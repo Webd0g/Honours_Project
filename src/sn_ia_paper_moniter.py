@@ -11,10 +11,11 @@ NOTION_TOKEN = "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"
 NOTION_DATABASE_ID = "3308c1c13618805ea3b3f0010184b76c"
 # 'cat' specifies the category. 
 # We search for SNe Ia specifically within HE, CO, and GA.
+# Grouping categories and terms correctly with parentheses
 SEARCH_QUERY = (
-    '(cat:astro-ph.HE OR cat:astro-ph.CO OR cat:astro-ph.GA) AND '
-    '(abs:"Type Ia" OR abs:"SN Ia" OR abs:"SNIa") AND '
-    '(abs:progenitor OR abs:standardization OR abs:"host galaxy")'
+    '(cat:astro-ph.CO OR cat:astro-ph.HE OR cat:astro-ph.GA) AND '
+    '("Type Ia" OR "SN Ia" OR "SNIa") AND '
+    '("host galaxy" OR "standardization" OR "standardisation" OR "mass step" OR "environmental correlation")'
 )
 # Initialize Clients
 ai_client = genai.Client(api_key=GEMINI_KEY)
@@ -42,22 +43,53 @@ def push_to_notion(data):
         print(f"Notion Error: {e}")
 
 def summarize(paper):
-    prompt = f"Evaluate this SN Ia abstract. Return ONLY: 'Score: [0-10] | Summary: [1 sentence]'. \nAbstract: {paper.summary}"
+    # This structured prompt uses "Chain of Thought" for better scoring
+    prompt = f"""
+    You are an expert Senior Researcher in Observational Cosmology. 
+    Evaluate this abstract for an Honours student researching the 'Standardization of Type Ia Supernovae and their Correlations with Host Galaxy Properties'.
+
+    CRITERIA FOR SCORING:
+    - 10: Direct analysis of SN Ia luminosity correlations with host mass, metallicity, or star-formation rate (e.g., the 'mass step').
+    - 8: New light-curve fitting methods (SALT3/Sugar) or large SN Ia samples (DES, LSST, Pantheon+).
+    - 5: General SN Ia physics or progenitor studies without host galaxy context.
+    - 1: Other transients (TDEs, SN II) or general cosmology without SNe Ia.
+
+    PAPER TO EVALUATE:
+    Title: {paper.title}
+    Abstract: {paper.summary}
+
+    OUTPUT FORMAT (STRICT):
+    Score: [0-10] | Summary: [1 sentence max focusing on the host-galaxy or standardization takeaway]
+    """
+    
     try:
-        res = ai_client.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
-        # Simple parser for the "Score: X | Summary: Y" format
-        parts = res.text.split("|")
-        score = parts[0].replace("Score:", "").strip()
-        summary = parts[1].replace("Summary:", "").strip()
+        res = ai_client.models.generate_content(
+            model="gemini-2.5-flash-lite", 
+            contents=prompt
+        )
+        # Use a more robust split in case the AI adds extra text
+        text = res.text.strip()
+        if "|" in text:
+            parts = text.split("|")
+            score = parts[0].replace("Score:", "").strip()
+            summary = parts[1].replace("Summary:", "").strip()
+        else:
+            score, summary = "5", text # Fallback
         return score, summary
-    except:
+    except Exception as e:
+        print(f"Summarize Error: {e}")
         return "0", "AI failed to process."
 
 def main():
     arxiv_client = arxiv.Client()
-    search = arxiv.Search(query=SEARCH_QUERY, max_results=5, sort_by=arxiv.SortCriterion.SubmittedDate)
+    search = arxiv.Search(query=SEARCH_QUERY, max_results=20, sort_by=arxiv.SortCriterion.SubmittedDate)
+    print("Starting search...")
     
+    count = 0
     for paper in arxiv_client.results(search):
+        count += 1
+        print(f"Found paper: {paper.title}")
+        print(f"Published: {paper.published}")
         # Only process papers from the last 24 hours
         if paper.published > datetime.now(timezone.utc) - timedelta(days=1):
             print(f"Processing: {paper.title}")
@@ -74,6 +106,10 @@ def main():
             save_to_csv(payload)
             push_to_notion(payload)
             print(f"Done! Score: {score}")
+        else:
+            print(f"Skipped (too old): {paper.title}")
+    
+    print(f"Search complete. Found {count} papers.")
 
 if __name__ == "__main__":
     main()
