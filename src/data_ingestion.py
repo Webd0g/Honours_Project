@@ -1,6 +1,4 @@
 import requests as re
-import pandas as pd
-
 
 url = "https://api.lsst.fink-portal.org/api/v1/tags"
 data = {

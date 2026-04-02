@@ -82,7 +82,7 @@ def summarize(paper):
 
 def main():
     arxiv_client = arxiv.Client()
-    search = arxiv.Search(query=SEARCH_QUERY, max_results=20, sort_by=arxiv.SortCriterion.SubmittedDate)
+    search = arxiv.Search(query=SEARCH_QUERY, max_results=100, sort_by=arxiv.SortCriterion.SubmittedDate)
     print("Starting search...")
     
     count = 0
@@ -91,7 +91,7 @@ def main():
         print(f"Found paper: {paper.title}")
         print(f"Published: {paper.published}")
         # Only process papers from the last 24 hours
-        if paper.published > datetime.now(timezone.utc) - timedelta(days=1):
+        if paper.updated > datetime.now(timezone.utc) - timedelta(days=3):
             print(f"Processing: {paper.title}")
             score, summary = summarize(paper)
             
