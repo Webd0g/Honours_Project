@@ -36,7 +36,8 @@ def push_to_notion(data):
                 "Name": {"title": [{"text": {"content": data["title"]}}]},
                 "Link": {"url": data["link"]},
                 "Score": {"number": int(data["score"])},
-                "AI Summary": {"rich_text": [{"text": {"content": data["summary"]}}]}
+                "AI Summary": {"rich_text": [{"text": {"content": data["summary"]}}]},
+                "Date Accessed": {"date": {"start":data["date"]} }
             }
         )
     except Exception as e:
@@ -91,7 +92,7 @@ def main():
         print(f"Found paper: {paper.title}")
         print(f"Published: {paper.published}")
         # Only process papers from the last 24 hours
-        if paper.updated > datetime.now(timezone.utc) - timedelta(days=3):
+        if paper.updated > datetime.now(timezone.utc) - timedelta(days=1):
             print(f"Processing: {paper.title}")
             score, summary = summarize(paper)
             

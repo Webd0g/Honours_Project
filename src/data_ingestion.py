@@ -1,19 +1,26 @@
 import requests as re
+import pandas as pd
+import io
 
-url = "https://api.lsst.fink-portal.org/api/v1/tags"
-data = {
-    'tag': 'sn_near_galaxy_candidate',
-    'n': '50'
-}
+api_url_tags = "https://api.lsst.fink-portal.org/api/v1/tags"
+api_url_sources = 'https://api.lsst.fink-portal.org/api/v1/sources'
 
-response = re.post(url, json=data)
-alerts = response.json()
+r0 = re.post(api_url_tags,
+    json={
+        "tag": "in_tns",
+        "n": 10,
+        "columns": "r:diaObjectId",  
+    },
+)
 
-print("Fink LSST Alert Data:")
-print("-" * 30)
+mylist = [str(val["r:diaObjectId"]) for val in r0.json()]
 
-for alert in alerts:
-    obj_id = alert.get('r:diaObjectId', 'No ID')
-    mag = alert.get('r:psfFlux', 'No Flux')
-    
-    print(f"Object ID: {obj_id}, Flux: {mag}")
+r1 = re.post(api_url_sources, 
+             json={
+                'diaObjectId': ','.join(mylist),
+                'columns': 'r:diaObjectId,r:fink_science_version,r:clf_earlySNIa_score,r:clf_snnSnVsOthers_score',
+                'output-format': 'json' },
+)
+
+pdf = pd.read_json(io.BytesIO(r1.content))
+print (pdf)
