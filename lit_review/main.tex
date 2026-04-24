@@ -1,0 +1,61 @@
+\documentclass[12pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{setspace}
+\usepackage{csquotes}
+\usepackage{graphicx}
+\usepackage[version=4]{mhchem}
+\usepackage{float}
+\usepackage{textcomp}
+\usepackage{subcaption}
+\newcommand{\mnras}{MNRAS}
+\newcommand{\apj}{ApJ}
+\newcommand{\aap}{A\&A}
+\usepackage[style=apa, backend=biber]{biblatex}
+\addbibresource{references.bib}
+
+\setstretch{1.5}
+
+\begin{document}
+
+\begin{titlepage}
+    \centering
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.5\linewidth]{graphics/Title_page/swinburne_landscape_logo.png}
+        \label{fig:placeholder}
+    \end{figure}
+    \vspace*{2cm}
+    {\Large \textbf{Literature Review}}\\[1.5cm]
+    {\large Riley Webster}\\[0.5cm]
+    {\large Honours Project A}\\[0.5cm]
+    {\large Semester 1, 2026}\\[2cm]
+    \vfill
+\end{titlepage}
+
+\tableofcontents
+\newpage
+
+\section{Introduction} \label{sec: Introduction}
+\input{Introduction}
+
+\section{Supernova Ia physics and Progenitor Channels} \label{sec: Supernova Ia physics and Progenitor Channels}
+\input{SNIa_Physics_and_Progenitor_Channels}
+
+\section{Host Galaxy Environment and SN Ia diversity} \label{sec: Host Galaxy Environment and SN Ia diversity}
+\input{Host Galaxy Environment and SN Ia Diversity}
+
+\section{Fink, Rubin and LSST} \label{sec: Fink, Rubin and LSST}
+\input{Fink, Rubin and LSST}
+
+\section{Project Aims} \label{sec: Project Aims}
+\input{Project Aims}
+
+\section{Planned Methodology} \label{sec: Planned Methodology}
+\input{Method}
+
+\newpage
+\section{References} \label{References}
+\printbibliography
+
+\end{document}
