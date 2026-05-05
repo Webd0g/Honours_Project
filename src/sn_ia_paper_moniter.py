@@ -4,6 +4,7 @@ import os
 from google import genai
 from notion_client import Client
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 # --- CONFIGURATION ---
 GEMINI_KEY = "AIzaSyCXVqmJtO9GyM1IZ3en9uqjGz72-17M7sY"
@@ -92,7 +93,7 @@ def main():
         print(f"Found paper: {paper.title}")
         print(f"Published: {paper.published}")
         # Only process papers from the last 24 hours
-        if paper.updated > datetime.now(timezone.utc) - timedelta(days=1):
+        if paper.updated > datetime.now(tz=ZoneInfo("Australia/Sydney")) - timedelta(days=1):
             print(f"Processing: {paper.title}")
             score, summary = summarize(paper)
             
