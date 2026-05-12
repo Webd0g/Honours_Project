@@ -29,7 +29,7 @@ def data_ingestion(startdate, stopdate):
             json={
                 "tag": tag,
                 "startdate" : startdate,
-                "stopdate" : stopdate,
+                "stopdate" : stopdate,  
                 "columns": "r:diaObjectId",
                 "output-format": "json"  
             },
@@ -57,4 +57,4 @@ def data_ingestion(startdate, stopdate):
         print (f"The number of new candidates found is {len(df_new)}")
         print (f"The total number of candidates in the catalogue is {len(combined_df)}")
 
-data_ingestion(tags, startdate, stopdate)
+# data_ingestion(startdate, stopdate)
