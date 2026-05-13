@@ -9,14 +9,14 @@ api_url_sources = "https://api.lsst.fink-portal.org/api/v1/sources"
 #output_path = input_path.parent / "extragalactic_candidates_using_ELMC_classified.parquet"
 
 base_path = Path(r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\extragalactic_object_ids")
-parquet_files = [base_path / "extragalactic_lt20mag_candidate.parquet", 
-                base_path / "sn_near_galaxy_candidate.parquet",
-                base_path / "extragalactic_new_candidate.parquet"]
+csv_files = [base_path / "extragalactic_lt20mag_candidate.csv", 
+                base_path / "sn_near_galaxy_candidate.csv",
+                base_path / "extragalactic_new_candidate.csv"]
 
 base_output_path = Path(r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\extragalactic_object_classified")
-output_paths = [base_output_path / "extragalactic_lt20mag_candidates_classified.parquet",
-                base_output_path / "sn_near_galaxy_candidate_classified.parquet",
-                base_output_path / "extragalactic_new_candidate_classified.parquet"]
+output_paths = [base_output_path / "extragalactic_lt20mag_candidates_classified.csv",
+                base_output_path / "sn_near_galaxy_candidate_classified.csv",
+                base_output_path / "extragalactic_new_candidate_classified.csv"]
 
 
 # grabbing the classifier scores from the parquet files object ID 
@@ -38,10 +38,10 @@ def collect_classifier_scores(diaObjectId: str) -> pd.DataFrame | None:
 # concatenation of the objects to retrieve the classifier scores 
 def classification_concatenation(object_ids: list) -> pd.DataFrame:
     
-    for parquet_path, output_path in zip(parquet_files, output_paths):
+    for csv_path, output_path in zip(csv_files, output_paths):
         results =[]
-        print (f"\nProcessing file: {parquet_path.name}")
-        object_ids = pd.read_parquet(parquet_path)["diaObjectId"].tolist()
+        print (f"\nProcessing file: {csv_path.name}")
+        object_ids = pd.read_csv(csv_path)["diaObjectId"].tolist()
 
         for i, oid in enumerate(object_ids):
             print (f"Processing {i+1}/{len(object_ids)}: {oid}")
@@ -50,7 +50,7 @@ def classification_concatenation(object_ids: list) -> pd.DataFrame:
                 results.append(df)
     
         if len(results) == 0:
-            print (f"No results returned for {parquet_path.name}")
+            print (f"No results returned for {csv_path.name}")
             continue
 
         combined = pd.concat(results, ignore_index= True)
@@ -64,11 +64,13 @@ def classification_concatenation(object_ids: list) -> pd.DataFrame:
             clf_snn_mean         = ("f:clf_snnSnVsOthers_score","mean"),
             n_detections         = ("r:diaObjectId",            "count"),
         ).reset_index()
-        combined_agg.to_parquet(output_path, index = False)
+        if len(combined_agg) > 0:
+            combined_agg.to_csv(output_path, index = False)
+            print (f"\nSaved {len(combined)} records for {len(results)} objects to {output_path}")
+        else:
+            print(f"Skipping write for {output_path.name} — no results returned")
 
-        print (f"\nSaved {len(combined)} records for {len(results)} objects to {output_path}")
-
-classification_concatenation (parquet_files)
+classification_concatenation (csv_files)
 # Single object test
 # ---------------------------------------------------------------
 # test_df = collect_classifier_scores("170235219334922248")
