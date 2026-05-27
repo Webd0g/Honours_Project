@@ -10,7 +10,7 @@ from light_curve_plotter import collect_light_curve_data
 
 api_url_sources = "https://api.lsst.fink-portal.org/api/v1/sources"
 OBJECT_ID = "170261592629837872"  # replace with your confirmed SN ID
-band_colours = {"u": "darkblue", "g":"hotpink", "r": "gray", "i":"pink", "z":"orange", "y":"darkorange"}
+band_colours = {"u": "fuchsia", "g":"green", "r": "red", "i":"orange", "z":"darkred", "y":"black"}
 
 def fit_bazin_per_band(df: pd.DataFrame) -> dict:
     """Fit a Bazin model to each band independently, returns dict of band -> fit results."""
@@ -96,7 +96,7 @@ def plot_bazin_fits(df: pd.DataFrame, fits: dict, diaObjectId: str):
                 label=f"{band}-band Bazin fit", linewidth=1.5)
 
         # Mark t_peak
-        ax.axvline(result["t_peak"], color=colour, linestyle="--", alpha=0.4, linewidth=1)
+        ax.axvline(result["t_peak"], color=colour, linestyle="-", alpha=0.4, linewidth=1)
 
     ax.set_xlabel("MJD (days)")
     ax.set_ylabel("Flux (nJy)")

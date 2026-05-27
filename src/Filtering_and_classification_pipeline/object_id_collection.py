@@ -17,7 +17,7 @@ tags = [("extragalactic_lt20mag_candidate", base_path / "extragalactic_lt20mag_c
 # will run everyday and scan the last 24hrs of alerts.
 # NOTE: Need to check what time Rubin is programmed to start the scan of the sky as I don't want to set the code going and miss when alerts are being sent out. 
 startdate = (datetime.now(tz=ZoneInfo("Australia/Sydney")) - timedelta(days=1)).strftime("%Y-%m-%d")
-stopdate = (datetime.now(tz=ZoneInfo("Australia/Sydney"))).strftime("%Y-%m-%d")
+stopdate = (datetime.now(tz=ZoneInfo("Australia/Sydney"))).strftime("%Y-%m-%d") 
 
 # data ingestion function, iterates through each tag and output path in the tags list-tuple.
 def data_ingestion(startdate, stopdate):
@@ -46,7 +46,7 @@ def data_ingestion(startdate, stopdate):
 
         # if path exists we append the new alerts if a new object ID passes the filters based on new alerts, if path don't exist we make the combined df = new df
         if output_path.exists():
-            existing_df = pd.read_csv(output_path)
+            existing_df = pd.read_csv(output_path, dtype={"diaObjectId": str})
             combined_df = pd.concat([existing_df, df_new], ignore_index=True)
             combined_df = combined_df.drop_duplicates(subset="diaObjectId")
         else:

@@ -19,7 +19,7 @@ output_paths = [base_output_path / "extragalactic_lt20mag_candidates_classified.
                 base_output_path / "extragalactic_new_candidate_classified.csv"]
 
 
-# grabbing the classifier scores from the parquet files object ID 
+# grabbing the classifier scores from the csv files object ID 
 def collect_classifier_scores(diaObjectId: str) -> pd.DataFrame | None:
     r0 = re.post(api_url_sources, 
         json = {
@@ -42,6 +42,7 @@ def classification_concatenation(object_ids: list) -> pd.DataFrame:
         results =[]
         print (f"\nProcessing file: {csv_path.name}")
         object_ids = pd.read_csv(csv_path)["diaObjectId"].tolist()
+        object_ids = [str(x) for x in object_ids]
 
         for i, oid in enumerate(object_ids):
             print (f"Processing {i+1}/{len(object_ids)}: {oid}")
@@ -55,14 +56,14 @@ def classification_concatenation(object_ids: list) -> pd.DataFrame:
 
         combined = pd.concat(results, ignore_index= True)
         combined_agg = combined.groupby("r:diaObjectId").agg(
-            clf_cats_class_mode  = ("f:clf_cats_class",       lambda x: x.mode()[0]),
-            clf_cats_score_max   = ("f:clf_cats_score",        "max"),
-            clf_cats_score_mean  = ("f:clf_cats_score",        "mean"),
-            clf_earlySNIa_max    = ("f:clf_earlySNIa_score",   "max"),
-            clf_earlySNIa_mean   = ("f:clf_earlySNIa_score",   "mean"),
-            clf_snn_max          = ("f:clf_snnSnVsOthers_score","max"),
-            clf_snn_mean         = ("f:clf_snnSnVsOthers_score","mean"),
-            n_detections         = ("r:diaObjectId",            "count"),
+        clf_cats_class_mode  = ("f:clf_cats_class",        lambda x: x.mode()[0]),
+        clf_cats_score_max   = ("f:clf_cats_score",         lambda x: x[x >= 0].max()),
+        clf_cats_score_mean  = ("f:clf_cats_score",         lambda x: x[x >= 0].mean()),
+        clf_earlySNIa_max    = ("f:clf_earlySNIa_score",    lambda x: x[x >= 0].max()),
+        clf_earlySNIa_mean   = ("f:clf_earlySNIa_score",    lambda x: x[x >= 0].mean()),
+        clf_snn_max          = ("f:clf_snnSnVsOthers_score", lambda x: x[x >= 0].max()),
+        clf_snn_mean         = ("f:clf_snnSnVsOthers_score", lambda x: x[x >= 0].mean()),
+        n_detections         = ("r:diaObjectId",             "count"),
         ).reset_index()
         if len(combined_agg) > 0:
             combined_agg.to_csv(output_path, index = False)
@@ -70,22 +71,4 @@ def classification_concatenation(object_ids: list) -> pd.DataFrame:
         else:
             print(f"Skipping write for {output_path.name} — no results returned")
 
-classification_concatenation (csv_files)
-# Single object test
-# ---------------------------------------------------------------
-# test_df = collect_classifier_scores("170235219334922248")
-# print (test_df.head())
-# ---------------------------------------------------------------
-
-# Multiple object test
-# -------------------------------------------------------------------------
-# Slice just the first 5 IDs from one parquet file
-#test_ids = pd.read_parquet(parquet_files[0])["diaObjectId"].tolist()[:5]
-
-#for oid in test_ids:
-#    df = collect_classifier_scores(oid)
-#    print(df)
-# -------------------------------------------------------------------------
-
-# Left off last time with the parquet file of object ids being passed to the classifier concatenator and being able to retrieve the classifier scores for the object ID, next will be working on how to aggregate the scores even if the data is currently not humungous
-# Also to note, the extragalactic candidates filters appears to not be filtering using the galactic latitude cut offs. Might have to make my own filter which should be cool and chill.
+classification_concatenation (csv_files)    
