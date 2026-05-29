@@ -41,7 +41,7 @@ def classification_concatenation(object_ids: list) -> pd.DataFrame:
     for csv_path, output_path in zip(csv_files, output_paths):
         results =[]
         print (f"\nProcessing file: {csv_path.name}")
-        object_ids = pd.read_csv(csv_path)["diaObjectId"].tolist()
+        object_ids = pd.read_csv(csv_path)["r:diaObjectId"].tolist()
         object_ids = [str(x) for x in object_ids]
 
         for i, oid in enumerate(object_ids):
