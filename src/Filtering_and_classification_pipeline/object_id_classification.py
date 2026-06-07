@@ -2,6 +2,8 @@ import requests as re
 import pandas as pd
 import io
 from pathlib import Path
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 # Pulling from the sources api to get the classifier scores for the ObjectIds Obtained from data_ingestion
 api_url_sources = "https://api.lsst.fink-portal.org/api/v1/sources"
@@ -24,13 +26,22 @@ output_paths = [base_output_path / "extragalactic_lt20mag_candidates_classified.
 # used in the TNS cross-match script. The aggregation logic and overall pipeline structure 
 # are unchanged from the original.
 
+startdate = (datetime.now(tz=ZoneInfo("Australia/Sydney")) - timedelta(days=1)).strftime("%Y-%m-%d")
+stopdate  = (datetime.now(tz=ZoneInfo("Australia/Sydney"))).strftime("%Y-%m-%d")
+
 
 # grabbing the classifier scores from the csv files object ID 
 def collect_classifier_scores_batch(object_ids: list) -> pd.DataFrame | None:
+    """Collects classifier scores for all the filtered object ids
+    but even further filtered to only retrieve those that had alerts 
+    over the last 24 hours, this prevents error 504 when requesting """
+    
     id_string = ",".join(object_ids)
     r0 = re.post(api_url_sources,
         json={
             "diaObjectId": id_string,
+            "startdate": startdate,
+            "stopdate": stopdate,
             "columns": "r:diaObjectId, f:clf_cats_class, f:clf_cats_score, f:clf_earlySNIa_score, f:clf_snnSnVsOthers_score",
             "output-format": "json"
         })

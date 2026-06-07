@@ -31,40 +31,40 @@ def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
     On 502 Bad Gateway, automatically splits the date range in half and retries.
     For daily 24hr runs this fallback will never trigger.
     """
-    try:
-        r = re.post(
-            api_url_tags,
-            json={
-                "tag":           tag,
-                "startdate":     startdate,
-                "stopdate":      stopdate,
-                "n":             N_ALERTS,
-                "columns":       "r:diaObjectId",
-                "output-format": "json",
-            },
-            timeout=120,
-        )
-        r.raise_for_status()
-        return r.json()
+    #try:
+    r = re.post(
+        api_url_tags,
+        json={
+            "tag":           tag,
+            "startdate":     startdate,
+            "stopdate":      stopdate,
+            "n":             N_ALERTS,
+            "columns":       "r:diaObjectId",
+            "output-format": "json",
+        },
+        timeout=120,
+    )
+    r.raise_for_status()
+    return r.json()
 
-    except re.exceptions.HTTPError as e:
-        if e.response.status_code in (502, 504):
-            start_dt = datetime.strptime(startdate, "%Y-%m-%d")
-            stop_dt  = datetime.strptime(stopdate,  "%Y-%m-%d")
-            mid_dt   = start_dt + (stop_dt - start_dt) / 2
+    # except re.exceptions.HTTPError as e:
+    #     if e.response.status_code in (502, 504):
+    #         start_dt = datetime.strptime(startdate, "%Y-%m-%d")
+    #         stop_dt  = datetime.strptime(stopdate,  "%Y-%m-%d")
+    #         mid_dt   = start_dt + (stop_dt - start_dt) / 2
 
-            # Avoid infinite recursion if range collapses to a single day
-            if mid_dt == start_dt or mid_dt == stop_dt:
-                print(f"  Could not split further for {startdate} -> {stopdate}, skipping.")
-                return []
+    #         # Avoid infinite recursion if range collapses to a single day
+    #         if mid_dt == start_dt or mid_dt == stop_dt:
+    #             print(f"  Could not split further for {startdate} -> {stopdate}, skipping.")
+    #             return []
 
-            mid = mid_dt.strftime("%Y-%m-%d")
-            print(f"  502 on {startdate} -> {stopdate}, splitting at {mid}")
-            left  = fetch_tag_with_fallback(tag, startdate, mid)
-            right = fetch_tag_with_fallback(tag, mid, stopdate)
-            return left + right
-        else:
-            raise
+    #         mid = mid_dt.strftime("%Y-%m-%d")
+    #         print(f"  502 on {startdate} -> {stopdate}, splitting at {mid}")
+    #         left  = fetch_tag_with_fallback(tag, startdate, mid)
+    #         right = fetch_tag_with_fallback(tag, mid, stopdate)
+    #         return left + right
+    #     else:
+    #         raise
 
 def data_ingestion(startdate, stopdate):
     for tag, output_path in tags:
@@ -80,6 +80,7 @@ def data_ingestion(startdate, stopdate):
 
         new_extragalactic_ids = sorted(set([str(val["r:diaObjectId"]) for val in raw_alerts]))
         df_new = pd.DataFrame({"r:diaObjectId": new_extragalactic_ids})
+        
 
         if len(df_new) == 0:
             print(f"No new candidates for tag: {tag}")
@@ -95,5 +96,6 @@ def data_ingestion(startdate, stopdate):
         combined_df.to_csv(output_path, index=False)
         print(f"The number of new candidates found is {len(df_new)}")
         print(f"The total number of candidates in the catalogue is {len(combined_df)}")
+        
 
 data_ingestion(startdate, stopdate)

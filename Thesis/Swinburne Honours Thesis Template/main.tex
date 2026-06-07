@@ -1,0 +1,112 @@
+\documentclass[english,12pt]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{siunitx}
+\graphicspath{{images/}}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{apacite}
+\usepackage{afterpage}
+\usepackage[a4paper,width=160mm,top=25mm,bottom=20mm]{geometry}
+\usepackage{hyperref}
+\hypersetup{
+    colorlinks=true,
+    citecolor=blue,     
+    urlcolor=blue,
+    linkcolor=black
+    }
+\usepackage{fancyhdr}
+\usepackage{amssymb}
+\usepackage{amsmath}
+\pagestyle{fancy}
+\fancyhf{}
+\setlength{\headheight}{15pt}
+\usepackage[table]{xcolor}
+\fancyhead{}
+\fancyhead[L]{\textcolor{gray}{Title}}
+\fancyhead[R]{\textcolor{gray}{'name' 'student number'}}
+\fancyfoot{}
+\fancyfoot[C]{\thepage}
+\usepackage{lipsum}
+\usepackage{parskip}
+\usepackage[export]{adjustbox}
+\usepackage{wrapfig}
+\usepackage{array}
+\newcommand{\PreserveBackslash}[1]{\let\temp=\\#1\let\\=\temp}
+\newcolumntype{C}[1]{>{\PreserveBackslash\centering}p{#1}}
+\newcolumntype{R}[1]{>{\PreserveBackslash\raggedleft}p{#1}}
+\newcolumntype{L}[1]{>{\PreserveBackslash\raggedright}p{#1}}
+\usepackage{caption}
+\captionsetup{labelfont=bf,singlelinecheck=false}
+\usepackage{subcaption}
+\captionsetup[subfigure]{justification=centering}
+\usepackage{setspace}
+\setstretch{1.5}
+\usepackage{pst-optexp}
+\usepackage{enumitem} %allows adjustment of list spacing
+\usepackage{natbib}
+\bibliographystyle{apalike}
+
+
+
+\setcounter{tocdepth}{3}
+\setcounter{secnumdepth}{3}
+
+\pagenumbering{roman} % Start roman numbering
+
+\begin{document}
+\begin{singlespace}
+\input{chapters/titlepage}
+\pagebreak
+\input{chapters/Abstract}
+\pagebreak
+\input{chapters/Declaration}
+\pagebreak
+\input{chapters/Acknowledgements}
+\pagebreak
+\end{singlespace}
+
+\begin{singlespace}
+\listoffigures
+\addcontentsline{toc}{chapter}{List of Figures}
+\begingroup
+\let\clearpage\relax
+\newpage
+\listoftables
+\addcontentsline{toc}{chapter}{List of Tables}
+\endgroup
+
+\newpage
+\tableofcontents
+\end{singlespace}
+\newpage
+\pagenumbering{arabic} % Start regular numbering
+\input{chapters/Introduction}
+\newpage
+\input{chapters/Literature Review}
+\newpage
+\input{chapters/Theory}
+\newpage
+\input{chapters/Methodology}
+\newpage
+\input{chapters/Results}
+\newpage
+\input{chapters/Conclusion}
+
+
+\appendix
+\renewcommand{\thesection}{\Alph{section}.\arabic{section}}
+\setcounter{section}{0}
+\chapter*{Appendix}
+\addcontentsline{toc}{chapter}{Appendix}
+\input{chapters/Appendix.tex}
+
+
+\begin{singlespace}
+\addcontentsline{toc}{chapter}{Bibliography}
+\bibliography{Reference}
+\end{singlespace}
+
+
+\end{document}
