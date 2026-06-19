@@ -1,8 +1,8 @@
-import requests as re
 import pandas as pd
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+import requests as re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from object_id_classification import classification_concatenation
 
 # Using tags to filter through alerts, the tag is the string at [0] in each tuple with [1] being the path of the csv file being saved.
 # sn_near_galaxy_candidate: Written by Anais Moller (Supervisor) - near galaxy extragalactic base with absolute magnitude cuts consistent with SNe.
@@ -13,12 +13,13 @@ api_url_tags = "https://api.lsst.fink-portal.org/api/v1/tags"
 base_path = Path(r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\extragalactic_object_ids")
 tags = [("sn_near_galaxy_candidate",        base_path / "sn_near_galaxy_candidate.csv"),
         ("extragalactic_lt20mag_candidate",  base_path / "extragalactic_lt20mag_candidate.csv"),
-        ("in_tns",                           base_path / "candidates_in_TNS.csv")]
+        ("in_tns",                           base_path / "candidates_in_TNS.csv"),
+        (base_path / "objects_with_new_alerts.csv")]
 
 # Will run everyday and scan the last 24hrs of alerts.
 # NOTE: Need to check what time Rubin is programmed to start the scan of the sky as I don't want to set the code going and miss when alerts are being sent out.
-startdate = (datetime.now(tz=ZoneInfo("Australia/Sydney")) - timedelta(days=1)).strftime("%Y-%m-%d")
-stopdate  = (datetime.now(tz=ZoneInfo("Australia/Sydney"))).strftime("%Y-%m-%d")
+startdate = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+stopdate  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
 
 N_ALERTS = 100000
 
@@ -31,57 +32,62 @@ def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
     On 502 Bad Gateway, automatically splits the date range in half and retries.
     For daily 24hr runs this fallback will never trigger.
     """
-    #try:
-    r = re.post(
-        api_url_tags,
-        json={
-            "tag":           tag,
-            "startdate":     startdate,
-            "stopdate":      stopdate,
-            "n":             N_ALERTS,
-            "columns":       "r:diaObjectId",
-            "output-format": "json",
-        },
-        timeout=120,
-    )
-    r.raise_for_status()
-    return r.json()
+    try:
+        r = re.post(
+            api_url_tags,
+            json={
+                "tag":           tag,
+                "startdate":     startdate,
+                "stopdate":      stopdate,
+                "n":             N_ALERTS,
+                "columns":       "r:diaObjectId",
+                "output-format": "json",
+            },
+            timeout=120,
+        )
+        r.raise_for_status()
+        return r.json()
 
-    # except re.exceptions.HTTPError as e:
-    #     if e.response.status_code in (502, 504):
-    #         start_dt = datetime.strptime(startdate, "%Y-%m-%d")
-    #         stop_dt  = datetime.strptime(stopdate,  "%Y-%m-%d")
-    #         mid_dt   = start_dt + (stop_dt - start_dt) / 2
+    except re.exceptions.HTTPError as e:
+        if e.response.status_code in (502, 504):
+            start_dt = datetime.strptime(startdate, "%Y-%m-%d")
+            stop_dt  = datetime.strptime(stopdate,  "%Y-%m-%d")
+            mid_dt   = start_dt + (stop_dt - start_dt) / 2
 
-    #         # Avoid infinite recursion if range collapses to a single day
-    #         if mid_dt == start_dt or mid_dt == stop_dt:
-    #             print(f"  Could not split further for {startdate} -> {stopdate}, skipping.")
-    #             return []
+            # Avoid infinite recursion if range collapses to a single day
+            if mid_dt == start_dt or mid_dt == stop_dt:
+                print(f"  Could not split further for {startdate} -> {stopdate}, skipping.")
+                return []
 
-    #         mid = mid_dt.strftime("%Y-%m-%d")
-    #         print(f"  502 on {startdate} -> {stopdate}, splitting at {mid}")
-    #         left  = fetch_tag_with_fallback(tag, startdate, mid)
-    #         right = fetch_tag_with_fallback(tag, mid, stopdate)
-    #         return left + right
-    #     else:
-    #         raise
+            mid = mid_dt.strftime("%Y-%m-%d")
+            print(f"  502 on {startdate} -> {stopdate}, splitting at {mid}")
+            left  = fetch_tag_with_fallback(tag, startdate, mid)
+            right = fetch_tag_with_fallback(tag, mid, stopdate)
+            return left + right
+        else:
+            raise
 
 def data_ingestion(startdate, stopdate):
-    for tag, output_path in tags:
-        print(f"\nIngesting tag: {tag}")
+    new_object_ids_ = []
 
+    for tag, output_path in tags:
+
+        print(f"\nIngesting tag: {tag}")
         raw_alerts = fetch_tag_with_fallback(tag, startdate, stopdate)
 
         # Warn if the alert ceiling was hit - raw alert count may be incomplete
         if len(raw_alerts) >= N_ALERTS:
             print(f"WARNING: n ceiling hit ({N_ALERTS}) for {tag} — increase N_ALERTS")
-
         print(f"Raw alerts returned: {len(raw_alerts)}")
 
         new_extragalactic_ids = sorted(set([str(val["r:diaObjectId"]) for val in raw_alerts]))
         df_new = pd.DataFrame({"r:diaObjectId": new_extragalactic_ids})
+        if df_new is not None and not df_new.empty:
+            # left off integrating the classification scheme into the object_id_collection file because this will let us directly use the new objects straight away from each tag without having to return them to a different function. 
+            # in data ingestion after the new objects have been retrieved, those will then be passed to the classification_concatenation function which will then pull classification scores for the objects, take their modes, means and maxes
+            # and append them to the designated csv file for each tag depending on how many classifiers the object passed. Object Ids will still be added to their designated csv files without scores also.  
+            df_new = classification_concatenation(df_new)
         
-
         if len(df_new) == 0:
             print(f"No new candidates for tag: {tag}")
             continue
@@ -96,6 +102,10 @@ def data_ingestion(startdate, stopdate):
         combined_df.to_csv(output_path, index=False)
         print(f"The number of new candidates found is {len(df_new)}")
         print(f"The total number of candidates in the catalogue is {len(combined_df)}")
-        
+    
+    new_object_ids = pd.concat(new_object_ids, ignore_index=True)
+    new_object_ids.to_csv(tags[3], index = False)
+    print (f"The total number of new objects found today is: {len(new_object_ids)}")
 
-data_ingestion(startdate, stopdate)
+if __name__ == "__main__":
+    data_ingestion(startdate, stopdate)

@@ -1,0 +1,11 @@
+blocks:
+- b_extragalactic_loose_candidate
+- b_is_rising
+catalog_filename: null
+content:
+- diaObject
+dates:
+  startdate: '2026-05-22'
+  stopdate: '2026-05-29'
+extra_cond: null
+filters: []

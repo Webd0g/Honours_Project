@@ -54,14 +54,13 @@ def collect_classifier_scores_batch(object_ids: list) -> pd.DataFrame | None:
 
 
 def classification_concatenation(object_ids: list) -> pd.DataFrame:
-    for csv_path, output_path in zip(csv_files, output_paths):
-        print(f"\nProcessing file: {csv_path.name}")
+    
+        print(f"\nProcessing objects from tag: {tag}")
         object_ids = pd.read_csv(csv_path)["r:diaObjectId"].astype(str).tolist()
 
         combined = collect_classifier_scores_batch(object_ids)
         if combined is None or len(combined) == 0:
             print(f"No results returned for {csv_path.name}")
-            continue
 
         combined_agg = combined.groupby("r:diaObjectId").agg(
             clf_cats_class_mode  = ("f:clf_cats_class",             lambda x: x.mode()[0]),

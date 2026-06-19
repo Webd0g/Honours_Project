@@ -28,7 +28,7 @@ def flux_to_mag(flux, flux_err):
     AB_mag_err = (2.5 / np.log(10)) * (flux_err / flux)
     return AB_mag, AB_mag_err
 
-def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str):
+def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, output_dir: str):
     df = df[df["r:psfFlux"] > 0].copy()
     df = df.sort_values("r:midpointMjdTai")
     df["mag"], df["mag_err"] = flux_to_mag(df["r:psfFlux"], df["r:psfFluxErr"])
@@ -56,4 +56,5 @@ def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str):
     ax.grid(True, alpha = 0.3)
     fig.autofmt_xdate()
     plt.tight_layout()
-    plt.show()
+    fig.savefig(output_dir / f"{diaObjectId}.png", dpi = 150,bbox_inches="tight")
+    plt.close(fig)
