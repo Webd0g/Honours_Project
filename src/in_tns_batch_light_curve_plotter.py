@@ -4,13 +4,12 @@ from pathlib import Path
 from light_curve_plotter import lightcurve_plotting
 from light_curve_plotter import collect_light_curve_data
 
-output_path = Path(r"C:\Users\riley\Documents\University\Honours\Honours_Project\images\SN_Ia_lightcurves\in_tns")
+output_path = Path(r"/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/in_tns")
 
-in_tns_object_ids = list((pd.read_csv(r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\Confirmed_SN\confirmed_SN_tns.csv", dtype= {"r:diaObjectId": str}))["r:diaObjectId"])
-in_tns_object_names = list((pd.read_csv(r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\Confirmed_SN\confirmed_SN_tns.csv", dtype= {"f:xm_tns_fullname": str}))["f:xm_tns_fullname"])
+in_tns_object_ids = list((pd.read_csv(r"/home/riley/Documents/University/Honours/Honours_Project/data/Confirmed_SN/confirmed_SN_tns.csv", dtype= {"r:diaObjectId": str}))["r:diaObjectId"])
+in_tns_object_names = list((pd.read_csv(r"/home/riley/Documents/University/Honours/Honours_Project/data/Confirmed_SN/confirmed_SN_tns.csv", dtype= {"f:xm_tns_fullname": str}))["f:xm_tns_fullname"])
 tns_lookup = dict(zip(in_tns_object_ids, in_tns_object_names))
 in_tns_object_ids = ",".join(in_tns_object_ids)
-
 
 # need lightcurve data first retrived from the strings of diaobject ID from the csv files. 
 light_curve_info = collect_light_curve_data(in_tns_object_ids)
