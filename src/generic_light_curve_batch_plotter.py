@@ -4,9 +4,9 @@ from pathlib import Path
 from light_curve_plotter import lightcurve_plotting
 from light_curve_plotter import collect_light_curve_data
 
-output_path = Path(r"/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results")
+output_path = Path(r"/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/in_tns")
 
-object_ids = list((pd.read_csv(r"/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/sn_near_galaxy_candidates_passed.csv", dtype= {"r:diaObjectId": str}))["r:diaObjectId"])
+object_ids = list((pd.read_csv("/home/riley/Documents/University/Honours/Honours_Project/data/Confirmed_SN/confirmed_SN_tns.csv", dtype= {"r:diaObjectId": str}))["r:diaObjectId"])
 
 chunk_size = 500
 
