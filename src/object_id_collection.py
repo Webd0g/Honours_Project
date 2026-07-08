@@ -66,8 +66,6 @@ def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
             raise
 
 def data_ingestion(startdate, stopdate):
-    new_object_ids_ = []
-
     for tag, output_path in tags:
 
         print(f"\nIngesting tag: {tag}")
