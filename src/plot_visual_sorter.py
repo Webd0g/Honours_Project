@@ -9,8 +9,8 @@ object_ids_passed_sn_near_galaxy = pd.read_csv("/home/riley/Documents/University
 object_ids_passed_extragalactic_lt20mag = pd.read_csv("/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/extragalactic_candidates_passed.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"].tolist()
 object_ids_passed_in_tns = pd.read_csv("/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/in_tns_candidates_passed.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].tolist()
 object_ids_passed = object_ids_passed_sn_near_galaxy + object_ids_passed_extragalactic_lt20mag + object_ids_passed_in_tns
-object_ids_with_plots_false_positives = ([f.split(".")[0] for f in os.listdir("/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results/False_positives") if f.endswith(".png")])
-object_ids_with_plots_probable_SN = ([f.split(".")[0] for f in os.listdir("/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results/Probable_Sn_Ia") if f.endswith(".png")])
+object_ids_with_plots_false_positives = ([f.split(".")[0] for f in os.listdir("/home/riley/Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results/False_positives") if f.endswith(".png")])
+object_ids_with_plots_probable_SN = ([f.split(".")[0] for f in os.listdir("/home/riley/Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results/Probable_Sn_Ia") if f.endswith(".png")])
 object_ids_with_plots = object_ids_with_plots_false_positives + object_ids_with_plots_probable_SN
 
 objects_not_with_plots = []
@@ -23,7 +23,7 @@ print (f"{(objects_not_with_plots)} passed the rate of rise cuts but doesn't hav
 
 chunk_size = 500
 objects_not_with_plots_results =[]
-output_path = "/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results"
+output_path = "/home/riley/Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results"
 
 if not objects_not_with_plots:
     print("No new objects to plot.")
@@ -37,21 +37,21 @@ else:
         raise RuntimeError("No light curve data returned for in_tns candidates")
 
     objects_not_with_plots_light_curve_info = pd.concat(objects_not_with_plots_results, ignore_index=True)
-    objects_not_with_plots_light_curve_info.to_csv("/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results/unplotted_objects.csv", index=False)
+    objects_not_with_plots_light_curve_info.to_csv("/home/riley/Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results/unplotted_objects.csv", index=False)
 
-    glcbp.batch_plotter("/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results/unplotted_objects.csv")
+    glcbp.batch_plotter("/home/riley/Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results/unplotted_objects.csv")
 
     # Written by Claude Sonnet 4.6 (Anthropic) with the prompt:
     # "write a script to sort light curve images into genuine_candidates and false_positives
     # subfolders based on a markdown tally file of visual inspection results"
 
-    image_dir = Path("/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results")
+    image_dir = Path("/home/riley/Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results")
     genuine_dir = image_dir / "Probable_Sn_Ia"
     false_positive_dir = image_dir / "False_positives"
     genuine_dir.mkdir(exist_ok=True)
     false_positive_dir.mkdir(exist_ok=True)
 
-    markdown_path = Path("/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/Honours_Project/SN_Ia_Rise_Rate_Cut_Results_Tally.md")
+    markdown_path = Path("/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/Honours Project/SN Ia Rise Rate Cut Results Tally.md")
 
     # Parse genuine rising transient IDs from the markdown file
     genuine_ids = set()
