@@ -1,13 +1,13 @@
 import pandas as pd
 from pathlib import Path
 
-base_classified_path = Path("/home/riley/Documents/University/Honours/Honours_Project/data/extragalactic_object_classified")
+base_classified_path = Path(Path.home() / "Documents/University/Honours/Honours_Project/data/extragalactic_object_classified")
 classified_csv_files = [base_classified_path / "sn_near_galaxy_candidate_passed_classified.csv",
                         base_classified_path / "extragalactic_lt20mag_candidates_passed_classified.csv",
                         base_classified_path / "candidates_in_TNS_passed_classified.csv"]
-SN_candidates_output_path = Path("/home/riley/Documents/University/Honours/Honours_Project/data/Potential_SN_candidates")
+SN_candidates_output_path = Path(Path.home() / "Documents/University/Honours/Honours_Project/data/Potential_SN_candidates")
 
-rejection_list_path = Path("/home/riley/Documents/University/Honours/Honours_Project/data/rejection_list.csv")
+rejection_list_path = Path(Path.home() / "Documents/University/Honours/Honours_Project/data/rejection_list.csv")
 
 def load_rejection_list(path: Path) -> set:
     if not path.exists():

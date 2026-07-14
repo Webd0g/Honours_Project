@@ -1,7 +1,11 @@
+"""This script scrapes the Fink broker and finds alerts that pass the extragalactic_lt20mag, sn_near_galaxy and in_tns Fink filters.
+it then pulls the diaObjectId from the alerts and appends it to a csv file for each object that passes the distinct filters"""
+
 import pandas as pd
 import requests as re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import os
 
 # Using tags to filter through alerts, the tag is the string at [0] in each tuple with [1] being the path of the csv file being saved.
 # sn_near_galaxy_candidate: Written by Anais Moller (Supervisor) - near galaxy extragalactic base with absolute magnitude cuts consistent with SNe.
@@ -9,10 +13,10 @@ from pathlib import Path
 # in_tns: objects already reported to TNS - used as confirmed ground truth for pipeline validation.
 # extragalactic_new_candidate removed: loose extragalactic flavor, no galaxy association, high contamination, single/double epoch objects only.
 api_url_tags = "https://api.lsst.fink-portal.org/api/v1/tags"
-base_path = Path("/home/riley/Documents/University/Honours/Honours_Project/data/extragalactic_object_ids")
-tags = [("sn_near_galaxy_candidate",        base_path / "sn_near_galaxy_candidate.csv"),
-        ("extragalactic_lt20mag_candidate",  base_path / "extragalactic_lt20mag_candidate.csv"),
-        ("in_tns",                           base_path / "candidates_in_TNS.csv")]
+project_dir = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+tags = [("sn_near_galaxy_candidate",        project_dir / "data" / "extragalactic_object_ids" /  "sn_near_galaxy_candidate.csv"),
+        ("extragalactic_lt20mag_candidate",  project_dir / "data" / "extragalactic_object_ids" / "extragalactic_lt20mag_candidate.csv"),
+        ("in_tns",                           project_dir / "data" / "extragalactic_object_ids" / "candidates_in_TNS.csv")]
 
 # Will run everyday and scan the last 24hrs of alerts.
 # NOTE: Need to check what time Rubin is programmed to start the scan of the sky as I don't want to set the code going and miss when alerts are being sent out.

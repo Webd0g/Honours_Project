@@ -11,7 +11,7 @@ from light_curve_plotter import collect_light_curve_data
 # chunk_size = 500
 
 # need lightcurve data first retrived from the strings of diaobject ID from the csv files. 
-def batch_plotter(object_ids, chunk_size=500, output_path="/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results"):
+def batch_plotter(object_ids, chunk_size=500, output_path=Path.home() / "/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results"):
     for diaObjectId in range(0, len(object_ids), chunk_size):
         chunk = ",".join(object_ids[diaObjectId:diaObjectId + chunk_size])
         light_curve_info = collect_light_curve_data(chunk)

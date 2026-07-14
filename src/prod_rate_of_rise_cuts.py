@@ -1,25 +1,26 @@
-# refactoring the rate of rise and points pre-peak filter into a function
-import pandas as pd
-import numpy as np
-from pathlib import Path
-from light_curve_plotter import collect_light_curve_data
-
 """This is the production level script of the rate of rise cuts for the g and r bands of the candidates in sn_near_galaxy_candidate.csv and extragalactic_lt20mag_candidates.csv.
     it will pull object id from the CSV file, fetch the light curve data from the api of the objects,
     apply the 4 minimum detections cut before peak, normalise the fluxes to the current brightest values, 
     compute the linear slope, then apply the 1 sigma cut to the slopes across both bands and then 
     output the candidates that passed and those that didn't into their respective CSV files"""
 
-base_candidate_paths = Path("/home/riley/Documents/University/Honours/Honours_Project/data/extragalactic_object_ids")
-sn_near_galaxy_candidates = list(pd.read_csv(base_candidate_paths / "sn_near_galaxy_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
-extragalactic_candidates = list(pd.read_csv(base_candidate_paths / "extragalactic_lt20mag_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
-in_tns_candidates = list(pd.read_csv(base_candidate_paths / "candidates_in_TNS.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
-sn_near_galaxy_candidates_output_passed = "/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/sn_near_galaxy_candidates_passed.csv"
-sn_near_galaxy_candidates_output_failed = "/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/sn_near_galaxy_candidates_failed.csv"
-extragalactic_candidates_output_passed = "/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/extragalactic_candidates_passed.csv"
-extragalactic_candidates_output_failed = "/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/extragalactic_candidates_failed.csv"
-in_tns_candidates_output_passed = "/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/in_tns_candidates_passed.csv"
-in_tns_candidates_output_failed = "/home/riley/Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/in_tns_candidates_failed.csv"
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from light_curve_plotter import collect_light_curve_data
+
+candidate_dir = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "extragalactic_object_ids"
+rate_of_rise_dir = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/ "data" / "Rate_of_rise_cuts"
+
+sn_near_galaxy_candidates = list(pd.read_csv(candidate_dir / "sn_near_galaxy_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
+extragalactic_candidates = list(pd.read_csv(candidate_dir / "extragalactic_lt20mag_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
+in_tns_candidates = list(pd.read_csv(candidate_dir / "candidates_in_TNS.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
+sn_near_galaxy_candidates_output_passed = rate_of_rise_dir / "sn_near_galaxy_candidates_passed.csv"
+sn_near_galaxy_candidates_output_failed = rate_of_rise_dir / "sn_near_galaxy_candidates_failed.csv"
+extragalactic_candidates_output_passed = rate_of_rise_dir / "extragalactic_candidates_passed.csv"
+extragalactic_candidates_output_failed = rate_of_rise_dir / "extragalactic_candidates_failed.csv"
+in_tns_candidates_output_passed = rate_of_rise_dir / "in_tns_candidates_passed.csv"
+in_tns_candidates_output_failed = rate_of_rise_dir / "in_tns_candidates_failed.csv"
 
 chunk_size = 500
 red_slope_cut_threshold = 0.0053
