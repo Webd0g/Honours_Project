@@ -14,7 +14,7 @@ ENV/
 
 # Images - used for writing docs and light curves of SN
 images/
-iamges/**
+images/**
 
 # honours meetings info
 honours_meetings/
