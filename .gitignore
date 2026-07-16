@@ -16,6 +16,10 @@ ENV/
 images/
 iamges/**
 
+# honours meetings info
+honours_meetings/
+honours_meetings/**
+
 # Byte-compiled / optimised cache
 __pycache__/
 *.py[cod]           # covers .pyc, .pyo, .pyd
