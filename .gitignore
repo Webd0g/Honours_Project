@@ -12,6 +12,10 @@ venv/
 env/
 ENV/
 
+# Images - used for writing docs and light curves of SN
+images/
+iamges/**
+
 # Byte-compiled / optimised cache
 __pycache__/
 *.py[cod]           # covers .pyc, .pyo, .pyd
