@@ -5,38 +5,34 @@ import pandas as pd
 import requests as re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import os
 
-# Using tags to filter through alerts, the tag is the string at [0] in each tuple with [1] being the path of the csv file being saved.
-# sn_near_galaxy_candidate: Written by Anais Moller (Supervisor) - near galaxy extragalactic base with absolute magnitude cuts consistent with SNe.
-# extragalactic_lt20mag_candidate: bright (mag < 20), rising extragalactic candidates - complementary to sn_near_galaxy as it has a rising component, doesn't have the abs mag cuts tho.
-# in_tns: objects already reported to TNS - used as confirmed ground truth for pipeline validation.
-# extragalactic_new_candidate removed: loose extragalactic flavor, no galaxy association, high contamination, single/double epoch objects only.
-api_url_tags = "https://api.lsst.fink-portal.org/api/v1/tags"
-project_dir = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
-tags = [("sn_near_galaxy_candidate",        project_dir / "data" / "extragalactic_object_ids" /  "sn_near_galaxy_candidate.csv"),
-        ("extragalactic_lt20mag_candidate",  project_dir / "data" / "extragalactic_object_ids" / "extragalactic_lt20mag_candidate.csv"),
-        ("in_tns",                           project_dir / "data" / "extragalactic_object_ids" / "candidates_in_TNS.csv")]
+# We use these tags so that we can Xmatch objects with galaxies as we want objects to be able to be associated with a host galaxy, we also use in_tns to find SN that have been confirmed before hand so we can expand groun truth SN before photometric classification.
+API_URL_TAGS = "https://api.lsst.fink-portal.org/api/v1/tags"
+PROJECT_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+TAGS = [("sn_near_galaxy_candidate",        PROJECT_DIR / "data" / "extragalactic_object_ids" /  "sn_near_galaxy_candidate.csv"),
+        ("extragalactic_lt20mag_candidate",  PROJECT_DIR / "data" / "extragalactic_object_ids" / "extragalactic_lt20mag_candidate.csv"),
+        ("in_tns",                           PROJECT_DIR / "data" / "extragalactic_object_ids" / "candidates_in_TNS.csv")]
 
-# Will run everyday and scan the last 24hrs of alerts.
-# NOTE: Need to check what time Rubin is programmed to start the scan of the sky as I don't want to set the code going and miss when alerts are being sent out.
-startdate = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
-stopdate  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+# To query jsut the latest alerts from the API
+STARTDATE = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+STOPDATE  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
 
+# To limit the number of alerts we query for so that we can get full alert volume from the tags and not be limited.
 N_ALERTS = 100000
 
-# fetch_tag_with_fallback was written by Claude Sonnet 4.6 with the prompt:
-# "The 502 error is a one-time problem for the historical backfill. Add a minimal
-# recursive date-splitting fallback that only activates on 502, leaving the daily
-# pipeline logic unchanged."
 def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
-    """Fetch alerts for a tag between two dates.
-    On 502 Bad Gateway, automatically splits the date range in half and retries.
-    For daily 24hr runs this fallback will never trigger.
+    """Fetch alert object IDs for a given Fink tag within a date range.
+
+    Queries the Fink /api/v1/tags endpoint for objects matching `tag` between
+    `startdate` and `stopdate`. On a 502/504 Bad Gateway response, recursively
+    splits the date range in half and retries each half, to handle large
+    historical backfills without timing out. For routine daily 24hr queries
+    this fallback is never triggered.
     """
+
     try:
         r = re.post(
-            api_url_tags,
+            API_URL_TAGS,
             json={
                 "tag":           tag,
                 "startdate":     startdate,
@@ -69,34 +65,52 @@ def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
         else:
             raise
 
-def data_ingestion(startdate, stopdate):
-    for tag, output_path in tags:
+def parse_and_merge_alerts(alerts: list, output_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Converts raw json alert package into a de-duplicated dataframe of the diaObjectIds
+    that is then merged with an existing catalogue at the output_path.
+    
+    This is done so that alerts are transformed into a readble and easy to work with
+    format that can be transformed into different data storage formats."""
+
+    new_extragalactic_ids = sorted(set([str(val["r:diaObjectId"]) for val in alerts]))
+    df_new = pd.DataFrame({"r:diaObjectId": new_extragalactic_ids})
+
+    if output_path.exists():
+        existing_df = pd.read_csv(output_path, dtype={"r:diaObjectId": str})
+        combined_df = pd.concat([existing_df, df_new], ignore_index=True)
+        combined_df = combined_df.drop_duplicates(subset="r:diaObjectId")
+    else:
+        combined_df = df_new
+
+    return combined_df, df_new
+
+def data_ingestion(startdate: str, stopdate: str) -> None:
+    """Iterates through the tags and calls fetch_with_fallback, 
+    removes duplicates and writes the collected object IDs to a csv.
+    
+    This is nessacary so that object IDs that are cross matched can be used 
+    later in the pipeline, this also indicates how many new alerts and 
+    objects are being passed through which allows the user to determine the 
+    ratio of new objects to total alerts produced by Rubin."""
+
+    for tag, output_path in TAGS:
 
         print(f"\nIngesting tag: {tag}")
-        raw_alerts = fetch_tag_with_fallback(tag, startdate, stopdate)
+        alerts = fetch_tag_with_fallback(tag, startdate, stopdate)
 
-        # Warn if the alert ceiling was hit - raw alert count may be incomplete
-        if len(raw_alerts) >= N_ALERTS:
+        if len(alerts) >= N_ALERTS:
             print(f"WARNING: n ceiling hit ({N_ALERTS}) for {tag} — increase N_ALERTS")
-        print(f"Raw alerts returned: {len(raw_alerts)}")
+        print(f"Raw alerts returned: {len(alerts)}")
 
-        new_extragalactic_ids = sorted(set([str(val["r:diaObjectId"]) for val in raw_alerts]))
-        df_new = pd.DataFrame({"r:diaObjectId": new_extragalactic_ids})
-        
+        combined_df, df_new = parse_and_merge_alerts(alerts, output_path)
+
         if len(df_new) == 0:
             print(f"No new candidates for tag: {tag}")
             continue
-
-        if output_path.exists():
-            existing_df = pd.read_csv(output_path, dtype={"r:diaObjectId": str})
-            combined_df = pd.concat([existing_df, df_new], ignore_index=True)
-            combined_df = combined_df.drop_duplicates(subset="r:diaObjectId")
-        else:
-            combined_df = df_new
 
         combined_df.to_csv(output_path, index=False)
         print(f"The number of new candidates found is {len(df_new)}")
         print(f"The total number of candidates in the catalogue is {len(combined_df)}")
 
 if __name__ == "__main__":
-    data_ingestion(startdate, stopdate)
+    data_ingestion(STARTDATE, STOPDATE)

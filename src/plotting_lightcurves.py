@@ -1,4 +1,3 @@
-# quick xcheck of the object IDs that have plots of them and the ones that don't have plots of them to see if any of the objects that passed the rate of rise cuts didn't have plots generated for them.
 import pandas as pd
 import os
 import light_curve_plotter as lcp

@@ -1,7 +1,7 @@
-"""This is the production level script of the rate of rise cuts for the g and r bands of the candidates in sn_near_galaxy_candidate.csv and extragalactic_lt20mag_candidates.csv.
-    it will pull object id from the CSV file, fetch the light curve data from the api of the objects,
-    apply the 4 minimum detections cut before peak, normalise the fluxes to the current brightest values, 
-    compute the linear slope, then apply the 1 sigma cut to the slopes across both bands and then 
+"""This performs a rate of rise cuts for the g and r bands of the candidates in sn_near_galaxy_candidate.csv, 
+    extragalactic_lt20mag_candidates.csv and candidates_in_TNS.csv. It pulls the diaObjectIds from the CSV file, 
+    fetch the light curve data from the api of the objects, apply the 4 minimum detections cut before peak, 
+    normalise the fluxes to the current brightest values, compute the linear slope, and then 
     output the candidates that passed and those that didn't into their respective CSV files"""
 
 import pandas as pd
@@ -9,24 +9,29 @@ import numpy as np
 from pathlib import Path
 from light_curve_plotter import collect_light_curve_data
 
-candidate_dir = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "extragalactic_object_ids"
-rate_of_rise_dir = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/ "data" / "Rate_of_rise_cuts"
+# Directories for the objects that passed the first filtering done through the tags, second directory is for the output of the rate of rise cut.
+CANDIDATE_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "extragalactic_object_ids"
+RATE_OF_RISE_DIR = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/ "data" / "Rate_of_rise_cuts"
 
-sn_near_galaxy_candidates = list(pd.read_csv(candidate_dir / "sn_near_galaxy_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
-extragalactic_candidates = list(pd.read_csv(candidate_dir / "extragalactic_lt20mag_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
-in_tns_candidates = list(pd.read_csv(candidate_dir / "candidates_in_TNS.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
-sn_near_galaxy_candidates_output_passed = rate_of_rise_dir / "sn_near_galaxy_candidates_passed.csv"
-sn_near_galaxy_candidates_output_failed = rate_of_rise_dir / "sn_near_galaxy_candidates_failed.csv"
-extragalactic_candidates_output_passed = rate_of_rise_dir / "extragalactic_candidates_passed.csv"
-extragalactic_candidates_output_failed = rate_of_rise_dir / "extragalactic_candidates_failed.csv"
-in_tns_candidates_output_passed = rate_of_rise_dir / "in_tns_candidates_passed.csv"
-in_tns_candidates_output_failed = rate_of_rise_dir / "in_tns_candidates_failed.csv"
+# Reading the csv for the objects that passed the Fink tag filtering and creating the CSVs where data will be stored. 
+SN_NEAR_GALAXY_CANDIDATES = list(pd.read_csv(CANDIDATE_DIR / "sn_near_galaxy_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
+EXTRAGALACTIC_CANDIDATES = list(pd.read_csv(CANDIDATE_DIR / "extragalactic_lt20mag_candidate.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
+IN_TNS_CANDIDATES = list(pd.read_csv(CANDIDATE_DIR / "candidates_in_TNS.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
 
+# Creating the passed and failed CSVs that store the passing and failing objects from the filter.
+sn_near_galaxy_candidates_output_passed = RATE_OF_RISE_DIR / "sn_near_galaxy_candidates_passed.csv"
+sn_near_galaxy_candidates_output_failed = RATE_OF_RISE_DIR / "sn_near_galaxy_candidates_failed.csv"
+extragalactic_candidates_output_passed = RATE_OF_RISE_DIR / "extragalactic_candidates_passed.csv"
+extragalactic_candidates_output_failed = RATE_OF_RISE_DIR / "extragalactic_candidates_failed.csv"
+in_tns_candidates_output_passed = RATE_OF_RISE_DIR / "in_tns_candidates_passed.csv"
+in_tns_candidates_output_failed = RATE_OF_RISE_DIR / "in_tns_candidates_failed.csv"
+
+# specifying the how many objects go into each query to the API and the slope thresholds for the rate of rise filtering.
 chunk_size = 500
 red_slope_cut_threshold = 0.0053
 green_slope_cut_threshold = 0.0223
 
-
+# Here we apply the rate of rise filter, pull the flux and the time of the measurement of the candidates into 
 def applying_rate_of_rise_filter(candidates, chunk_size, red_slope_cut_threshold, green_slope_cut_threshold, output_path_passed, output_path_failed):
     passed, failed = [], []
 
