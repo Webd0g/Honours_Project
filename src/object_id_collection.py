@@ -1,5 +1,7 @@
-"""This script scrapes the Fink broker and finds alerts that pass the extragalactic_lt20mag, sn_near_galaxy and in_tns Fink filters.
-it then pulls the diaObjectId from the alerts and appends it to a csv file for each object that passes the distinct filters"""
+"""
+This script scrapes the Fink broker and finds alerts that pass the extragalactic_lt20mag, sn_near_galaxy and in_tns Fink filters.
+it then pulls the diaObjectId from the alerts and appends it to a csv file for each object that passes the distinct filters
+"""
 
 import pandas as pd
 import requests as re
@@ -21,7 +23,8 @@ STOPDATE  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-
 N_ALERTS = 100000
 
 def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
-    """Fetch alert object IDs for a given Fink tag within a date range.
+    """
+    Fetch alert object IDs for a given Fink tag within a date range.
 
     Queries the Fink /api/v1/tags endpoint for objects matching `tag` between
     `startdate` and `stopdate`. On a 502/504 Bad Gateway response, recursively
@@ -66,11 +69,13 @@ def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
             raise
 
 def parse_and_merge_alerts(alerts: list, output_path: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Converts raw json alert package into a de-duplicated dataframe of the diaObjectIds
+    """
+    Converts raw json alert package into a de-duplicated dataframe of the diaObjectIds
     that is then merged with an existing catalogue at the output_path.
     
     This is done so that alerts are transformed into a readble and easy to work with
-    format that can be transformed into different data storage formats."""
+    format that can be transformed into different data storage formats.
+    """
 
     new_extragalactic_ids = sorted(set([str(val["r:diaObjectId"]) for val in alerts]))
     df_new = pd.DataFrame({"r:diaObjectId": new_extragalactic_ids})
@@ -85,13 +90,15 @@ def parse_and_merge_alerts(alerts: list, output_path: Path) -> tuple[pd.DataFram
     return combined_df, df_new
 
 def data_ingestion(startdate: str, stopdate: str) -> None:
-    """Iterates through the tags and calls fetch_with_fallback, 
+    """
+    Iterates through the tags and calls fetch_with_fallback, 
     removes duplicates and writes the collected object IDs to a csv.
     
     This is nessacary so that object IDs that are cross matched can be used 
     later in the pipeline, this also indicates how many new alerts and 
     objects are being passed through which allows the user to determine the 
-    ratio of new objects to total alerts produced by Rubin."""
+    ratio of new objects to total alerts produced by Rubin.
+    """
 
     for tag, output_path in TAGS:
 

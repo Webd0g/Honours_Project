@@ -1,8 +1,10 @@
-"""This performs a rate of rise cuts for the g and r bands of the candidates in sn_near_galaxy_candidate.csv, 
-    extragalactic_lt20mag_candidates.csv and candidates_in_TNS.csv. It pulls the diaObjectIds from the CSV file, 
-    fetch the light curve data from the api of the objects, apply the 4 minimum detections cut before peak, 
-    normalise the fluxes to the current brightest values, compute the linear slope, and then 
-    output the candidates that passed and those that didn't into their respective CSV files"""
+"""
+This performs a rate of rise cuts for the g and r bands of the candidates in sn_near_galaxy_candidate.csv, 
+extragalactic_lt20mag_candidates.csv and candidates_in_TNS.csv. It pulls the diaObjectIds from the CSV file, 
+fetch the light curve data from the api of the objects, apply the 4 minimum detections cut before peak, 
+normalise the fluxes to the current brightest values, compute the linear slope, and then 
+output the candidates that passed and those that didn't into their respective CSV files
+"""
 
 import pandas as pd
 import numpy as np
@@ -31,16 +33,13 @@ CHUNK_SIZE = 500
 RED_SLOPE_CUT_THRESHOLD = 0.0053
 GREEN_SLOPE_CUT_THRESHOLD = 0.0223
 
-
-def applying_rate_of_rise_filter(candidates, chunk_size, red_slope_cut_threshold, green_slope_cut_threshold, output_path_passed, output_path_failed):
-    """This function applies the rate of rise filter to a CSV file of diaObjectIds acquired from the Rubin telescope using Fink. It uses thresholds 
-    for the slope of the g and r bandpasses derived from the 6 confirmed in_tns objects. This function also employs a number of data points pre-peak
-    cut off which is 4 to prevent two point detection cases from pasing which are not useful cases.
-    
-    This function is nessacary to cut out any flat and non rising objects out of the large data base as the tag filtering doesn't cut out flat light curves
-    which are obviously not SN candidates."""
-
-    passed, failed = [], []
+def chunked_light_curve_data(candidates : list , chunk_size = 500 ) -> pd.DataFrame:
+    """
+    This function scrapes the Fink
+    API for the light curve info nessacary
+    to make cuts absed on object qualities and 
+    produce plots of the light curves.
+    """
 
     candidate_results =[]
 
@@ -48,43 +47,83 @@ def applying_rate_of_rise_filter(candidates, chunk_size, red_slope_cut_threshold
         candidates_light_curve_data = collect_light_curve_data(','.join(candidates[diaObjectId:diaObjectId + chunk_size]))
         if candidates_light_curve_data is not None:
             candidate_results.append(candidates_light_curve_data)
-    
+
     if not candidate_results:
         raise RuntimeError(f"No light curve data returned for candidate batch of size {len(candidates)}")
 
-    candidate_light_curve_info = pd.concat(candidate_results, ignore_index=True)
+    return pd.concat(candidate_results, ignore_index=True)
 
-    for object_id, group_df in candidate_light_curve_info.groupby("r:diaObjectId"):
-        red_group_df = group_df[group_df["r:band"].isin(["r"])]
-        green_group_df = group_df[group_df["r:band"].isin(["g"])]
-        if red_group_df.empty or green_group_df.empty:
-            failed.append(object_id)
-            continue
-        red_peak_flux = red_group_df["r:psfFlux"].max()
-        green_peak_flux = green_group_df["r:psfFlux"].max()
-        peak_red_mjd = red_group_df.loc[red_group_df["r:psfFlux"].idxmax(), "r:midpointMjdTai"]
-        peak_green_mjd = green_group_df.loc[green_group_df["r:psfFlux"].idxmax(), "r:midpointMjdTai"]
-        pre_peak_red_mjd = red_group_df[red_group_df["r:midpointMjdTai"] < peak_red_mjd]
-        pre_peak_green_mjd = green_group_df[green_group_df["r:midpointMjdTai"] < peak_green_mjd]
-        if len(pre_peak_red_mjd) >= 4 and len(pre_peak_green_mjd) >= 4:
-            red_slope, red_intercept = np.polyfit(pre_peak_red_mjd["r:midpointMjdTai"], (pre_peak_red_mjd["r:psfFlux"]/red_peak_flux), 1)
-            green_slope, green_intercept = np.polyfit(pre_peak_green_mjd["r:midpointMjdTai"], (pre_peak_green_mjd["r:psfFlux"]/green_peak_flux), 1)
-            if red_slope >= red_slope_cut_threshold and green_slope >= green_slope_cut_threshold:
-                # candidate passes the cut
-                passed.append(object_id)
-            else: 
-                failed.append(object_id)
+def slope_calculation(group_df: pd.DataFrame, band: str) -> tuple[float, int] | None:
+    """
+    This function finds the slope of the band of the lightcurve
+    prepeak by fitting a polynomial of degree 1 to the points of the light
+    curve before the brightest point of the light curve. This also incorporates
+    the minimum four detections before the peak check before the slope is calculated.
+
+    This is done to remove the flat objects whose brightness doesn't change that much over time.
+    We make it a function of bands so that we can easily use different bandpasses when neccesary for 
+    higher redshift SN.
+    """
+    band_df = group_df[group_df["r:band"] == band]
+
+    if band_df.empty:
+        return None
+
+    peak_flux = band_df["r:psfFlux"].max()
+    peak_mjd = band_df.loc[band_df["r:psfFlux"].idxmax(), "r:midpointMjdTai"]
+    pre_peak_mjd = band_df[band_df["r:midpointMjdTai"] < peak_mjd]
+
+    if len(pre_peak_mjd) >= 4:
+        slope, _ = np.polyfit(pre_peak_mjd["r:midpointMjdTai"], (pre_peak_mjd["r:psfFlux"]/peak_flux), 1)
+
+        return slope, len(pre_peak_mjd)
+    
+    else:
+        return None
+
+
+def check_rate_of_rise(group_df: pd.DataFrame, red_threshold: float, green_threshold: float) -> bool:
+    """
+    This function calls the slope calculation of the object in the specified band and checks if 
+    it passes the specifed threshold for to be considered potentially SN. 
+    
+    This function is nessecary incase we desire to easily change what bands we use and change the
+    slope thresholds. 
+    """
+    red_slope = slope_calculation(group_df, "r")
+    green_slope = slope_calculation(group_df, "g")
+    
+    if red_slope is None or green_slope is None:
+        return False
+    
+    return red_slope[0] >= red_threshold and green_slope[0] >= green_threshold
+
+def applying_the_rate_of_rise(objects: list[str], chunk_size: int, red_threshold: float, green_threshold: float, output_path_passed: Path, output_path_failed: Path) -> tuple[list[str], list[str]]:
+    """
+    This function pulls the light curve data for the specified list of object ids and the chunk size can be customised if you have a large list of objects or small. The function then checks against 
+    the rate of rise threshold and directs the objects to their respective lists. Finally this function then produces two CSV files of the obejcts that passed and ones that failed.
+    """
+
+    passed, failed = [], []
+    
+    light_curve_info = chunked_light_curve_data(objects, chunk_size)
+
+    for object_id, group_df in light_curve_info.groupby("r:diaObjectId"):
+        if check_rate_of_rise(group_df, red_threshold, green_threshold):
+            passed.append(object_id)
         else:
             failed.append(object_id)
-
-    # writing the passed candidates to their respective CSV files
-    passed_df = pd.DataFrame(passed, columns=["r:diaObjectId"])
-    passed_df.to_csv(output_path_passed, index=False)
-    failed_df = pd.DataFrame(failed, columns=["r:diaObjectId"])
-    failed_df.to_csv(output_path_failed, index=False)
+    
+    pd.DataFrame(passed, columns=["r:diaObjectId"]).to_csv(output_path_passed, index=False)
+    pd.DataFrame(failed, columns=["r:diaObjectId"]).to_csv(output_path_failed, index=False)
 
     return passed, failed
 
-sn_near_galaxy_candidates_passed, sn_near_galaxy_candidates_failed = applying_rate_of_rise_filter(SN_NEAR_GALAXY_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, SN_NEAR_GALAXY_CANDIDATES_OUTPUT_PASSED, SN_NEAR_GALAXY_CANDIDATES_OUTPUT_FAILED)
-extragalactic_candidates_passed, extragalactic_candidates_failed = applying_rate_of_rise_filter(EXTRAGALACTIC_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, EXTRAGALACTIC_CANDIDATES_OUTPUT_PASSED, EXTRAGALACTIC_CANDIDATES_OUTPUT_FAILED)
-in_tns_candidates_passed, in_tns_candidates_failed = applying_rate_of_rise_filter(IN_TNS_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, IN_TNS_CANDIDATES_OUTPUT_PASSED, IN_TNS_CANDIDATES_OUTPUT_FAILED)
+if __name__ ==  "__main__":
+    applying_the_rate_of_rise(SN_NEAR_GALAXY_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, SN_NEAR_GALAXY_CANDIDATES_OUTPUT_PASSED, SN_NEAR_GALAXY_CANDIDATES_OUTPUT_FAILED)
+    applying_the_rate_of_rise(EXTRAGALACTIC_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, EXTRAGALACTIC_CANDIDATES_OUTPUT_PASSED, EXTRAGALACTIC_CANDIDATES_OUTPUT_FAILED)
+    applying_the_rate_of_rise(IN_TNS_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, IN_TNS_CANDIDATES_OUTPUT_PASSED, IN_TNS_CANDIDATES_OUTPUT_FAILED)
+
+# in_tns_test_candidates = ["170094456400773135", "170094456357257301", "170226393328648251", "170235219334922248", "170257199649521669", "170411112000913487"]
+
+# applying_the_rate_of_rise(in_tns_test_candidates, 500, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, r"C:\Users\riley\Downloads\in_tns_test_passed.csv", r"C:\Users\riley\Downloads\in_tns_test_failed.csv")
