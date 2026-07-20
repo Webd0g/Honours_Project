@@ -114,3 +114,21 @@ $RECYCLE.BIN/
 
 # Windows zone identifier files (created when downloading files)
 *.Zone.Identifier
+
+# Writing & presentation content - Syncthing's responsibility
+Literature_Review/
+Literature_Review/**
+Thesis/
+Thesis/**
+Portfolio/
+Portfolio/**
+Oral_presentation/
+Oral_presentation/**
+
+# Research Skills Class Content
+Classes/
+Classes/**
+
+#logs
+logs/
+logs/**

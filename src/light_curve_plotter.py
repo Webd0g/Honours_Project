@@ -42,7 +42,7 @@ def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, ou
             group["date"],
             group["mag"],
             yerr = group["mag_err"],
-            fmt = "o-",
+            fmt = "o",
             color = colour,
             label = f"{band}-band",
             capsize = 3,

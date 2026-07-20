@@ -42,7 +42,7 @@ def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, ou
             group["date"],
             group["mag"],
             yerr = group["mag_err"],
-            fmt = "o-",
+            fmt = "o",
             color = colour,
             label = f"{band}-band",
             capsize = 3,
@@ -50,7 +50,7 @@ def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, ou
         
     ax.invert_yaxis()
     ax.set_xlabel("Observation Date")
-    ax.set_ylabel("AB Magnitude")
+    ax.set_ylabel("AB magnitude")
     ax.set_title(f"Light curve - {diaObjectId}\n({source_file})")
     ax.legend()
     ax.grid(True, alpha = 0.3)

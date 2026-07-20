@@ -11,6 +11,7 @@ object_ids_passed_sn_near_galaxy = pd.read_csv(rate_of_rise_dir / "sn_near_galax
 object_ids_passed_extragalactic_lt20mag = pd.read_csv(rate_of_rise_dir / "extragalactic_candidates_passed.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"].tolist()
 object_ids_passed_in_tns = pd.read_csv(rate_of_rise_dir / "in_tns_candidates_passed.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].tolist()
 object_ids_passed = object_ids_passed_sn_near_galaxy + object_ids_passed_extragalactic_lt20mag + object_ids_passed_in_tns
+print (object_ids_passed)
 
 # finds the object ids of the objects that already have plots of them and combines the strings into a list.
 object_ids_with_plots_false_positives = ([f.split(".")[0] for f in os.listdir(Path.home() / "Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results/False_positives") if f.endswith(".png")])
@@ -29,4 +30,4 @@ print (f"{(len(objects_not_with_plots))} passed the rate of rise cuts but doesn'
 chunk_size = 500
 output_path = Path.home() / "Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results"
 
-glcbp.batch_plotter(objects_not_with_plots, chunk_size, output_path)
+# glcbp.batch_plotter(objects_not_with_plots, chunk_size, output_path)

@@ -19,20 +19,27 @@ EXTRAGALACTIC_CANDIDATES = list(pd.read_csv(CANDIDATE_DIR / "extragalactic_lt20m
 IN_TNS_CANDIDATES = list(pd.read_csv(CANDIDATE_DIR / "candidates_in_TNS.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"])
 
 # Creating the passed and failed CSVs that store the passing and failing objects from the filter.
-sn_near_galaxy_candidates_output_passed = RATE_OF_RISE_DIR / "sn_near_galaxy_candidates_passed.csv"
-sn_near_galaxy_candidates_output_failed = RATE_OF_RISE_DIR / "sn_near_galaxy_candidates_failed.csv"
-extragalactic_candidates_output_passed = RATE_OF_RISE_DIR / "extragalactic_candidates_passed.csv"
-extragalactic_candidates_output_failed = RATE_OF_RISE_DIR / "extragalactic_candidates_failed.csv"
-in_tns_candidates_output_passed = RATE_OF_RISE_DIR / "in_tns_candidates_passed.csv"
-in_tns_candidates_output_failed = RATE_OF_RISE_DIR / "in_tns_candidates_failed.csv"
+SN_NEAR_GALAXY_CANDIDATES_OUTPUT_PASSED = RATE_OF_RISE_DIR / "sn_near_galaxy_candidates_passed.csv"
+SN_NEAR_GALAXY_CANDIDATES_OUTPUT_FAILED = RATE_OF_RISE_DIR / "sn_near_galaxy_candidates_failed.csv"
+EXTRAGALACTIC_CANDIDATES_OUTPUT_PASSED = RATE_OF_RISE_DIR / "extragalactic_candidates_passed.csv"
+EXTRAGALACTIC_CANDIDATES_OUTPUT_FAILED = RATE_OF_RISE_DIR / "extragalactic_candidates_failed.csv"
+IN_TNS_CANDIDATES_OUTPUT_PASSED = RATE_OF_RISE_DIR / "in_tns_candidates_passed.csv"
+IN_TNS_CANDIDATES_OUTPUT_FAILED = RATE_OF_RISE_DIR / "in_tns_candidates_failed.csv"
 
-# specifying the how many objects go into each query to the API and the slope thresholds for the rate of rise filtering.
-chunk_size = 500
-red_slope_cut_threshold = 0.0053
-green_slope_cut_threshold = 0.0223
+# Specifying how many objects go into each query to the API and the slope thresholds for the rate of rise in the g and r bands for the rate of rise filtering.
+CHUNK_SIZE = 500
+RED_SLOPE_CUT_THRESHOLD = 0.0053
+GREEN_SLOPE_CUT_THRESHOLD = 0.0223
 
-# Here we apply the rate of rise filter, pull the flux and the time of the measurement of the candidates into 
+
 def applying_rate_of_rise_filter(candidates, chunk_size, red_slope_cut_threshold, green_slope_cut_threshold, output_path_passed, output_path_failed):
+    """This function applies the rate of rise filter to a CSV file of diaObjectIds acquired from the Rubin telescope using Fink. It uses thresholds 
+    for the slope of the g and r bandpasses derived from the 6 confirmed in_tns objects. This function also employs a number of data points pre-peak
+    cut off which is 4 to prevent two point detection cases from pasing which are not useful cases.
+    
+    This function is nessacary to cut out any flat and non rising objects out of the large data base as the tag filtering doesn't cut out flat light curves
+    which are obviously not SN candidates."""
+
     passed, failed = [], []
 
     candidate_results =[]
@@ -78,6 +85,6 @@ def applying_rate_of_rise_filter(candidates, chunk_size, red_slope_cut_threshold
 
     return passed, failed
 
-sn_near_galaxy_candidates_passed, sn_near_galaxy_candidates_failed = applying_rate_of_rise_filter(sn_near_galaxy_candidates, chunk_size, red_slope_cut_threshold, green_slope_cut_threshold, sn_near_galaxy_candidates_output_passed, sn_near_galaxy_candidates_output_failed)
-extragalactic_candidates_passed, extragalactic_candidates_failed = applying_rate_of_rise_filter(extragalactic_candidates, chunk_size, red_slope_cut_threshold, green_slope_cut_threshold, extragalactic_candidates_output_passed, extragalactic_candidates_output_failed)
-in_tns_candidates_passed, in_tns_candidates_failed = applying_rate_of_rise_filter(in_tns_candidates, chunk_size, red_slope_cut_threshold, green_slope_cut_threshold, in_tns_candidates_output_passed, in_tns_candidates_output_failed)
+sn_near_galaxy_candidates_passed, sn_near_galaxy_candidates_failed = applying_rate_of_rise_filter(SN_NEAR_GALAXY_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, SN_NEAR_GALAXY_CANDIDATES_OUTPUT_PASSED, SN_NEAR_GALAXY_CANDIDATES_OUTPUT_FAILED)
+extragalactic_candidates_passed, extragalactic_candidates_failed = applying_rate_of_rise_filter(EXTRAGALACTIC_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, EXTRAGALACTIC_CANDIDATES_OUTPUT_PASSED, EXTRAGALACTIC_CANDIDATES_OUTPUT_FAILED)
+in_tns_candidates_passed, in_tns_candidates_failed = applying_rate_of_rise_filter(IN_TNS_CANDIDATES, CHUNK_SIZE, RED_SLOPE_CUT_THRESHOLD, GREEN_SLOPE_CUT_THRESHOLD, IN_TNS_CANDIDATES_OUTPUT_PASSED, IN_TNS_CANDIDATES_OUTPUT_FAILED)
