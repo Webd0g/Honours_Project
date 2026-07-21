@@ -33,6 +33,29 @@ CHUNK_SIZE = 500
 RED_SLOPE_CUT_THRESHOLD = 0.0053
 GREEN_SLOPE_CUT_THRESHOLD = 0.0223
 
+#writing the fetch ligthcurve info with fallback function here
+def collect_light_curve_info_with_fallback(candidates: list[str]) -> pd.DataFrame:
+    """This function collects the lightcurve info of an object 
+    and factors in a recursive self repair incase the script timesout 
+    while running on large requests. """
+
+    data = collect_light_curve_data(",".join(candidates))
+    if data is not None:
+        return data
+    
+    if len(candidates) <= 1:
+        print (f"Could not fetch data for object {candidates}, skipping.")
+        return None
+    
+    mid = len(candidates) // 2
+    left = collect_light_curve_info_with_fallback(candidates[:mid])
+    right = collect_light_curve_info_with_fallback(candidates[mid:])
+
+    candidates_parts = [df for df in (left, right) if df is not None]
+    if not candidates_parts:
+        return None
+    return pd.concat(candidates_parts)
+
 def chunked_light_curve_data(candidates : list , chunk_size = 500 ) -> pd.DataFrame:
     """
     This function scrapes the Fink
@@ -44,9 +67,11 @@ def chunked_light_curve_data(candidates : list , chunk_size = 500 ) -> pd.DataFr
     candidate_results =[]
 
     for diaObjectId in range(0, len(candidates), chunk_size):
-        candidates_light_curve_data = collect_light_curve_data(','.join(candidates[diaObjectId:diaObjectId + chunk_size]))
+        chunked_ids = candidates[diaObjectId:diaObjectId + chunk_size]
+        candidates_light_curve_data = collect_light_curve_info_with_fallback(chunked_ids)
         if candidates_light_curve_data is not None:
             candidate_results.append(candidates_light_curve_data)
+        
 
     if not candidate_results:
         raise RuntimeError(f"No light curve data returned for candidate batch of size {len(candidates)}")

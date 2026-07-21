@@ -1,3 +1,7 @@
+"""
+Plotting the lightcurves that 
+"""
+
 import pandas as pd
 import os
 import light_curve_plotter as lcp
@@ -30,4 +34,4 @@ print (f"{(len(objects_not_with_plots))} passed the rate of rise cuts but doesn'
 chunk_size = 500
 output_path = Path.home() / "Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results"
 
-# glcbp.batch_plotter(objects_not_with_plots, chunk_size, output_path)
+glcbp.batch_plotter(objects_not_with_plots, chunk_size, output_path)
