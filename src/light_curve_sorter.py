@@ -1,96 +1,107 @@
+"""
+This script cross-checks the visual inspection CSV against the current location of
+each object's light curve plot, and moves any plot that isn't already sitting in the
+directory matching its assigned category.
+"""
+
+# Written by Claude Sonnet 4.6 (Anthropic) with the prompt:
+# "Here is what I have so far as a draft and I am kind of stuck with how to find the
+# file that currently has that object ID... [draft script pasted]... could you make
+# the edits and I will supervise please?" followed by "Now can you refactor it so
+# each different step is its own function please?"
+
+import pandas as pd
 from pathlib import Path
-import os
 
 # Define directories
-image_dir = Path(Path.home() / "Documents/University/Honours/Honours_Project/images/SN_lightcurves/passed_rate_of_rise_cuts_results")
-genuine_dir = Path(image_dir / "genuine_candidates")
-flat_curve_dir = Path(image_dir / "flat_curves_with_noise")
-declining_dir = Path(image_dir / "declining_objects")
-single_band_dir = Path(image_dir / "single_band_detections")
-anomaly_dir = Path(image_dir / "anomalies")
+PLOT_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "SN_lightcurves"
+IMAGE_DIR = PLOT_DIR / "passed_rate_of_rise_cuts_results"
+GENUINE_DIR = IMAGE_DIR / "genuine_candidates"
+FLAT_CURVE_DIR = IMAGE_DIR / "flat_curves_with_noise"
+DECLINING_DIR = IMAGE_DIR / "declining_objects"
+SINGLE_BAND_DIR = IMAGE_DIR / "single_band_detections"
+ANOMALY_DIR = IMAGE_DIR / "anomalies"
 
-# Ensure directories exist
-genuine_dir.mkdir(parents=True, exist_ok=True)
-flat_curve_dir.mkdir(parents=True, exist_ok=True)
-declining_dir.mkdir(parents=True, exist_ok=True)
-single_band_dir.mkdir(parents=True, exist_ok=True)
-anomaly_dir.mkdir(parents=True, exist_ok=True)
+CSV_RESULTS_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "visual_inspection" / "visual_inspection_results.csv"
 
-def parse_markdown(markdown_ids):
-    categories = {
-        "genuine_candidates": [],
-        "flat_curves_with_noise": [],
-        "declining_objects": [],
-        "single_band_detections": [],
-        "anomalies": []
-    }
+CATEGORIES = [
+    'anomalies',
+    'declining_objects',
+    'flat_curves_with_noise',
+    'genuine_candidates',
+    'single_band_detections'
+]
 
-    lines = markdown_ids.split("\n")
-    current_category = None
 
-    for line_number, line in enumerate(lines, start=1):
-        if line.startswith("##"):
-            category_name = line[3:].strip()
-            current_category = category_name.lower().replace(" ", "_").replace("-", "_")
+def build_object_id_lookup(image_dir: Path) -> dict[str, Path]:
+    """
+    Searches recursively across image_dir for every .png file and builds a
+    lookup of diaObjectId (the file stem) -> its current Path.
 
-            # Adjust category names based on the structure
-            if category_name == "Genuine Rising transients":
-                current_category = "genuine_candidates"
-            elif category_name == "Declining Objects":
-                current_category = "declining_objects"
-            elif category_name == "Single Band Detections":
-                current_category = "single_band_detections"
-            elif category_name == "Anomaly":
-                current_category = "anomalies"
-        else:
-            line = (line.strip().lower().replace('-', ''))[:19]
-            if len(line) == 19:
-                categories[current_category].append(line.strip())
-            else:
-                print (f"Line {line_number} does not fit the format for a Rubin diaObjectId")
+    This is done once upfront so that finding an object's current location is a
+    single dict lookup rather than a fresh filesystem search per object.
+    """
+    return {image.stem: image for image in image_dir.rglob("*.png")}
 
-    return categories
 
-# Read the markdown_ids of the markdown file
-with open(Path.home() / "Documents/University/Honours/Honours_Project/data/Rate_of_rise_cuts/Honours Project/SN Ia Rise Rate Cut Results Tally.md", "r") as file:
-    markdown_ids = file.read()
+def build_expected_paths(csv_object_df: pd.DataFrame, image_dir: Path, categories: list[str]) -> dict[str, list[tuple[str, Path]]]:
+    """
+    Groups (diaObjectId, expected_path) pairs by category, based on the
+    visual inspection CSV. expected_path is where that object's plot should
+    live if it has already been sorted correctly.
+    """
+    constructed_dirs = {category: [] for category in categories}
 
-categories = parse_markdown(markdown_ids)
+    for _, row in csv_object_df.iterrows():
+        if row["Category"] in constructed_dirs:
+            expected_path = image_dir / row["Category"] / (row["diaObjectId"] + ".png")
+            constructed_dirs[row["Category"]].append((row["diaObjectId"], expected_path))
 
-def move_images_not_in_markdown(image_dir, categories):
-    all_ids = set()
-    items = os.listdir(image_dir)
-    images = []
-    images_not_in_markdown = []
+    return constructed_dirs
 
-    for id_list in categories.values():
-        all_ids.update(id_list)
 
-    for item in items:
-        if item.endswith(".png"):
-            images.append(item)
-    
-    for item in images:
-        object_id = Path(item).stem
-        if object_id not in all_ids:
-            images_not_in_markdown.append(item)
-    
-    for image in images_not_in_markdown:
-        image_path = image_dir / f"{image}"
-        if image_path.exists():
-            image_path.rename(flat_curve_dir / f"{image}")
+def move_misplaced_plots(constructed_dirs: dict[str, list[tuple[str, Path]]], object_id_lookup: dict[str, Path]) -> tuple[int, int]:
+    """
+    For each expected (diaObjectId, expected_path) pair, checks whether the
+    plot is already at expected_path. If not, looks up its current location
+    and moves it there. Returns (moved_count, missing_count).
+    """
+    moved = 0
+    missing = 0
 
-def move_images_in_markdown(image_dir, target_dir ,ids):
-    for id_str in ids:
-        image_path = image_dir / f"{id_str}.png"
-        if image_path.exists():
-            image_path.rename(target_dir / f"{id_str}.png")
+    for category, entries in constructed_dirs.items():
+        for object_id, expected_path in entries:
+            if expected_path.exists():
+                continue
 
-# Move images to respective directories
-move_images_in_markdown(image_dir, genuine_dir, categories["genuine_candidates"])
-move_images_in_markdown(image_dir, declining_dir, categories["declining_objects"])
-move_images_in_markdown(image_dir, single_band_dir, categories["single_band_detections"])
-move_images_in_markdown(image_dir, anomaly_dir, categories["anomalies"])
-move_images_not_in_markdown(image_dir, categories)
+            current_path = object_id_lookup.get(object_id)
+            if current_path is None:
+                print(f"No plot found on disk for {object_id} (expected category: {category})")
+                missing += 1
+                continue
 
-print("Images have been moved to respective directories.")
+            expected_path.parent.mkdir(parents=True, exist_ok=True)
+            current_path.rename(expected_path)
+            moved += 1
+            print(f"Moved {object_id}: {current_path} -> {expected_path}")
+
+    return moved, missing
+
+
+def sort_plots_from_csv(csv_path: Path, image_dir: Path, categories: list[str]) -> None:
+    """
+    Orchestrates the full sorting process: reads the visual inspection CSV,
+    builds the current-location lookup, works out where each plot should be,
+    and moves any plots that are in the wrong place.
+    """
+    csv_object_df = pd.read_csv(csv_path, dtype={"diaObjectId": str})
+
+    object_id_lookup = build_object_id_lookup(image_dir)
+    constructed_dirs = build_expected_paths(csv_object_df, image_dir, categories)
+    moved, missing = move_misplaced_plots(constructed_dirs, object_id_lookup)
+
+    print(f"\nDone. Moved {moved} plots, {missing} objects had no plot found on disk.")
+
+
+if __name__ == "__main__":
+    sort_plots_from_csv(CSV_RESULTS_DIR, IMAGE_DIR, CATEGORIES)
