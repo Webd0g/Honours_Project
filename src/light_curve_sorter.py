@@ -13,16 +13,24 @@ directory matching its assigned category.
 import pandas as pd
 from pathlib import Path
 
-# Define directories
+# Define passed directories
 PLOT_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "SN_lightcurves"
-IMAGE_DIR = PLOT_DIR / "passed_rate_of_rise_cuts_results"
-GENUINE_DIR = IMAGE_DIR / "genuine_candidates"
-FLAT_CURVE_DIR = IMAGE_DIR / "flat_curves_with_noise"
-DECLINING_DIR = IMAGE_DIR / "declining_objects"
-SINGLE_BAND_DIR = IMAGE_DIR / "single_band_detections"
-ANOMALY_DIR = IMAGE_DIR / "anomalies"
+IMAGE_DIR_PASSED = PLOT_DIR / "passed_rate_of_rise_cuts_results"
+GENUINE_DIR_PASSED = IMAGE_DIR_PASSED / "genuine_candidates"
+FLAT_CURVE_DIR_PASSED = IMAGE_DIR_PASSED / "flat_curves_with_noise"
+DECLINING_DIR_PASSED = IMAGE_DIR_PASSED / "declining_objects"
+SINGLE_BAND_DIR_PASSED = IMAGE_DIR_PASSED / "single_band_detections"
+ANOMALY_DIR_PASSED = IMAGE_DIR_PASSED / "anomalies"
 
-CSV_RESULTS_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "visual_inspection" / "visual_inspection_results.csv"
+# Define failed directories
+IMAGE_DIR_FAILED = PLOT_DIR / "failed_rate_of_rise_cuts_results"
+GENUINE_DIR_FAILED = IMAGE_DIR_FAILED / "genuine_candidates"
+FLAT_CURVE_DIR_FAILED = IMAGE_DIR_FAILED / "flat_curves_with_noise"
+DECLINING_DIR_FAILED = IMAGE_DIR_FAILED / "declining_objects"
+SINGLE_BAND_DIR_FAILED = IMAGE_DIR_FAILED / "single_band_detections"
+ANOMALY_DIR_FAILED = IMAGE_DIR_FAILED / "anomalies"
+
+CSV_RESULTS_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "visual_inspection"
 
 CATEGORIES = [
     'anomalies',
@@ -82,6 +90,7 @@ def move_misplaced_plots(constructed_dirs: dict[str, list[tuple[str, Path]]], ob
 
             expected_path.parent.mkdir(parents=True, exist_ok=True)
             current_path.rename(expected_path)
+            object_id_lookup[object_id] = expected_path
             moved += 1
             print(f"Moved {object_id}: {current_path} -> {expected_path}")
 
@@ -104,4 +113,4 @@ def sort_plots_from_csv(csv_path: Path, image_dir: Path, categories: list[str]) 
 
 
 if __name__ == "__main__":
-    sort_plots_from_csv(CSV_RESULTS_DIR, IMAGE_DIR, CATEGORIES)
+    sort_plots_from_csv(CSV_RESULTS_DIR / "failed_visual_inspection_results.csv", IMAGE_DIR_FAILED, CATEGORIES)

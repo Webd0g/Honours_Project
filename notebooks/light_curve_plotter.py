@@ -57,3 +57,4 @@ def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, ou
     fig.autofmt_xdate()
     plt.tight_layout()
     plt.savefig(output_dir)
+    plt.close(fig)
