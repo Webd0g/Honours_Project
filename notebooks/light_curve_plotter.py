@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy.time import Time
 
-band_colours = {"u": "darkblue", "g":"blue", "r": "gray", "i":"pink", "z":"orange"}   
+band_colours = {"u": "darkblue", "g":"blue", "r": "red", "i":"darkred", "z":"orange", "y":"black"}   
 
 def collect_light_curve_data(diaObjectId):
     r = re.post(
