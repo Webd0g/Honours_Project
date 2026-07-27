@@ -47,6 +47,8 @@ htmlcov/
 
 
 # ── Astrophysics Data ────────────────────────────────────────
+data/
+data/**
 
 # FITS files are typically large and binary; store in a data/ dir and exclude
 *.fits
