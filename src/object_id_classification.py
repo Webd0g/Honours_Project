@@ -45,7 +45,6 @@ def classification_concatenation():
         print(f"\nProcessing objects from {csv_file}")
         object_ids = pd.read_csv(csv_file, dtype={"r:diaObjectId" : str})["r:diaObjectId"].tolist()
 
-
         chunk_size = 500
         combined = []
         for diaObjectId in range(0, len(object_ids), chunk_size):

@@ -1,59 +1,154 @@
-"""
-This script plots the new objects that pass the rate of rise filter
-so that the objects can be visually inspected and confirmed to look like SN.
-
-The rate of rise filter is not perfect so visual inspection is necessary step to 
-confirm the population of the objects at least look like SN after the filter is 
-applied.
-"""
+import io
+import requests as re
 import pandas as pd
-import os
+import numpy as np
+import matplotlib.pyplot as plt
+from astropy.time import Time
 from pathlib import Path
-import generic_light_curve_batch_plotter as glcbp
+import polars as pl
 
-# Directory that the rate of rise data is hosted in.
-RATE_OF_RISE_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "Rate_of_rise_cuts"
+SLOPES_OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "slope_fitting_results" / "slope_values.csv"
 
-PLOT_RESULTS_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "SN_lightcurves" / "passed_rate_of_rise_cuts_results"
+TEST_DATA_DIR = Path.home() / "Documents" / "University"/"Honours"/"Honours_Project"/"data"/"test_data"
+PASSED_OBJECTS =  TEST_DATA_DIR / "test_passed.csv"
+FAILED_OBJECTS = TEST_DATA_DIR / "test_failed.csv"
 
-# Sub-directories where the object plots are stored 
-SUBDIRECTORIES = [PLOT_RESULTS_DIR / "anomalies", 
-                PLOT_RESULTS_DIR / "declining_objects",
-                PLOT_RESULTS_DIR / "flat_curves_with_noise",
-                PLOT_RESULTS_DIR / "genuine_candidates",
-                PLOT_RESULTS_DIR / "single_band_detections"]
+PASSED_OBJECTS_DF = pl.read_csv(PASSED_OBJECTS, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
+FAILED_OBJECTS_DF = pl.read_csv(FAILED_OBJECTS, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
 
-# Reads the CSVs that have passed the rate of rise cut that were made and combines them into one list that consists of the objects that passed the cuts.
-OBJECT_IDS_PASSED_SN_NEAR_GALAXY = pd.read_csv(RATE_OF_RISE_DIR / "sn_near_galaxy_candidates_passed.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"].tolist()
-OBJECT_IDS_PASSED_EXTRAGALACTIC_LT20MAG = pd.read_csv(RATE_OF_RISE_DIR / "extragalactic_candidates_passed.csv", dtype={"r:diaObjectId": str})["r:diaObjectId"].tolist()
-OBJECT_IDS_PASSED_IN_TNS = pd.read_csv(RATE_OF_RISE_DIR / "in_tns_candidates_passed.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].tolist()
-OBJECT_IDS_PASSED = OBJECT_IDS_PASSED_SN_NEAR_GALAXY + OBJECT_IDS_PASSED_EXTRAGALACTIC_LT20MAG + OBJECT_IDS_PASSED_IN_TNS
-
-def find_objects_with_plots(list_of_subdirectories: list[Path], extension: str) -> list[str]:
+def append_fitted_slopes(rows: list[dict], output_path: Path = SLOPES_OUTPUT_PATH) -> None:
     """
-    Finds the stems of the files that have the specific file extension 
-    in a directory the user specifies and combines the stems into a list of strings.
-
-    This used to find objects that already have plots of them so that only new objects have plots produced. 
+    Appends per-band fitted slope rows to a CSV file, writing a header only if the
+    file doesn't already exist. Each row is expected to contain diaObjectId, band,
+    slope, and n_pre_peak_points.
     """
-    objects_with_plots = []
-    for directory in list_of_subdirectories:
-        objects_with_plots.extend([f.split(".")[0] for f in os.listdir(directory) if f.endswith(extension)])
-    return objects_with_plots
+    if not rows:
+        return
 
-def find_objects_without_plots(object_ids: list, list_of_subdirectories: list[Path], extension: str) -> list[str]:
+    new_rows_df = pd.DataFrame(rows)
+
+    new_rows_df.to_csv(output_path, mode="a", header=False, index=False)
+
+band_colours = {"u": "darkblue", "g":"blue", "r": "red", "i":"darkred", "z":"orange", "y":"black"}   
+
+def collect_light_curve_data(diaObjectId):
+    r = re.post(
+        "https://api.lsst.fink-portal.org/api/v1/sources",
+        json={
+            "diaObjectId": diaObjectId,
+            "columns": "r:diaObjectId, r:diaSourceId, r:midpointMjdTai, r:psfFlux, r:psfFluxErr, r:band",
+            "output-format": "json",
+        },
+    )
+    if r.status_code != 200:
+        print (f"Failed to fetch the light curve info for {diaObjectId}: {r.status_code}")
+        return None
+    return pd.read_json(io.BytesIO(r.content))
+
+def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, output_dir: str, min_pre_peak_points: int = 4, min_pre_peak_time_span: float = 5, slopes_output_path: Path = SLOPES_OUTPUT_PATH, min_peak_SNR: int = 10):
     """
-    This function takes a list of object ids that have passed the rate of rise cut, list of subdirectories of 
-    different object types and a file extension. find_objects_without_plots uses list_of_subdirectories and extension
-    to call find_objects_with_plots to find the objects that haven't been plotted yet and then appends them to a list.
+    Plots the light curve for one object directly in flux space (no magnitude
+    conversion), with the pre-peak linear fit for each band overlaid as a dashed
+    line. Also prints the fitted slope and number of pre-peak points used, per band,
+    and appends the same values to slopes_output_path so they can be inspected after
+    a batch run rather than just read off the console.
 
-    find_objects_with_plots was neccesary so that the use doesn't have to manually compare objects when you have thousands 
-    of SN candidate objects. 
+    Working in flux rather than magnitude avoids fitting a straight line to a
+    logarithmic quantity, which was flagged as a potential source of distortion in
+    the rate-of-rise filter's output.
     """
-    plotted_objects = set(find_objects_with_plots(list_of_subdirectories, extension))
-    objects_without_plots = [oid for oid in object_ids if oid not in plotted_objects]
-    print (f"{(len(objects_without_plots))} passed the rate of rise cuts but doesn't have a plot generated for it.")
-    return objects_without_plots
+    df = df[df["r:psfFlux"] > 0].copy()
+    df = df.sort_values("r:midpointMjdTai")
+    df["date"] = Time(df["r:midpointMjdTai"].values, format="mjd").to_datetime()
 
-# Finally the batch plotter receives the objects without plots and thus plots them. 
-glcbp.batch_plotter(find_objects_without_plots(OBJECT_IDS_PASSED, SUBDIRECTORIES, ".png"), 500, Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "SN_lightcurves")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    fitted_slope_rows = []
+
+    for band, group in df.groupby("r:band"):
+        colour = band_colours.get(band, "black")
+
+        ax.errorbar(
+            group["date"],
+            group["r:psfFlux"],
+            yerr=group["r:psfFluxErr"],
+            fmt="o",
+            color=colour,
+            label=f"{band}-band",
+            capsize=3,
+            markersize=5,
+        )
+
+        significant_group_df = group[group["r:psfFlux"] / group["r:psfFluxErr"] > min_peak_SNR]
+        if significant_group_df.empty:
+            continue
+        
+        # Fit and overlay the pre-peak slope for this band
+        peak_flux = significant_group_df["r:psfFlux"].max()
+        peak_mjd = significant_group_df.loc[significant_group_df["r:psfFlux"].idxmax(), "r:midpointMjdTai"]
+        pre_peak = significant_group_df[significant_group_df["r:midpointMjdTai"] < peak_mjd]
+
+        if len(pre_peak) < min_pre_peak_points:
+            print(f"  [{diaObjectId}] {band}-band: only {len(pre_peak)} pre-peak point(s), skipping fit.")
+            continue
+
+        time_span = pre_peak["r:midpointMjdTai"].max() - pre_peak["r:midpointMjdTai"].min()
+        if time_span < min_pre_peak_time_span:
+            print(f"  [{diaObjectId}] {band}-band: pre-peak points only span {time_span:.2f} days, skipping fit.")
+            continue
+
+        normalised_flux = pre_peak["r:psfFlux"] / peak_flux
+        normalised_err = (pre_peak["r:psfFluxErr"] / peak_flux).clip(lower=1e-6)
+        weights = 1 / normalised_err
+
+        slope, intercept = np.polyfit(pre_peak["r:midpointMjdTai"], normalised_flux, 1, w=weights)
+
+        print(f"  [{diaObjectId}] {band}-band: slope={slope:.5f}, n_pre_peak={len(pre_peak)}")
+
+        fitted_slope_rows.append({
+            "diaObjectId": diaObjectId,
+            "band": band,
+            "slope": slope,
+            "n_pre_peak_points": len(pre_peak),
+        })
+
+        fit_mjd = pre_peak["r:midpointMjdTai"].sort_values()
+        fit_flux = (slope * fit_mjd + intercept) * peak_flux
+        fit_dates = Time(fit_mjd.values, format="mjd").to_datetime()
+
+        ax.plot(
+            fit_dates,
+            fit_flux,
+            linestyle="--",
+            color=colour,
+            alpha=0.7,
+            label=f"{band} fit (slope={slope:.4f})",
+        )
+
+    ax.set_xlabel("Observation Date")
+    ax.set_ylabel("Flux (nanojansky)")
+    ax.set_title(f"Light curve - {diaObjectId}\n({source_file})")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    fig.autofmt_xdate()
+    plt.tight_layout()
+    plt.savefig(f"{output_dir}.png")
+    plt.close(fig)
+
+    append_fitted_slopes(fitted_slope_rows, slopes_output_path)
+
+def batch_plotter(object_ids: list[str], chunk_size: int = 500, output_path: Path = Path.home() / "Pictures"):
+    """Batch Plotter takes a list of object IDs for which in this case are the reuslts 
+    from the slope fitting filter and plots the objects lightcurve in chunks."""
+
+    for diaObjectId in range(0, len(object_ids), chunk_size):
+        chunk = ",".join(object_ids[diaObjectId:diaObjectId + chunk_size])
+        light_curve_info = collect_light_curve_data(chunk)
+        if light_curve_info is None or light_curve_info.empty:
+            print(f"No light curve data found for chunk starting at index {diaObjectId}.")
+            continue
+        for object_id, group_df in light_curve_info.groupby("r:diaObjectId"):
+            object_id = str(object_id)
+            lightcurve_plotting(group_df, object_id, object_id, output_path / f"{object_id}")
+
+if __name__ == "__main__":
+    batch_plotter(PASSED_OBJECTS_DF, 500, Path.home() / "Pictures")

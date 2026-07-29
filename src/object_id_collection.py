@@ -16,12 +16,11 @@ TAGS = [("sn_near_galaxy_candidate",        PROJECT_DIR / "data" / "extragalacti
         ("in_tns",                           PROJECT_DIR / "data" / "extragalactic_object_ids" / "candidates_in_TNS.csv")]
 
 # To query jsut the latest alerts from the API
-# STARTDATE = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
-# STOPDATE  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
-STARTDATE = "2025-10-25"
-STOPDATE = "2026-07-15"
+STARTDATE = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+STOPDATE  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+
 # To limit the number of alerts we query for so that we can get full alert volume from the tags and not be limited.
-N_ALERTS = 300000
+N_ALERTS = 100000
 
 def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
     """
