@@ -92,9 +92,10 @@ def one_point_per_night(band_df: pd.DataFrame) -> pd.DataFrame:
     """
 
     band_df["night"] = band_df["r:midpointMjdTai"].astype(int)
-    night_group = band_df.groupby("night")["r:psfFlux"].apply(lambda x: x / band_df.loc[x.index, "r:psfFluxErr"]) # We are attempting to produce a dataframe that only returns the best points per night for each band that we can then
-    # do fitting to. 
-    print (night_group)
+    band_df["SNR"] = band_df["r:psfFlux"]/band_df["r:psfFluxErr"]
+
+    return band_df
+
     
 def slope_calculation(group_df: pd.DataFrame, band: str, min_points: int = MIN_PRE_PEAK_POINTS, min_time_span: int = MIN_PRE_PEAK_TIME_SPAN_DAYS, min_peak_snr: int = MIN_PEAK_SNR) -> tuple[float, int] | None:
     """
@@ -178,7 +179,7 @@ def check_rate_of_rise(group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_PO
     return any(slope > 0.001 for slope, _ in slopes.values())
 
 
-def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_passed: Path =0, output_path_failed: Path =0) -> tuple[list[str], list[str]]:
+def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_passed: Path = None, output_path_failed: Path = None) -> tuple[list[str], list[str]]:
     """
     This function pulls the light curve data for the specified list of object ids and
     the chunk size can be customised if you have a large list of objects or small. The
@@ -189,6 +190,11 @@ def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_p
     passed, failed = [], []
 
     light_curve_info = chunked_light_curve_data(objects, chunk_size)
+    
+    light_curve_info = one_point_per_night(light_curve_info)
+
+    sorted_light_curve_info = light_curve_info.sort_values(by="SNR", ascending=False)
+    best_points = sorted_light_curve_info.groupby(["r:diaObjectId", "r:band", "night"]).first().reset_index()
 
     for object_id, group_df in light_curve_info.groupby("r:diaObjectId"):
         if check_rate_of_rise(group_df):
@@ -204,7 +210,7 @@ def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_p
 
 if __name__ == "__main__":
 
-    candidates = pd.read_csv("/home/riley/Documents/University/Honours/Honours_Project/data/test_data/20_test_objects.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].to_list()
+    # candidates = pd.read_csv(Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].to_list()
     # applying_the_rate_of_rise(candidates, 500, TEST_PASSED_DIR, TEST_FAILED_DIR)
-    light_curve_info = chunked_light_curve_data(candidates, 500)
-    one_point_per_night(light_curve_info)
+    candidate = ["170235219334922248"]
+    applying_the_rate_of_rise(candidate, 500)
