@@ -80,7 +80,22 @@ def chunked_light_curve_data(candidates: list, chunk_size: int = 500) -> pd.Data
 
     return pd.concat(candidate_results, ignore_index=True)
 
+def one_point_per_night(band_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Takes the dataframe of all the bands data and filters it further to 
+    one point per night of observation, with that point being the 
+    point with the highest SNR. 
 
+    This is so that when the slope fitting happens it doesn't fit to 
+    points that have been clustered and ensures that the points
+    that are being fit to are actually changing in time.
+    """
+
+    band_df["night"] = band_df["r:midpointMjdTai"].astype(int)
+    night_group = band_df.groupby("night")["r:psfFlux"].apply(lambda x: x / band_df.loc[x.index, "r:psfFluxErr"]) # We are attempting to produce a dataframe that only returns the best points per night for each band that we can then
+    # do fitting to. 
+    print (night_group)
+    
 def slope_calculation(group_df: pd.DataFrame, band: str, min_points: int = MIN_PRE_PEAK_POINTS, min_time_span: int = MIN_PRE_PEAK_TIME_SPAN_DAYS, min_peak_snr: int = MIN_PEAK_SNR) -> tuple[float, int] | None:
     """
     This function finds the slope of the band of the lightcurve prepeak by fitting a
@@ -189,5 +204,7 @@ def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_p
 
 if __name__ == "__main__":
 
-    candidates = pd.read_csv("/home/riley/Documents/University/Honours/Honours_Project/data/extragalactic_object_ids/sn_near_galaxy_candidate.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].to_list()
-    applying_the_rate_of_rise(candidates, 500, TEST_PASSED_DIR, TEST_FAILED_DIR)
+    candidates = pd.read_csv("/home/riley/Documents/University/Honours/Honours_Project/data/test_data/20_test_objects.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].to_list()
+    # applying_the_rate_of_rise(candidates, 500, TEST_PASSED_DIR, TEST_FAILED_DIR)
+    light_curve_info = chunked_light_curve_data(candidates, 500)
+    one_point_per_night(light_curve_info)
