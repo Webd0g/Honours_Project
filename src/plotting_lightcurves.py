@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from astropy.time import Time
 from pathlib import Path
 import polars as pl
+from rate_of_rise_cut import one_point_per_night
 
 SLOPES_OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "slope_fitting_results" / "slope_values.csv"
 
@@ -77,15 +78,22 @@ def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, ou
             capsize=3,
             markersize=5,
         )
-
-        significant_group_df = group[group["r:psfFlux"] / group["r:psfFluxErr"] > min_peak_SNR]
-        if significant_group_df.empty:
-            continue
         
         # Fit and overlay the pre-peak slope for this band
-        peak_flux = significant_group_df["r:psfFlux"].max()
-        peak_mjd = significant_group_df.loc[significant_group_df["r:psfFlux"].idxmax(), "r:midpointMjdTai"]
-        pre_peak = significant_group_df[significant_group_df["r:midpointMjdTai"] < peak_mjd]
+        max_idx = group["r:psfFlux"].idxmax()
+        peak_flux = group.loc[max_idx, "r:psfFlux"]
+        peak_flux_err = group.loc[max_idx, "r:psfFluxErr"]
+        peak_mjd = group.loc[max_idx, "r:midpointMjdTai"]
+        pre_peak = group[group["r:midpointMjdTai"] < peak_mjd]
+        peak_SNR = peak_flux/peak_flux_err
+
+        if (peak_SNR) < min_peak_SNR:
+            print (f"Object {diaObjectId}'s peak point's SNR is {peak_SNR} which doesn't pass the cut-off of {min_peak_SNR} ")
+            continue
+
+        print (pre_peak)
+        pre_peak = one_point_per_night(pre_peak)
+        print (pre_peak)
 
         if len(pre_peak) < min_pre_peak_points:
             print(f"  [{diaObjectId}] {band}-band: only {len(pre_peak)} pre-peak point(s), skipping fit.")
@@ -151,4 +159,4 @@ def batch_plotter(object_ids: list[str], chunk_size: int = 500, output_path: Pat
             lightcurve_plotting(group_df, object_id, object_id, output_path / f"{object_id}")
 
 if __name__ == "__main__":
-    batch_plotter(PASSED_OBJECTS_DF, 500, Path.home() / "Pictures")
+    batch_plotter(["170235219334922248"], 500, Path.home() / "Pictures")
