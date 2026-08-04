@@ -17,6 +17,8 @@ FAILED_OBJECTS = TEST_DATA_DIR / "test_failed.csv"
 PASSED_OBJECTS_DF = pl.read_csv(PASSED_OBJECTS, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
 FAILED_OBJECTS_DF = pl.read_csv(FAILED_OBJECTS, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
 
+TEST_IMAGE_DIR = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"images"/"test_data_images"
+
 def append_fitted_slopes(rows: list[dict], output_path: Path = SLOPES_OUTPUT_PATH) -> None:
     """
     Appends per-band fitted slope rows to a CSV file, writing a header only if the
@@ -46,7 +48,7 @@ def collect_light_curve_data(diaObjectId):
         return None
     return pd.read_json(io.BytesIO(r.content))
 
-def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, output_dir: str, min_pre_peak_points: int = 4, min_pre_peak_time_span: float = 5, slopes_output_path: Path = SLOPES_OUTPUT_PATH, min_peak_SNR: int = 10):
+def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, output_dir: str, min_pre_peak_points: int = 3, min_pre_peak_time_span: float = 5, slopes_output_path: Path = SLOPES_OUTPUT_PATH, min_peak_SNR: int = 10):
     """
     Plots the light curve for one object directly in flux space (no magnitude
     conversion), with the pre-peak linear fit for each band overlaid as a dashed
@@ -84,42 +86,42 @@ def lightcurve_plotting(df: pd.DataFrame, diaObjectId: str, source_file: str, ou
         peak_flux = group.loc[max_idx, "r:psfFlux"]
         peak_flux_err = group.loc[max_idx, "r:psfFluxErr"]
         peak_mjd = group.loc[max_idx, "r:midpointMjdTai"]
-        pre_peak = group[group["r:midpointMjdTai"] < peak_mjd]
+        pre_peak = group[group["r:midpointMjdTai"] <= peak_mjd]
         peak_SNR = peak_flux/peak_flux_err
 
         if (peak_SNR) < min_peak_SNR:
             print (f"Object {diaObjectId}'s peak point's SNR is {peak_SNR} which doesn't pass the cut-off of {min_peak_SNR} ")
             continue
 
-        print (pre_peak)
         pre_peak = one_point_per_night(pre_peak)
-        print (pre_peak)
+        pre_peak_sorted_points = pre_peak.sort_values(by="SNR", ascending=False)
+        pre_peak_best_points = pre_peak_sorted_points.groupby(["r:diaObjectId", "r:band", "night"]).first().reset_index()
 
-        if len(pre_peak) < min_pre_peak_points:
-            print(f"  [{diaObjectId}] {band}-band: only {len(pre_peak)} pre-peak point(s), skipping fit.")
+        if len(pre_peak_best_points) < min_pre_peak_points:
+            print(f"  [{diaObjectId}] {band}-band: only {len(pre_peak_best_points)} pre-peak point(s), skipping fit.")
             continue
 
-        time_span = pre_peak["r:midpointMjdTai"].max() - pre_peak["r:midpointMjdTai"].min()
+        time_span = pre_peak_best_points["r:midpointMjdTai"].max() - pre_peak_best_points["r:midpointMjdTai"].min()
         if time_span < min_pre_peak_time_span:
             print(f"  [{diaObjectId}] {band}-band: pre-peak points only span {time_span:.2f} days, skipping fit.")
             continue
 
-        normalised_flux = pre_peak["r:psfFlux"] / peak_flux
-        normalised_err = (pre_peak["r:psfFluxErr"] / peak_flux).clip(lower=1e-6)
+        normalised_flux = pre_peak_best_points["r:psfFlux"] / peak_flux
+        normalised_err = (pre_peak_best_points["r:psfFluxErr"] / peak_flux).clip(lower=1e-6)
         weights = 1 / normalised_err
 
-        slope, intercept = np.polyfit(pre_peak["r:midpointMjdTai"], normalised_flux, 1, w=weights)
+        slope, intercept = np.polyfit(pre_peak_best_points["r:midpointMjdTai"], normalised_flux, 1, w=weights)
 
-        print(f"  [{diaObjectId}] {band}-band: slope={slope:.5f}, n_pre_peak={len(pre_peak)}")
+        print(f"  [{diaObjectId}] {band}-band: slope={slope:.5f}, n_pre_peak={len(pre_peak_best_points)}, pre-peak_time_span = {time_span}")
 
         fitted_slope_rows.append({
             "diaObjectId": diaObjectId,
             "band": band,
             "slope": slope,
-            "n_pre_peak_points": len(pre_peak),
+            "n_pre_peak_points": len(pre_peak_best_points),
         })
 
-        fit_mjd = pre_peak["r:midpointMjdTai"].sort_values()
+        fit_mjd = pre_peak_best_points["r:midpointMjdTai"].sort_values()
         fit_flux = (slope * fit_mjd + intercept) * peak_flux
         fit_dates = Time(fit_mjd.values, format="mjd").to_datetime()
 
@@ -159,4 +161,4 @@ def batch_plotter(object_ids: list[str], chunk_size: int = 500, output_path: Pat
             lightcurve_plotting(group_df, object_id, object_id, output_path / f"{object_id}")
 
 if __name__ == "__main__":
-    batch_plotter(["170235219334922248"], 500, Path.home() / "Pictures")
+    batch_plotter(FAILED_OBJECTS_DF, 500, TEST_IMAGE_DIR / "100_object_test" / "fail")

@@ -27,7 +27,7 @@ CHUNK_SIZE = 500
 # Minimum number of pre-peak points needed in a band before a slope is even attempted.
 # np.polyfit needs at least 2 points to fit a line; kept low deliberately while we test
 # the loosened nonzero-slope criterion, per today's discussion with Anais.
-MIN_PRE_PEAK_POINTS = 4
+MIN_PRE_PEAK_POINTS = 3
 
 # Minimum time baseline (in days) spanned by the pre-peak points used in a fit.
 # Points clustered within a very short window can produce wildly unstable slopes,
@@ -113,33 +113,39 @@ def slope_calculation(group_df: pd.DataFrame, band: str, min_points: int = MIN_P
     if band_df.empty:
         return None
 
-    significant_df = band_df[band_df["r:psfFlux"] / band_df["r:psfFluxErr"] > MIN_PEAK_SNR]
-    if significant_df.empty:
+    max_idx = band_df["r:psfFlux"].idxmax()
+    peak_flux = band_df.loc[max_idx, "r:psfFlux"]
+    peak_flux_err = band_df.loc[max_idx, "r:psfFluxErr"]
+    peak_mjd = band_df.loc[max_idx, "r:midpointMjdTai"]
+    pre_peak = band_df[band_df["r:midpointMjdTai"] <= peak_mjd]
+    peak_SNR = peak_flux/peak_flux_err
+
+    if peak_SNR < min_peak_snr:
+        return None
+    
+    pre_peak = one_point_per_night(pre_peak)
+    pre_peak_sorted_points = pre_peak.sort_values(by="SNR", ascending=False)
+    pre_peak_best_points = pre_peak_sorted_points.groupby(["r:diaObjectId", "r:band", "night"]).first().reset_index()
+
+    if len(pre_peak_best_points) < min_points:
         return None
 
-    peak_flux = significant_df["r:psfFlux"].max()
-    peak_mjd = significant_df.loc[significant_df["r:psfFlux"].idxmax(), "r:midpointMjdTai"]
-    pre_peak = significant_df[significant_df["r:midpointMjdTai"] < peak_mjd]
-
-    if len(pre_peak) < min_points:
-        return None
-
-    time_span = pre_peak["r:midpointMjdTai"].max() - pre_peak["r:midpointMjdTai"].min()
+    time_span = peak_mjd - pre_peak_best_points["r:midpointMjdTai"].min()
     if time_span < min_time_span:
         return None
 
-    normalised_flux = pre_peak["r:psfFlux"] / peak_flux
-    normalised_err = pre_peak["r:psfFluxErr"] / peak_flux
+    normalised_flux = pre_peak_best_points["r:psfFlux"] / peak_flux
+    normalised_err = pre_peak_best_points["r:psfFluxErr"] / peak_flux
 
     # Guard against zero/negative errors, which would otherwise produce an
     # infinite or undefined weight.
     normalised_err = normalised_err.clip(lower=1e-6)
     weights = 1 / normalised_err
 
-    slope, _ = np.polyfit(pre_peak["r:midpointMjdTai"], normalised_flux, 1, w=weights)
+    slope, _ = np.polyfit(pre_peak_best_points["r:midpointMjdTai"], normalised_flux, 1, w=weights)
 
 
-    return slope, len(pre_peak)
+    return slope, len(pre_peak_best_points)
 
 
 def compute_all_band_slopes(group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS) -> dict[str, tuple[float, int]]:
@@ -190,11 +196,6 @@ def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_p
     passed, failed = [], []
 
     light_curve_info = chunked_light_curve_data(objects, chunk_size)
-    
-    light_curve_info = one_point_per_night(light_curve_info)
-
-    sorted_light_curve_info = light_curve_info.sort_values(by="SNR", ascending=False)
-    best_points = sorted_light_curve_info.groupby(["r:diaObjectId", "r:band", "night"]).first().reset_index()
 
     for object_id, group_df in light_curve_info.groupby("r:diaObjectId"):
         if check_rate_of_rise(group_df):
@@ -210,7 +211,5 @@ def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_p
 
 if __name__ == "__main__":
 
-    # candidates = pd.read_csv(Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].to_list()
-    # applying_the_rate_of_rise(candidates, 500, TEST_PASSED_DIR, TEST_FAILED_DIR)
-    candidate = ["170235219334922248"]
-    applying_the_rate_of_rise(candidate, 500)
+    candidates = pd.read_csv(Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"100_test_objects.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].to_list()
+    applying_the_rate_of_rise(candidates, 500, TEST_PASSED_DIR, TEST_FAILED_DIR)
