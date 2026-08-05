@@ -58,7 +58,7 @@ def fit_bazin_single_object(csv_path: Path, band: str, mcmc_niter: int, algorith
     bazin_param_dict = {name: val for name, val in zip(bazin.names, result)}
     return bazin_param_dict
 
-def bazin_batch_fits(csv_path: Path, band: str, algorithm: str, mcmc_niter: int) -> pl.DataFrame:
+def bazin_batch_fits(csv_path: Path, light_curve_data_path: Path, band: str, algorithm: str, mcmc_niter: int, output_path: Path) -> pl.DataFrame:
     """Batch Bazin fits for batch testing and processing of the Bazin fitting to many objects.
     
     This is to be used for batch processing of light curves so that many objects can be fit to at once
@@ -80,21 +80,28 @@ def bazin_batch_fits(csv_path: Path, band: str, algorithm: str, mcmc_niter: int)
     # This is so when an object cannot be fitted by the Bazin fit the exception doesn't cause a crash and instead logs a Nan for the object
     fill_value = np.nan
 
-    objects = pl.read_csv(csv_path, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"],)["r:diaObjectId"].to_list()
+    objects = pl.read_csv(csv_path, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
+    light_curve_data = pl.read_parquet(light_curve_data_path)
+    light_curve_data_filtered = light_curve_data.filter(pl.col("r:diaObjectId").cast(pl.Utf8).is_in(objects))
+    
+    # light_curve_info = chunked_light_curve_data(objects, 500)
 
-    light_curve_info = chunked_light_curve_data(objects, 500)
-
-    for object_id, group_df in light_curve_info.groupby("r:diaObjectId"):
-        band_df = group_df[group_df["r:band"] == band].sort_values("r:midpointMjdTai")
+    groups = {key[0]: group_df for key, group_df in light_curve_data_filtered.group_by("r:diaObjectId", maintain_order=True)}
+    
+    for object_id in objects:
+        group_df = groups.get(int(object_id))
+        if group_df is None:
+            continue
+        band_df = group_df.filter(pl.col("r:band") == band).sort("r:midpointMjdTai")
 
         # As the bazin fit needs to fit 5 params we should have at least a decent number of points to get an okay fit with the minimum for the function to be 6.
         if len(band_df) < 6:
                 print (f"Band {band} has {len(band_df)} which doesn't pass the 6 point cut-off")
                 continue
         
-        flux = band_df["r:psfFlux"].values.astype(np.float64)
-        flux_err = band_df["r:psfFluxErr"].values.astype(np.float64)
-        time = band_df["r:midpointMjdTai"].values.astype(np.float64)
+        flux = band_df["r:psfFlux"].to_numpy().astype(np.float64)
+        flux_err = band_df["r:psfFluxErr"].to_numpy().astype(np.float64)
+        time = band_df["r:midpointMjdTai"].to_numpy().astype(np.float64)
         peak_flux = band_df["r:psfFlux"].max()
         peak_time = band_df["r:midpointMjdTai"].max()
 
@@ -114,7 +121,7 @@ def bazin_batch_fits(csv_path: Path, band: str, algorithm: str, mcmc_niter: int)
 
     bazin_results_df = pl.DataFrame(bazin_results)
 
-    return bazin_results_df.write_csv(Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits"/"bazin_fits_results.csv") 
+    return bazin_results_df.write_csv(output_path) 
 
 def bazin_curve(t: np.ndarray, amplitude: float, t0: float, tau_rise: float, tau_fall: float, baseline: float) -> np.ndarray:
     """The Bazin et al. (2009) model, used here just to draw the fitted curve
@@ -188,5 +195,5 @@ if __name__ == "__main__":
     # object = ["170235219334922248"]
     # print (fit_bazin_single_object(object, "r", 10000, "mcmc"))
     csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv"
-    # result = bazin_batch_fits(csv_path, "r", "mcmc", 10000)
-    plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits"/"20_object_test"/"bazin_fits_results.csv", Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv", "r",  Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"images"/"bazin_fits"/"20_object_test")
+    result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", "r", "mcmc", 6000, Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits" / "20_object_test" / "bazin_fits_results.csv")
+    # plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits"/"20_object_test"/"bazin_fits_results.csv", Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv", "r",  Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"images"/"bazin_fits"/"20_object_test")
