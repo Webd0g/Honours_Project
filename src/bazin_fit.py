@@ -151,15 +151,15 @@ def plot_bazin_fit_single_object(group_df: pd.DataFrame, band: str, fit_result: 
     )
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.errorbar(t, flux, yerr=flux_err, fmt="o", color="black", label=f"{band}-band data", capsize=3, markersize=5)
-    ax.plot(t_fine, fit_flux, "--", color="red", label=f"Bazin fit (chi2={fit_result['reduced_chi2']:.2f})")
+    ax.errorbar(t, flux, yerr=flux_err, fmt="o", color="maroon", label=f"{band}-band data", capsize=3, markersize=5)
+    ax.plot(t_fine, fit_flux, "--", color="darkmagenta", label=f"Bazin fit (chi2={fit_result['reduced_chi2']:.2f})")
     ax.set_xlabel("MJD")
     ax.set_ylabel("Flux (nanojansky)")
     ax.set_title(f"Bazin fit - {diaObjectId} ({band}-band)")
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(output_path / f"{diaObjectId}.png")
+    plt.savefig(output_path / f"{diaObjectId}_i_band.png")
     print (f"saved the plot of object {diaObjectId}")
     plt.close(fig)
 
@@ -191,10 +191,6 @@ def plot_bazin_fit_batch(dict_path: Path, csv_path: Path, light_curve_data_path:
             print(f"Object {object_id} did not have any data in that band and couldn't be fitted to and thus won't be plotted.")
             continue
         plot_bazin_fit_single_object(group_df, band, fit_result, object_id, output_path)
-    # for object_id, light_curve_info_df in light_curve_info.groupby("r:diaObjectId"):
-    #     object_id_str = str(object_id)
-    #     fit_result = bazin_fit_dict.get(object_id_str)
-    #     plot_bazin_fit_single_object(light_curve_info_df, band, fit_result, object_id_str, output_path)
 
 if __name__ == "__main__":
 

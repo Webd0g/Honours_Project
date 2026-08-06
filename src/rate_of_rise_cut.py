@@ -27,7 +27,7 @@ CHUNK_SIZE = 500
 # Minimum number of pre-peak points needed in a band before a slope is even attempted.
 # np.polyfit needs at least 2 points to fit a line; kept low deliberately while we test
 # the loosened nonzero-slope criterion, per today's discussion with Anais.
-MIN_PRE_PEAK_POINTS = 3
+MIN_PRE_PEAK_POINTS = 4
 
 # Minimum time baseline (in days) spanned by the pre-peak points used in a fit.
 # Points clustered within a very short window can produce wildly unstable slopes,
@@ -80,7 +80,7 @@ def chunked_light_curve_data(candidates: list, chunk_size: int = 500) -> pd.Data
 
     return pd.concat(candidate_results, ignore_index=True)
 
-def one_point_per_night(band_df: pd.DataFrame) -> pd.DataFrame:
+def add_night_and_SNR_columns(band_df: pd.DataFrame) -> pd.DataFrame:
     """
     Takes the dataframe of all the bands data and filters it further to 
     one point per night of observation, with that point being the 
@@ -123,7 +123,7 @@ def slope_calculation(group_df: pd.DataFrame, band: str, min_points: int = MIN_P
     if peak_SNR < min_peak_snr:
         return None
     
-    pre_peak = one_point_per_night(pre_peak)
+    pre_peak = add_night_and_SNR_columns(pre_peak)
     pre_peak_sorted_points = pre_peak.sort_values(by="SNR", ascending=False)
     pre_peak_best_points = pre_peak_sorted_points.groupby(["r:diaObjectId", "r:band", "night"]).first().reset_index()
 
