@@ -10,6 +10,7 @@ pre-peak rise was in a band other than g or r (e.g. i-band for higher redshift S
 """
 
 import pandas as pd
+import polars as pl
 import numpy as np
 from pathlib import Path
 from light_curve_plotter import collect_light_curve_data
@@ -27,7 +28,7 @@ CHUNK_SIZE = 500
 # Minimum number of pre-peak points needed in a band before a slope is even attempted.
 # np.polyfit needs at least 2 points to fit a line; kept low deliberately while we test
 # the loosened nonzero-slope criterion, per today's discussion with Anais.
-MIN_PRE_PEAK_POINTS = 4
+MIN_PRE_PEAK_POINTS = 3
 
 # Minimum time baseline (in days) spanned by the pre-peak points used in a fit.
 # Points clustered within a very short window can produce wildly unstable slopes,
@@ -80,7 +81,7 @@ def chunked_light_curve_data(candidates: list, chunk_size: int = 500) -> pd.Data
 
     return pd.concat(candidate_results, ignore_index=True)
 
-def add_night_and_SNR_columns(band_df: pd.DataFrame) -> pd.DataFrame:
+def add_night_and_SNR_columns(band_df: pl.DataFrame) -> pl.DataFrame:
     """
     Takes the dataframe of all the bands data and filters it further to 
     one point per night of observation, with that point being the 
@@ -91,61 +92,65 @@ def add_night_and_SNR_columns(band_df: pd.DataFrame) -> pd.DataFrame:
     that are being fit to are actually changing in time.
     """
 
-    band_df["night"] = band_df["r:midpointMjdTai"].astype(int)
-    band_df["SNR"] = band_df["r:psfFlux"]/band_df["r:psfFluxErr"]
+    band_df = band_df.with_columns((pl.col("r:midpointMjdTai").cast(int)).alias("night"))
+    band_df = band_df.with_columns((pl.col("r:psfFlux")/pl.col("r:psfFluxErr")).alias("SNR"))
 
     return band_df
 
-    
-def slope_calculation(group_df: pd.DataFrame, band: str, min_points: int = MIN_PRE_PEAK_POINTS, min_time_span: int = MIN_PRE_PEAK_TIME_SPAN_DAYS, min_peak_snr: int = MIN_PEAK_SNR) -> tuple[float, int] | None:
-    """
-    This function finds the slope of the band of the lightcurve prepeak by fitting a
+def slope_calculation(group_df: pl.DataFrame,band: str,min_points: int = MIN_PRE_PEAK_POINTS,min_time_span: int = MIN_PRE_PEAK_TIME_SPAN_DAYS,min_peak_snr: int = MIN_PEAK_SNR,) -> tuple[float, int] | None:
+    """This function finds the slope of the band of the lightcurve prepeak by fitting a
+
     polynomial of degree 1 to the points of the light curve before the brightest point
     of the light curve. Returns None if there isn't enough pre-peak data in this band
     to attempt a fit.
-
-    This is done to remove the flat objects whose brightness doesn't change that much
-    over time. We make it a function of bands so that we can easily use different
-    bandpasses when necessary for higher redshift SNe.
     """
-    band_df = group_df[(group_df["r:band"] == band) & (group_df["r:psfFlux"] > 0)]
-
-    if band_df.empty:
+    band_df = group_df.filter(
+        (pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0)
+    )
+    if band_df.is_empty():
         return None
 
-    max_idx = band_df["r:psfFlux"].idxmax()
-    peak_flux = band_df.loc[max_idx, "r:psfFlux"]
-    peak_flux_err = band_df.loc[max_idx, "r:psfFluxErr"]
-    peak_mjd = band_df.loc[max_idx, "r:midpointMjdTai"]
-    pre_peak = band_df[band_df["r:midpointMjdTai"] <= peak_mjd]
-    peak_SNR = peak_flux/peak_flux_err
-
-    if peak_SNR < min_peak_snr:
-        return None
     
+    peak_row = band_df.filter(
+        pl.col("r:psfFlux") == pl.col("r:psfFlux").max()
+    ).row(0, named=True)
+
+    peak_flux = peak_row["r:psfFlux"]
+    peak_flux_err = peak_row["r:psfFluxErr"]
+    peak_mjd = peak_row["r:midpointMjdTai"]
+
+    peak_snr = peak_flux / peak_flux_err
+    if peak_snr < min_peak_snr:
+        return None
+
+    pre_peak = band_df.filter(pl.col("r:midpointMjdTai") <= peak_mjd)
+
     pre_peak = add_night_and_SNR_columns(pre_peak)
-    pre_peak_sorted_points = pre_peak.sort_values(by="SNR", ascending=False)
-    pre_peak_best_points = pre_peak_sorted_points.groupby(["r:diaObjectId", "r:band", "night"]).first().reset_index()
+
+    pre_peak_best_points = (
+        pre_peak.sort(by="SNR", descending=True)
+        .group_by(["r:diaObjectId", "r:band", "night"])
+        .first()
+    )
 
     if len(pre_peak_best_points) < min_points:
         return None
 
-    time_span = peak_mjd - pre_peak_best_points["r:midpointMjdTai"].min()
+    min_mjd = pre_peak_best_points["r:midpointMjdTai"].min()
+    time_span = peak_mjd - min_mjd
     if time_span < min_time_span:
         return None
 
-    normalised_flux = pre_peak_best_points["r:psfFlux"] / peak_flux
-    normalised_err = pre_peak_best_points["r:psfFluxErr"] / peak_flux
+    mjd_vec = pre_peak_best_points["r:midpointMjdTai"].to_numpy()
+    norm_flux = (pre_peak_best_points["r:psfFlux"] / peak_flux).to_numpy()
+    norm_err = (pre_peak_best_points["r:psfFluxErr"] / peak_flux).to_numpy()
 
-    # Guard against zero/negative errors, which would otherwise produce an
-    # infinite or undefined weight.
-    normalised_err = normalised_err.clip(lower=1e-6)
-    weights = 1 / normalised_err
+    norm_err = np.clip(norm_err, a_min=1e-6, a_max=None)
+    weights = 1 / norm_err
 
-    slope, _ = np.polyfit(pre_peak_best_points["r:midpointMjdTai"], normalised_flux, 1, w=weights)
+    slope, _ = np.polyfit(mjd_vec, norm_flux, 1, w=weights)
 
-
-    return slope, len(pre_peak_best_points)
+    return float(slope), len(pre_peak_best_points)
 
 
 def compute_all_band_slopes(group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS) -> dict[str, tuple[float, int]]:
@@ -185,7 +190,7 @@ def check_rate_of_rise(group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_PO
     return any(slope > 0.001 for slope, _ in slopes.values())
 
 
-def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_passed: Path = None, output_path_failed: Path = None) -> tuple[list[str], list[str]]:
+def applying_the_rate_of_rise(object_csv_path: Path, light_curve_data_path: Path, output_path_passed: Path = None, output_path_failed: Path = None) -> tuple[list[str], list[str]]:
     """
     This function pulls the light curve data for the specified list of object ids and
     the chunk size can be customised if you have a large list of objects or small. The
@@ -195,21 +200,24 @@ def applying_the_rate_of_rise(objects: list[str], chunk_size: int, output_path_p
     """
     passed, failed = [], []
 
-    light_curve_info = chunked_light_curve_data(objects, chunk_size)
+    objects = pl.read_csv(object_csv_path, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
+    light_curve_data = pl.read_parquet(light_curve_data_path)
+    light_curve_data_filtered = light_curve_data.filter(pl.col("r:diaObjectId").cast(pl.Utf8).is_in(objects))
 
-    for object_id, group_df in light_curve_info.groupby("r:diaObjectId"):
+    for object_id, group_df in light_curve_data_filtered.group_by("r:diaObjectId"):
         if check_rate_of_rise(group_df):
             passed.append(object_id)
         else:
             failed.append(object_id)
 
-    pd.DataFrame(passed, columns=["r:diaObjectId"]).to_csv(output_path_passed, index=False)
-    pd.DataFrame(failed, columns=["r:diaObjectId"]).to_csv(output_path_failed, index=False)
+    pl.DataFrame(passed, schema=["r:diaObjectId"]).write_csv(output_path_passed)
+    pl.DataFrame(failed, schema=["r:diaObjectId"]).write_csv(output_path_failed)
 
     return passed, failed
 
 
 if __name__ == "__main__":
 
-    candidates = pd.read_csv(Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"100_test_objects.csv", dtype={"r:diaObjectId":str})["r:diaObjectId"].to_list()
-    applying_the_rate_of_rise(candidates, 500, TEST_PASSED_DIR, TEST_FAILED_DIR)
+    candidates = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"100_test_objects.csv"
+    light_curve_data_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet"
+    applying_the_rate_of_rise(candidates, light_curve_data_path, TEST_PASSED_DIR, TEST_FAILED_DIR)
