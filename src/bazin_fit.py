@@ -151,8 +151,8 @@ def plot_bazin_fit_single_object(group_df: pd.DataFrame, band: str, fit_result: 
     )
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.errorbar(t, flux, yerr=flux_err, fmt="o", color="maroon", label=f"{band}-band data", capsize=3, markersize=5)
-    ax.plot(t_fine, fit_flux, "--", color="darkmagenta", label=f"Bazin fit (chi2={fit_result['reduced_chi2']:.2f})")
+    ax.errorbar(t, flux, yerr=flux_err, fmt="o", color="darkred", label=f"{band}-band data", capsize=3, markersize=5)
+    ax.plot(t_fine, fit_flux, "--", color="purple", label=f"Bazin fit (chi2={fit_result['reduced_chi2']:.2f})")
     ax.set_xlabel("MJD")
     ax.set_ylabel("Flux (nanojansky)")
     ax.set_title(f"Bazin fit - {diaObjectId} ({band}-band)")
@@ -201,9 +201,9 @@ if __name__ == "__main__":
                             "i", 
                             "mcmc", 
                             2000, 
-                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits" / "20_object_test" / "bazin_fits_results.csv")
-    plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits"/"20_object_test"/"bazin_fits_results.csv", 
+                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits" / "20_object_test" / "bazin_fits_i_band_results.csv")
+    plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits"/"20_object_test"/"bazin_fits_i_band_results.csv", 
                         Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv",
                         Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet",
                         "i",  
-                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"images"/"bazin_fits"/"20_object_test")
+                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"images"/"bazin_fits"/"20_object_test" / "i_band")
