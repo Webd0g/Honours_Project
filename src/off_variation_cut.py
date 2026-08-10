@@ -4,13 +4,18 @@ cut."""
 
 from pathlib import Path
 import polars as pl
+import matplotlib.pyplot as plt
+import numpy as np
+from light_curve_plotter import lightcurve_plotting
 
 # Path to the directory where all the Bazin fits CSV are
 BAZIN_FITS_DATA_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits"
 
 LIGHT_CURVE_DATA_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "light_curve_data"
 
-def variability_window(bazin_fits_data_path: Path, light_curve_data_path: Path):
+VARIABILITY_WINDOW_OUTPUT_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits" / "off_variability_tests"
+
+def variability_window(bazin_fits_data_path: Path, light_curve_data_path: Path) -> pl.DataFrame:
     """Here is where we find the main variability window for each objects Bazin fit.
     
     We do this so that we can seperate the points of main variation from the points that 
@@ -21,23 +26,44 @@ def variability_window(bazin_fits_data_path: Path, light_curve_data_path: Path):
     light_curve_data = pl.read_parquet(light_curve_data_path)
     light_curve_data_filtered = light_curve_data.filter(pl.col("r:diaObjectId").cast(pl.Utf8).is_in(objects))
 
-    bazin_data_df = bazin_data_df.with_columns([(pl.col("reference_time") - (3*pl.col("rise_time"))).alias("var_start"), 
-                                                (pl.col("reference_time") + (3*pl.col("fall_time"))).alias("var_end")])
+    bazin_data_df = bazin_data_df.with_columns([(pl.col("reference_time") - (2.7*pl.col("rise_time"))).alias("var_start"), 
+                                                (pl.col("reference_time") + (2.7*pl.col("fall_time"))).alias("var_end")])
 
     bazin_light_curve_data = light_curve_data_filtered.join(bazin_data_df, on = ["r:diaObjectId"], how="inner")
     off_var_data = bazin_light_curve_data.filter((pl.col("r:midpointMjdTai") < pl.col("var_start")) |
                                                 (pl.col("r:midpointMjdTai") > pl.col("var_end")))
     return off_var_data
 
+def plotting_off_var_data(bazin_fits_data_path: Path, light_curve_data_path: Path):
+    """Here we plot the data points 
+    that are off the main variation. 
+    This is done iteratively to ensure that we aren't cutting
+    off any points that are in the main variation."""
 
+    off_var_data = variability_window(bazin_fits_data_path, light_curve_data_path)
+    for (diaObjectId,), off_var_data in off_var_data.group_by("r:diaObjectId"):
+        diaObjectId = str(diaObjectId)
+        lightcurve_plotting(off_var_data, diaObjectId, VARIABILITY_WINDOW_OUTPUT_DIR)
 
-def off_var_chi_squared():
+def off_var_chi_squared(bazin_fits_data_path: Path, light_curve_data_path: Path):
     """Here we compute the chi squared for the data points that are considered 
     off the main variation of the SN
     
     We do this so we can make a cut based on this parameter empirically using the SN-like
     objects as our ground truth."""
 
+    off_var_window_df = variability_window(bazin_fits_data_path, light_curve_data_path)
+    result = (
+    off_var_window_df
+    .with_columns((((pl.col("r:psfFlux") - pl.col("baseline")) / pl.col("r:psfFluxErr")) ** 2).alias("term"))
+    .group_by("r:diaObjectId")
+    .agg([pl.col("term").sum().alias("chi2_sum"), pl.col("term").count().alias("n_points")])
+    .with_columns((pl.col("chi2_sum") / pl.col("n_points")).alias("chi2_off"))
+)
+    return result
+
 
 if __name__ == "__main__":
-    print(variability_window(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet"))
+    # print(variability_window(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet"))
+    # plotting_off_var_data(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet")
+    print(off_var_chi_squared(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet"))
