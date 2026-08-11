@@ -218,6 +218,6 @@ def applying_the_rate_of_rise(object_csv_path: Path, light_curve_data_path: Path
 
 if __name__ == "__main__":
 
-    candidates = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"100_test_objects.csv"
+    candidates = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv"
     light_curve_data_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet"
     applying_the_rate_of_rise(candidates, light_curve_data_path, TEST_PASSED_DIR, TEST_FAILED_DIR)

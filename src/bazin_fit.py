@@ -159,7 +159,7 @@ def plot_bazin_fit_single_object(group_df: pd.DataFrame, band: str, fit_result: 
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(output_path / f"{diaObjectId}_i_band.png")
+    plt.savefig(output_path / f"{diaObjectId}_{i}_band.png")
     print (f"saved the plot of object {diaObjectId}")
     plt.close(fig)
 
@@ -196,14 +196,16 @@ if __name__ == "__main__":
 
     # object = ["170235219334922248"]
     # print (fit_bazin_single_object(object, "r", 10000, "mcmc"))
-    csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv"
-    result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", 
-                            "i", 
+    bands = ["u", "g", "r", "i", "z", "y"]
+    for i in bands:
+        csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_off_variation_test_objects.csv"
+        result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", 
+                            i, 
                             "mcmc", 
                             2000, 
-                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits" / "20_object_test" / "bazin_fits_i_band_results.csv")
-    plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits"/"20_object_test"/"bazin_fits_i_band_results.csv", 
-                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv",
+                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "20_object_test" / f"bazin_fits_{i}_band_results.csv")
+        plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits_results"/"20_object_test"/ f"bazin_fits_{i}_band_results.csv", 
+                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_off_variation_test_objects.csv",
                         Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet",
-                        "i",  
-                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"images"/"bazin_fits"/"20_object_test" / "i_band")
+                        i,  
+                        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / "20_object_test" / f"{i}_band")
