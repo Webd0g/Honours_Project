@@ -262,14 +262,14 @@ if __name__ == "__main__":
     # print (fit_bazin_single_object(object, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", "i", "mcmc", 2000))
     bands = ["u", "g", "r", "i", "z", "y"]
     for i in bands:
-        csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_off_variation_test_objects.csv"
+        csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"slope_fitting_results"/"objects_passing_slope_fit.csv"
         result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", 
                             i, 
                             "mcmc", 
                             2000, 
-                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "20_object_test" / f"bazin_fits_{i}_band_results.csv")
-        plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits_results"/"20_object_test"/ f"bazin_fits_{i}_band_results.csv", 
-                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_off_variation_test_objects.csv",
+                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / f"bazin_fits_{i}_band_results.csv")
+        plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits_results"/ f"bazin_fits_{i}_band_results.csv", 
+                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"slope_fitting_results"/"objects_passing_slope_fit.csv",
                         Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet",
                         i,  
-                    Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / "20_object_test" / f"{i}_band")
+                    Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / f"{i}_band")
