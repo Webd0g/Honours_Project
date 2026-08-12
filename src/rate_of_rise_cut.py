@@ -20,6 +20,8 @@ TEST_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Proje
 PLOTS_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "test_data_images"
 TEST_PASSED_DIR = TEST_DIR / "test_passed.csv"
 TEST_FAILED_DIR = TEST_DIR / "test_failed.csv"
+FAILED_DIR = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"slope_fitting_results"/"objects_failing_slope_fit.csv"
+PASSED_DIR = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"slope_fitting_results"/ "objects_failing_slope_fit.csv"
 # Reading the csv for the objects that passed the Fink tag filtering and creating the CSVs where data will be stored.
 
 # Specifying how many objects go into each query to the API.
@@ -218,6 +220,6 @@ def applying_the_rate_of_rise(object_csv_path: Path, light_curve_data_path: Path
 
 if __name__ == "__main__":
 
-    candidates = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv"
+    candidates = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"object_id_collection_results" / "sn_near_galaxy_candidate.csv"
     light_curve_data_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet"
-    applying_the_rate_of_rise(candidates, light_curve_data_path, TEST_PASSED_DIR, TEST_FAILED_DIR)
+    applying_the_rate_of_rise(candidates, light_curve_data_path, PASSED_DIR, FAILED_DIR)
