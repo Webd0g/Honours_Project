@@ -75,7 +75,11 @@ SN_LIKE_OBJECTS = ("170019716323082348",
 "313831458447818885",
 "313831458523316231",
 "313853496686280764",
-"313853497291309068")
+"313853497291309068",
+"313677516803932212",
+"313695087643066440",
+"313765480559017992",
+"313871014435488133")
 
 NOT_SN_LIKE_OBJECTS = ("170019717135204495",
 "170019696305242310",
@@ -155,15 +159,15 @@ def variability_window(i_band_bazin_fits_path: Path, light_curve_data_path: Path
 
     bazin_i_data = bazin_i_data.with_columns((pl.col("reference_time")+ pl.col("rise_time")* (pl.col("fall_time") / pl.col("rise_time") - 1).log()).alias("peak_time"))
 
-    bazin_i_data = bazin_i_data.with_columns([(pl.col("peak_time") - (1.5*pl.col("rise_time"))).alias("var_start"), 
-                                                (pl.col("peak_time") + (1.5*pl.col("fall_time"))).alias("var_end")])
+    bazin_i_data = bazin_i_data.with_columns([(pl.col("peak_time") - (1*pl.col("rise_time"))).alias("var_start"), 
+                                                (pl.col("peak_time") + (1*pl.col("fall_time"))).alias("var_end")])
 
     bazin_light_curve_data = light_curve_data.join(bazin_i_data.select(["r:diaObjectId","var_start","var_end",]), on = "r:diaObjectId", how="inner")
     off_var_data = bazin_light_curve_data.filter((pl.col("r:midpointMjdTai") < pl.col("var_start")) |
                                                 (pl.col("r:midpointMjdTai") > pl.col("var_end")))
     return off_var_data
 
-def plotting_off_var_data(i_band_bazin_fits_path: Path, light_curve_data_path: Path):
+def plotting_off_var_data(i_band_bazin_fits_path: Path, light_curve_data_path: Path, output_path: Path)-> None:
     """Here we plot the data points 
     that are off the main variation. 
     This is done iteratively to ensure that we aren't cutting
@@ -172,7 +176,7 @@ def plotting_off_var_data(i_band_bazin_fits_path: Path, light_curve_data_path: P
     off_var_data = variability_window(i_band_bazin_fits_path, light_curve_data_path)
     for (diaObjectId,), off_var_data in off_var_data.group_by("r:diaObjectId"):
         diaObjectId = str(diaObjectId)
-        lightcurve_plotting(off_var_data, diaObjectId, VARIABILITY_WINDOW_PLOT_OUTPUT_DIR / "20_object_test")
+        lightcurve_plotting(off_var_data, diaObjectId, output_path)
 
 def load_band_baselines(bazin_fits_paths: dict[str, Path]):
     """Here we want to load the baselines from
@@ -278,7 +282,7 @@ if __name__ == "__main__":
     # print(off_var_chi_squared(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet"))
     BAZIN_TEST_DIR = (
         BAZIN_FITS_DATA_DIR
-        / "20_object_test"
+        / "1000_random_object_test"
     )
 
     bazin_fits_paths = {
@@ -286,22 +290,11 @@ if __name__ == "__main__":
         "g": BAZIN_TEST_DIR / "bazin_fits_g_band_results.csv",
         "r": BAZIN_TEST_DIR / "bazin_fits_r_band_results.csv",
         "i": BAZIN_TEST_DIR / "bazin_fits_i_band_results.csv",
-        "z": BAZIN_TEST_DIR / "bazin_fits_z_band_results.csv",
-        "y": BAZIN_TEST_DIR / "bazin_fits_y_band_results.csv"
+        "z": BAZIN_TEST_DIR / "bazin_fits_z_band_results.csv"
     }
 
-    result = off_var_chi_squared(
-        i_band_bazin_fits_path=bazin_fits_paths["i"],
-        bazin_fits_paths=bazin_fits_paths,
-        light_curve_data_path=(
-            LIGHT_CURVE_DATA_DIR
-            / "combined_light_curve_data.parquet"),
-        output_path=(
-            OFF_VAR_CHI2_CSV_OUTPUT_DIR
-            / "20_object_test"
-            / "20_object_test"),)
-
-    print (result)
+    result = off_var_chi_squared(i_band_bazin_fits_path=bazin_fits_paths["i"], bazin_fits_paths=bazin_fits_paths, light_curve_data_path=(LIGHT_CURVE_DATA_DIR/ "combined_light_curve_data.parquet"),
+                                output_path=(OFF_VAR_CHI2_CSV_OUTPUT_DIR/ "1000_random_object_test"/ "1000_random_object_test"),)
     
-    off_var_chi_vs_i_flux_plot(bazin_fits_paths["i"], result, LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet", OFF_VAR_CHI2_CSV_OUTPUT_DIR / "20_object_test" / "20_object_test")
-    plotting_off_var_data(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet")
+    off_var_chi_vs_i_flux_plot(bazin_fits_paths["i"], result, LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet", OFF_VAR_CHI2_CSV_OUTPUT_DIR / "1000_random_object_test" / "1000_random_object_test")
+    plotting_off_var_data(BAZIN_FITS_DATA_DIR / "1000_random_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet", VARIABILITY_WINDOW_PLOT_OUTPUT_DIR / "1000_random_object_test")
