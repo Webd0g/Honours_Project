@@ -22,14 +22,6 @@ import numpy as np
 import light_curve as licu
 from rate_of_rise_cut import chunked_light_curve_data
 
-import inspect
-import light_curve as licu
-
-print(licu.__version__)
-print(inspect.signature(licu.BazinFit))
-print(inspect.signature(licu.BazinFit.many))
-
-
 def fit_bazin_single_object(csv_path: Path, band: str, mcmc_niter: int, algorithm: str = "mcmc") -> dict | None:
     """Fits a Bazin fit to the single band of an objects light curve and returns the amplitude, baseline, reference time, 
     rise time, fall time and reduced chi squared values. 
@@ -199,20 +191,20 @@ def plot_bazin_fit_batch(dict_path: Path, csv_path: Path, light_curve_data_path:
             continue
         plot_bazin_fit_single_object(group_df, band, fit_result, object_id, output_path)
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
 
     # object = ["170235219334922248"]
     # print (fit_bazin_single_object(object, "r", 10000, "mcmc"))
-    # bands = ["u", "g", "r", "i", "z", "y"]
-    # for i in bands:
-    #     csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv"
-    #     result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", 
-    #                         i, 
-    #                         "mcmc", 
-    #                         2000, 
-    #                         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "1000_random_object_test" / f"bazin_fits_{i}_band_results.csv")
-    #     plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits_results"/"1000_random_object_test"/ f"bazin_fits_{i}_band_results.csv", 
-    #                     Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv",
-    #                     Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet",
-    #                     i,  
-#                     Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / "1000_random_object_test" / f"{i}_band")
+    bands = ["u", "g", "r", "i", "z", "y"]
+    for i in bands:
+        csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv"
+        result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", 
+                            i, 
+                            "mcmc", 
+                            2000, 
+                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "1000_random_object_test" / f"bazin_fits_{i}_band_results.csv")
+        plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits_results"/"1000_random_object_test"/ f"bazin_fits_{i}_band_results.csv", 
+                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv",
+                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet",
+                        i,  
+                    Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / "1000_random_object_test" / f"{i}_band")
