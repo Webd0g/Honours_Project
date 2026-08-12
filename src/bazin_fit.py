@@ -22,7 +22,7 @@ import numpy as np
 import light_curve as licu
 from rate_of_rise_cut import chunked_light_curve_data
 
-def fit_bazin_single_object(csv_path: Path, band: str, mcmc_niter: int, algorithm: str = "mcmc") -> dict | None:
+def fit_bazin_single_object(object_ids: list, light_curve_data_path: Path, band: str, algorithm: str, mcmc_niter: int) -> pl.DataFrame:
     """Fits a Bazin fit to the single band of an objects light curve and returns the amplitude, baseline, reference time, 
     rise time, fall time and reduced chi squared values. 
     
@@ -30,32 +30,97 @@ def fit_bazin_single_object(csv_path: Path, band: str, mcmc_niter: int, algorith
     shapes in their light curve. This should remove objects that have a rise but this function also uses the decline 
     of the object as well."""
 
-    # initial_params = [
-    #     peak_flux, # Amplitude
-    #     np.median(flux) * 0.1, # Baseline
-    #     peak_time, # Reference time
-    #     (peak_time - time.min()),       # rise_time, rough guess
-    #     (time.max() - peak_time)2,       # fall_time, rough guess
-    # ]
+    object_ids = [str(object_id) for object_id in object_ids]
 
-    # object = pl.read_csv(csv_path, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"],)["r:diaObjectId"].to_list()
-    light_curve_info = chunked_light_curve_data(object, 500)
-    
-    band_df = light_curve_info[light_curve_info["r:band"] == band].sort_values("r:midpointMjdTai")
+    light_curve_data = (pl.read_parquet(light_curve_data_path).with_columns(pl.col("r:diaObjectId").cast(pl.String)))
+    light_curve_data_filtered = light_curve_data.filter(pl.col("r:diaObjectId").is_in(object_ids))
+
+    groups = {str(key[0]): group_df for key, group_df in light_curve_data_filtered.group_by("r:diaObjectId", maintain_order=True)}
+
+    bazin_results = {"r:diaObjectId":[],
+                    "amplitude":[], 
+                    "baseline":[],
+                    "reference_time":[],
+                    "rise_time":[],
+                    "fall_time":[],
+                    "reduced_chi2":[]}
+
+    for object_id in object_ids:
+        group_df = groups.get(object_id)
+        if group_df is None:
+            print (f"Object {object_id} has no light curve data for this band")
+            continue
+        band_df = group_df.filter((pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0)).sort("r:midpointMjdTai")
 
         # As the bazin fit needs to fit 5 params we should have at least a decent number of points to get an okay fit with the minimum for the function to be 6.
-    if len(band_df) < 6:
-        print (f"Band {band} has {len(band_df)} which doesn't pass the 6 point cut-off")
-        return None
+        if len(band_df) < 6:
+                print (f"Band {band} has {len(band_df)} which doesn't pass the 6 point cut-off")
+                continue
 
-    flux = band_df["r:psfFlux"].values.astype(np.float64)
-    flux_err = band_df["r:psfFluxErr"].values.astype(np.float64)
-    time = band_df["r:midpointMjdTai"].values.astype(np.float64)
+        flux = band_df["r:psfFlux"].to_numpy().astype(np.float64)
+        flux_err = band_df["r:psfFluxErr"].to_numpy().astype(np.float64)
+        time = band_df["r:midpointMjdTai"].to_numpy().astype(np.float64)
 
-    bazin = licu.BazinFit(algorithm, mcmc_niter=mcmc_niter)
-    result = bazin(time, flux, flux_err)
-    bazin_param_dict = {name: val for name, val in zip(bazin.names, result)}
-    return bazin_param_dict
+        # intial parameter calculation
+
+        peak_index = np.argmax(flux)
+        peak_flux = flux[peak_index]
+        peak_time = time[peak_index]
+
+        baseline_init = np.percentile(flux, 10)
+
+        amplitude_init = peak_flux - baseline_init
+
+        rise_time_init = peak_time - time.min()
+        fall_time_init = time.max() - peak_time
+
+
+        initial_params = [
+    10000.0,   # amplitude
+    5000.0,    # baseline
+    61120.0,   # reference time
+    35.0,      # rise time
+    100.0,     # fall time
+]
+
+        print(f"\nObject: {object_id}")
+        print(f"Band: {band}")
+        print("Initial parameters:")
+        print(f"  amplitude      = {amplitude_init}")
+        print(f"  baseline       = {baseline_init}")
+        print(f"  reference_time = {peak_time}")
+        print(f"  rise_time      = {rise_time_init}")
+        print(f"  fall_time      = {fall_time_init}")
+        
+        bazin = licu.BazinFit(
+            algorithm=algorithm,
+            mcmc_niter=mcmc_niter,
+            init=initial_params,
+        )
+
+        result = bazin(
+            time,
+            flux,
+            flux_err,
+        )
+
+        print("\nFit result:")
+        print(dict(zip(bazin.names, result)))
+
+        bazin_results["r:diaObjectId"].append(object_id)
+        bazin_results["amplitude"].append(result[0])
+        bazin_results["baseline"].append(result[1])
+        bazin_results["reference_time"].append(result[2])
+        bazin_results["rise_time"].append(result[3])
+        bazin_results["fall_time"].append(result[4])
+        bazin_results["reduced_chi2"].append(result[5])
+
+    bazin_results_df = pl.DataFrame(bazin_results)
+
+    # if output_path is not None:
+    #     bazin_results_df.write_csv(output_path)
+
+    return bazin_results_df
 
 def bazin_batch_fits(csv_path: Path, light_curve_data_path: Path, band: str, algorithm: str, mcmc_niter: int, output_path: Path) -> pl.DataFrame:
     """Batch Bazin fits for batch testing and processing of the Bazin fitting to many objects.
@@ -193,18 +258,18 @@ def plot_bazin_fit_batch(dict_path: Path, csv_path: Path, light_curve_data_path:
 
 if __name__ == "__main__":
 
-    # object = ["170235219334922248"]
-    # print (fit_bazin_single_object(object, "r", 10000, "mcmc"))
+    # object = ["313699514821640259"]
+    # print (fit_bazin_single_object(object, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", "i", "mcmc", 2000))
     bands = ["u", "g", "r", "i", "z", "y"]
     for i in bands:
-        csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv"
+        csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv"
         result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", 
                             i, 
                             "mcmc", 
                             2000, 
-                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "1000_random_object_test" / f"bazin_fits_{i}_band_results.csv")
-        plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits_results"/"1000_random_object_test"/ f"bazin_fits_{i}_band_results.csv", 
-                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"1000_random_test_objects.csv",
+                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "20_object_test" / f"bazin_fits_{i}_band_results.csv")
+        plot_bazin_fit_batch(Path.home() /"Documents"/"University"/"Honours"/"Honours_Project"/"data"/"bazin_fits_results"/"20_object_test"/ f"bazin_fits_{i}_band_results.csv", 
+                        Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv",
                         Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet",
                         i,  
-                    Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / "1000_random_object_test" / f"{i}_band")
+                    Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / "20_object_test" / f"{i}_band")
