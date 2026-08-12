@@ -159,8 +159,8 @@ def variability_window(i_band_bazin_fits_path: Path, light_curve_data_path: Path
 
     bazin_i_data = bazin_i_data.with_columns((pl.col("reference_time")+ pl.col("rise_time")* (pl.col("fall_time") / pl.col("rise_time") - 1).log()).alias("peak_time"))
 
-    bazin_i_data = bazin_i_data.with_columns([(pl.col("peak_time") - (5.5*pl.col("rise_time"))).alias("var_start"), 
-                                                (pl.col("peak_time") + (1*pl.col("fall_time"))).alias("var_end")])
+    bazin_i_data = bazin_i_data.with_columns([(pl.col("peak_time") - (3*pl.col("rise_time"))).alias("var_start"), 
+                                                (pl.col("peak_time") + (3*pl.col("fall_time"))).alias("var_end")])
 
     bazin_light_curve_data = light_curve_data.join(bazin_i_data.select(["r:diaObjectId","var_start","var_end",]), on = "r:diaObjectId", how="inner")
     off_var_data = bazin_light_curve_data.filter((pl.col("r:midpointMjdTai") < pl.col("var_start")) |
@@ -230,7 +230,7 @@ def off_var_chi_squared(i_band_bazin_fits_path: Path, bazin_fits_paths: dict[str
     result.write_csv(f"{output_path}.csv")
     return result
 
-def off_var_chi_vs_i_flux_plot(bazin_fits_data_path: Path, off_var_chi_squared_result: pl.DataFrame, light_curve_data_path: Path, csv_output_path: Path) -> None:
+def off_var_chi_vs_i_flux_plot(bazin_fits_data_path: Path, off_var_chi_squared_result: pl.DataFrame, light_curve_data_path: Path) -> None:
     """Here we plot the off-variation chi squared score against
     the value of the peak flux in the i band for the object. This will 
     help us make the empirical cut for objects that are SN-like and 
@@ -282,7 +282,6 @@ if __name__ == "__main__":
     # print(off_var_chi_squared(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet"))
     BAZIN_TEST_DIR = (
         BAZIN_FITS_DATA_DIR
-        / "100_object_test"
     )
 
     bazin_fits_paths = {
@@ -290,11 +289,12 @@ if __name__ == "__main__":
         "g": BAZIN_TEST_DIR / "bazin_fits_g_band_results.csv",
         "r": BAZIN_TEST_DIR / "bazin_fits_r_band_results.csv",
         "i": BAZIN_TEST_DIR / "bazin_fits_i_band_results.csv",
-        "z": BAZIN_TEST_DIR / "bazin_fits_z_band_results.csv"
+        "z": BAZIN_TEST_DIR / "bazin_fits_z_band_results.csv",
+        "y": BAZIN_TEST_DIR / "bazin_fits_y_band_results.csv"
     }
 
     result = off_var_chi_squared(i_band_bazin_fits_path=bazin_fits_paths["i"], bazin_fits_paths=bazin_fits_paths, light_curve_data_path=(LIGHT_CURVE_DATA_DIR/ "combined_light_curve_data.parquet"),
-                                output_path=(OFF_VAR_CHI2_CSV_OUTPUT_DIR/ "100_object_test"/ "100_object_test"),)
+                                output_path=(OFF_VAR_CHI2_CSV_OUTPUT_DIR/ "off_variation_values.csv"),)
     
-    off_var_chi_vs_i_flux_plot(bazin_fits_paths["i"], result, LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet", OFF_VAR_CHI2_CSV_OUTPUT_DIR / "100_object_test" / "100_object_test")
-    plotting_off_var_data(BAZIN_FITS_DATA_DIR / "100_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet", VARIABILITY_WINDOW_PLOT_OUTPUT_DIR / "100_object_test")
+    off_var_chi_vs_i_flux_plot(bazin_fits_paths["i"], result, LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet")
+    # plotting_off_var_data(BAZIN_FITS_DATA_DIR / "100_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet", VARIABILITY_WINDOW_PLOT_OUTPUT_DIR / "100_object_test")
