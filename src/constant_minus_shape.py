@@ -203,8 +203,9 @@ def constant_batch_fits(object_path: Path, light_curve_data_path: Path, band: st
 
     return result_df
 
-def delta_chi_agaisnt_chi_SN_plot(object_path: Path, light_curve_data_path: Path, band: str, bazin_fit_i_band_data_path: Path, output_path: Path) -> None:
-    """Here we plot the difference between the fit by a constant and the shape fit as a function of the shape fit in the i band."""
+def compute_delta_chi(object_path: Path, light_curve_data_path: Path, band: str, bazin_fit_i_band_data_path: Path, output_path: Path) -> pl.DataFrame:
+    """Here we compute the difference between the constant fit and the Bazin
+    fit and append it as a column to the df. """
 
     # Fit with a constant for the objects
     constant_fit_result = constant_batch_fits(object_path, light_curve_data_path, band)
@@ -221,6 +222,13 @@ def delta_chi_agaisnt_chi_SN_plot(object_path: Path, light_curve_data_path: Path
     delta_chi_df = (constant_fit_result.join(bazin_fit_chi_squared, on="r:diaObjectId", how="inner", suffix="bazin").with_columns((pl.col("constant_reduced_chi2") - pl.col("bazin_reduced_chi2")).alias("delta_reduced_chi2")))
 
     delta_chi_df.write_csv(output_path)
+
+    return delta_chi_df
+
+def delta_chi_agaisnt_chi_SN_plot(path_to_delta_chi_results: Path, output_path: Path) -> None:
+    """Here we plot the difference between the fit by a constant and the shape fit as a function of the shape fit in the i band."""
+
+    delta_chi_df = pl.read_csv(path_to_delta_chi_results)
 
     labels = delta_chi_df.select("r:diaObjectId").to_series()
 
@@ -244,8 +252,32 @@ def delta_chi_agaisnt_chi_SN_plot(object_path: Path, light_curve_data_path: Path
     plt.title("Delta chi squared as a function of bazin chi squared in the i band")
     plt.xlabel("Chi squared of the bazin fit in the i band")
     plt.ylabel("delta chi squared in the i band")
+    plt.savefig(output_path)
     plt.show()
 
+def delta_chi_check(path_to_delta_chi_results: Path):
+    """Here we separate the objects that are above the unity line from those that are below the unity line."""
+
+    delta_chi_df = pl.read_csv(path_to_delta_chi_results)
+
+    delta_chi_df = delta_chi_df.with_columns((pl.col("delta_reduced_chi2") > pl.col("bazin_reduced_chi2")).alias("passes_delta_chi_cut"))
+
+    delta_chi_df = delta_chi_df.with_columns((pl.col("delta_reduced_chi2") <= pl.col("bazin_reduced_chi2")).alias("failed_delta_chi_cut"))
+
+    return delta_chi_df
+
+def save_pass_fail_objects(path_to_delta_chi_results: Path, output_path_pass: Path, output_path_fail: Path):
+    """Here we write the results of which objects passed and which objects failed the to their respective CSV files."""
+
+    delta_chi_df = delta_chi_check(path_to_delta_chi_results)
+
+    delta_chi_df_pass = delta_chi_df.filter(pl.col("passes_delta_chi_cut") == "true")
+
+    delta_chi_df_fail = delta_chi_df.filter(pl.col("failed_delta_chi_cut") == "true")
+
+    delta_chi_df_pass.write_csv(output_path_pass)
+
+    delta_chi_df_fail.write_csv(output_path_fail)
 
 if __name__ == "__main__":
 
@@ -257,4 +289,11 @@ if __name__ == "__main__":
 
     BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "20_object_test" / "bazin_fits_i_band_results.csv"
 
-    delta_chi_agaisnt_chi_SN_plot(TEST_DATA, LIGHT_CURVE_DATA, "i", BAZIN_FITS_I_BAND_PATH, TEST_OUTPUT_PATH)
+    delta_chi_agaisnt_chi_SN_plot("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test.csv",
+                                "/home/riley/Documents/University/Honours/Honours_Project/Figure.png")
+
+    compute_delta_chi(TEST_DATA, LIGHT_CURVE_DATA, "i", BAZIN_FITS_I_BAND_PATH, "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test.csv")
+
+    save_pass_fail_objects("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test.csv", 
+                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test_pass.csv",
+                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test_fail.csv")

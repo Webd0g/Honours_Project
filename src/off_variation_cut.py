@@ -282,6 +282,7 @@ if __name__ == "__main__":
     # print(off_var_chi_squared(BAZIN_FITS_DATA_DIR / "20_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet"))
     BAZIN_TEST_DIR = (
         BAZIN_FITS_DATA_DIR
+        / "20_object_test"
     )
 
     bazin_fits_paths = {
@@ -294,7 +295,7 @@ if __name__ == "__main__":
     }
 
     result = off_var_chi_squared(i_band_bazin_fits_path=bazin_fits_paths["i"], bazin_fits_paths=bazin_fits_paths, light_curve_data_path=(LIGHT_CURVE_DATA_DIR/ "combined_light_curve_data.parquet"),
-                                output_path=(OFF_VAR_CHI2_CSV_OUTPUT_DIR/ "off_variation_values.csv"),)
+                                output_path=(OFF_VAR_CHI2_CSV_OUTPUT_DIR/ "20_object_test"))
     
     off_var_chi_vs_i_flux_plot(bazin_fits_paths["i"], result, LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet")
     # plotting_off_var_data(BAZIN_FITS_DATA_DIR / "100_object_test" / "bazin_fits_i_band_results.csv", LIGHT_CURVE_DATA_DIR / "combined_light_curve_data.parquet", VARIABILITY_WINDOW_PLOT_OUTPUT_DIR / "100_object_test")
