@@ -281,19 +281,19 @@ def save_pass_fail_objects(path_to_delta_chi_results: Path, output_path_pass: Pa
 
 if __name__ == "__main__":
 
-    TEST_DATA = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"20_test_objects.csv"
+    TEST_DATA = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"100_test_objects.csv"
 
     LIGHT_CURVE_DATA = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/ "light_curve_data" / "combined_light_curve_data.parquet"
 
-    TEST_OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "constant_minus_shape_results" / "20_object_test.csv"
+    TEST_OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "constant_minus_shape_results" / "100_object_test.csv"
 
-    BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "20_object_test" / "bazin_fits_i_band_results.csv"
+    BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "100_object_test" / "bazin_fits_i_band_results.csv"
 
-    delta_chi_agaisnt_chi_SN_plot("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test.csv",
-                                "/home/riley/Documents/University/Honours/Honours_Project/Figure.png")
+    delta_chi_agaisnt_chi_SN_plot(Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"constant_minus_shape_results"/"100_object_test/100_object_test.csv",
+                                Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"Figure.png")
 
-    compute_delta_chi(TEST_DATA, LIGHT_CURVE_DATA, "i", BAZIN_FITS_I_BAND_PATH, "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test.csv")
+    compute_delta_chi(TEST_DATA, LIGHT_CURVE_DATA, "i", BAZIN_FITS_I_BAND_PATH, Path.home()  / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"constant_minus_shape_results"/"100_object_test/100_object_test.csv")
 
-    save_pass_fail_objects("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test.csv", 
-                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test_pass.csv",
-                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/20_object_test/20_object_test_fail.csv")
+    save_pass_fail_objects(r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\constant_minus_shape_results\100_object_test\100_object_test.csv", 
+                        r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\constant_minus_shape_results\100_object_test\100_object_test_pass.csv",
+                        r"C:\Users\riley\Documents\University\Honours\Honours_Project\data\constant_minus_shape_results\100_object_test\100_object_test_fail.csv")
