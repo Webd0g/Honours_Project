@@ -271,7 +271,7 @@ def batch_plotter(
 
 if __name__ == "__main__":
     batch_plotter(
-        PASSED_OBJECTS,
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "slope_fitting_results" / "objects_failing_slope_fit.csv",
         LIGHT_CURVE_DATA_PATH,
-        TEST_IMAGE_DIR / "1000_object_test" / "pass",
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "slope_fitting_plots" / "objects_failing_slope_fit",
     )
