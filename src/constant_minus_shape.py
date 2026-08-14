@@ -277,6 +277,7 @@ if __name__ == "__main__":
     TEST_OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "constant_minus_shape_results" / "100_object_test.csv"
 
     BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "100_object_test" / "bazin_fits_i_band_results.csv"
+    BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "100_object_test" / "bazin_fits_i_band_results.csv"
 
     delta_chi_agaisnt_chi_SN_plot("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/100_object_test/100_object_test.csv",
                                 "/home/riley/Documents/University/Honours/Honours_Project/Figure.png")
