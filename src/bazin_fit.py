@@ -146,15 +146,24 @@ def bazin_batch_fits(csv_path: Path, light_curve_data_path: Path, band: str, alg
 
     objects = pl.read_csv(csv_path, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
     light_curve_data = pl.read_parquet(light_curve_data_path)
-    light_curve_data_filtered = light_curve_data.filter(pl.col("r:diaObjectId").cast(pl.Utf8).is_in(objects))
+    light_curve_data_filtered = light_curve_data.filter(pl.col("r:diaObjectId").cast(pl.String).is_in(objects))
 
     groups = {key[0]: group_df for key, group_df in light_curve_data_filtered.group_by("r:diaObjectId", maintain_order=True)}
     
     for object_id in objects:
-        group_df = groups.get(int(object_id))
+        group_df = groups.get(str(object_id))
         if group_df is None:
             continue
-        band_df = group_df.filter((pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0)).sort("r:midpointMjdTai")
+        band_df = group_df.filter((pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0)).sort("r:midpointMjdTai").unique(subset=["r:midpointMjdTai"], keep="first", maintain_order=True)
+
+        time = band_df["r:midpointMjdTai"].to_numpy()
+
+        if not np.all(np.isfinite(time)):
+            print("Non-finite:", object_id)
+
+        if np.any(np.diff(time) <= 0):
+            print("Not strictly increasing:", object_id)
+            print(time)
 
         # As the bazin fit needs to fit 5 params we should have at least a decent number of points to get an okay fit with the minimum for the function to be 6.
         if len(band_df) < 6:
@@ -247,14 +256,17 @@ def plot_bazin_fit_batch(dict_path: Path, csv_path: Path, light_curve_data_path:
     groups = {key[0]: group_df for key, group_df in light_curve_data_filtered.group_by("r:diaObjectId", maintain_order=True)}
 
     for object_id in objects:
-        group_df = groups.get(int(object_id))
+        group_df = groups.get((object_id))
         if group_df is None:
             continue
         fit_result = bazin_fit_dict.get(object_id)
+        print (fit_result)
         if fit_result is None:
             print(f"Object {object_id} did not have any data in that band and couldn't be fitted to and thus won't be plotted.")
             continue
-        plot_bazin_fit_single_object(group_df, band, fit_result, object_id, output_path)
+        if plot_bazin_fit_single_object(group_df, band, fit_result, object_id, output_path):
+            print(f"{object_id} has been plotted.")
+        
 
 if __name__ == "__main__":
 
@@ -262,14 +274,14 @@ if __name__ == "__main__":
     # print (fit_bazin_single_object(object, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", "i", "mcmc", 2000))
     bands = ["u", "g", "r", "i", "z", "y"]
     for i in bands:
-        csv_path = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"test_data"/"100_constant_minus_shape_test_objects.csv"
+        csv_path = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "timing_cuts_results" / "timing_cuts_passed.csv"
         result = bazin_batch_fits(csv_path, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", 
                             i, 
                             "mcmc", 
                             2000, 
-                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "100_object_test" / f"bazin_fits_{i}_band_results.csv")
-        plot_bazin_fit_batch(Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "100_object_test" / f"bazin_fits_{i}_band_results.csv", 
-                        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "test_data" / "100_constant_minus_shape_test_objects.csv",
+                            Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / f"bazin_fits_{i}_band_results.csv")
+        plot_bazin_fit_batch(Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / f"bazin_fits_{i}_band_results.csv", 
+                        csv_path,
                         Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet",
                         i,  
-                    Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / "100_object_test"/ f"{i}_band")
+                    Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "bazin_fits_plots" / f"{i}_band")

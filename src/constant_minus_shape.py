@@ -127,8 +127,7 @@ def constant_fit(flux: np.ndarray, flux_err: np.ndarray)-> tuple:
     weights = 1.0 / flux_err**2
 
     # Best-fitting constant
-    # constant = np.sum(weights * flux) / np.sum(weights)
-    constant = np.average(flux)
+    constant = np.sum(weights * flux) / np.sum(weights)
 
     # Chi-squared
     chi2 = np.sum(
@@ -276,14 +275,15 @@ if __name__ == "__main__":
 
     TEST_OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "constant_minus_shape_results" / "100_object_test.csv"
 
-    BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "100_object_test" / "bazin_fits_i_band_results.csv"
-    BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "100_object_test" / "bazin_fits_i_band_results.csv"
+    BAZIN_FITS_I_BAND_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "bazin_fits_results" / "bazin_fits_i_band_results.csv"
 
-    delta_chi_agaisnt_chi_SN_plot("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/100_object_test/100_object_test.csv",
+    CANDIDATES = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "timing_cuts_results" / "timing_cuts_passed.csv"
+
+    compute_delta_chi(CANDIDATES, LIGHT_CURVE_DATA, "i", BAZIN_FITS_I_BAND_PATH, "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_values.csv")
+
+    delta_chi_agaisnt_chi_SN_plot("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_values.csv",
                                 "/home/riley/Documents/University/Honours/Honours_Project/Figure.png")
 
-    compute_delta_chi(TEST_DATA, LIGHT_CURVE_DATA, "i", BAZIN_FITS_I_BAND_PATH, "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/100_object_test/100_object_test.csv")
-
-    save_pass_fail_objects("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/100_object_test/100_object_test.csv", 
-                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/100_object_test/100_object_test_pass.csv",
-                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/100_object_test/100_object_test_fail.csv")
+    save_pass_fail_objects("/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_values.csv", 
+                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_passed.csv",
+                        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_failed.csv")

@@ -63,12 +63,35 @@ def loading_objects_and_light_data(object_path: Path, light_curve_data_path: Pat
 
     return results
 
+def timing_pass_check(timing_cuts_values_path: Path, output_path_pass: Path, output_path_fail: Path) -> None:
+    """Here we check the objects that passed or failed the timing check and sort them into
+    their respective CSV files."""
+
+    timing_cuts_values = pl.read_csv(timing_cuts_values_path)
+
+    timing_cuts_values_pass = timing_cuts_values.filter(pl.col("passes_peak_cut") == "true")
+
+    timing_cuts_values_fail = timing_cuts_values.filter(pl.col("passes_peak_cut") == "false")
+
+    timing_cuts_values_pass.write_csv(output_path_pass)
+
+    timing_cuts_values_fail.write_csv(output_path_fail)
+
+
 if __name__=="__main__":
 
     TEST_DATA = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "test_data" / "20_test_objects.csv"
 
     LIGHT_CURVE_DATA = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/ "light_curve_data" / "combined_light_curve_data.parquet"
 
-    TEST_OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "timing_cuts_results" / "20_object_test" / "20_object_test.csv"
+    OUTPUT_PATH = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "timing_cuts_results" / "timing_cuts_values.csv"
 
-    print (loading_objects_and_light_data(TEST_DATA, LIGHT_CURVE_DATA, TEST_OUTPUT_PATH))
+    OUTPUT_PATH_PASS = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "timing_cuts_results" / "timing_cuts_passed.csv"
+
+    OUTPUT_PATH_FAIL = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "timing_cuts_results" / "timing_cuts_failed.csv"
+
+    CANDIDATES = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "slope_fitting_results" / "objects_passing_slope_fit.csv"
+
+    print (loading_objects_and_light_data(CANDIDATES, LIGHT_CURVE_DATA, OUTPUT_PATH))
+
+    timing_pass_check(OUTPUT_PATH, OUTPUT_PATH_PASS, OUTPUT_PATH_FAIL)
