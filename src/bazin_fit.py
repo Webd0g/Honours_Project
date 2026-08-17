@@ -62,7 +62,6 @@ def fit_bazin_single_object(object_ids: list, light_curve_data_path: Path, band:
         time = band_df["r:midpointMjdTai"].to_numpy().astype(np.float64)
 
         # intial parameter calculation
-
         peak_index = np.argmax(flux)
         peak_flux = flux[peak_index]
         peak_time = time[peak_index]
