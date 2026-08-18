@@ -189,18 +189,16 @@ def slope_fit_plotting(
             )
             continue
 
-        normalised_flux = (
-            pre_peak_best_points["r:psfFlux"] / peak_flux
-        ).to_numpy()
+        normalised_flux = (pre_peak_best_points["r:psfFlux"] / peak_flux).to_numpy()
         normalised_err = (
-            pre_peak_best_points["r:psfFluxErr"] / peak_flux
-        ).clip(lower_bound=1e-6).to_numpy()
+            (pre_peak_best_points["r:psfFluxErr"] / peak_flux)
+            .clip(lower_bound=1e-6)
+            .to_numpy()
+        )
         weights = 1.0 / normalised_err
 
         mjd_vals = mjd_series.to_numpy()
-        slope, intercept = np.polyfit(
-            mjd_vals, normalised_flux, 1, w=weights
-        )
+        slope, intercept = np.polyfit(mjd_vals, normalised_flux, 1, w=weights)
 
         print(
             f"  [{diaObjectId}] {band}-band: slope={slope:.5f},"
@@ -208,12 +206,14 @@ def slope_fit_plotting(
             f" pre-peak_time_span={time_span:.2f}"
         )
 
-        fitted_slope_rows.append({
-            "diaObjectId": diaObjectId,
-            "band": band,
-            "slope": slope,
-            "n_pre_peak_points": len(pre_peak_best_points),
-        })
+        fitted_slope_rows.append(
+            {
+                "diaObjectId": diaObjectId,
+                "band": band,
+                "slope": slope,
+                "n_pre_peak_points": len(pre_peak_best_points),
+            }
+        )
 
         fit_mjd = np.sort(mjd_vals)
         fit_flux = (slope * fit_mjd + intercept) * peak_flux
@@ -244,7 +244,7 @@ def slope_fit_plotting(
 def batch_plotter(
     object_path: Path,
     light_curve_data_path: Path,
-    output_path: Path = Path.home() / "Pictures",
+    output_path: Path,
 ):
     """Batch Plotter takes a list of object IDs for which in this case are the results
 
@@ -261,17 +261,27 @@ def batch_plotter(
         pl.col("r:diaObjectId").cast(pl.String).is_in(objects)
     )
 
-    for (object_id,), group_df in light_curve_data_filtered.group_by(
-        "r:diaObjectId"
-    ):
-        slope_fit_plotting(
-            group_df, object_id, object_id, output_path / f"{object_id}"
-        )
+    for (object_id,), group_df in light_curve_data_filtered.group_by("r:diaObjectId"):
+        slope_fit_plotting(group_df, object_id, object_id, output_path / f"{object_id}")
 
 
 if __name__ == "__main__":
     batch_plotter(
-        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "slope_fitting_results" / "objects_passing_slope_fit.csv",
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "slope_fitting_results"
+        / "objects_passing_slope_fit.csv",
         LIGHT_CURVE_DATA_PATH,
-        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "slope_fitting_plots" / "objects_passing_slope_fit",
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "slope_fitting_plots"
+        / "objects_passing_slope_fit",
     )

@@ -4,7 +4,6 @@ should be reletivly close to one another."""
 
 from pathlib import Path
 import polars as pl
-import numpy as np
 
 def loading_objects_and_light_data(object_path: Path, light_curve_data_path: Path, output_path: Path) -> pl.DataFrame:
     """Here we load the object list from the rate_of_rise fit script"""
