@@ -53,8 +53,8 @@ if __name__ == "__main__":
         / "Honours"
         / "Honours_Project"
         / "data"
-        / "constant_minus_shape_results"
-        / "constant_minus_shape_failed.csv"
+        / "sampling_results"
+        / "sampling_fail.csv"
     )
 
     LIGHT_CURVE_DATA_PATH = (
@@ -75,7 +75,7 @@ if __name__ == "__main__":
         / "Honours"
         / "Honours_Project"
         / "images"
-        / "constant_minus_shape_plots"
+        / "sampling_plots"
         / "fail"
     )
 

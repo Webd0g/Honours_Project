@@ -11,7 +11,16 @@ def numb_pre_peak_post_peak(
     objects_path: Path, light_curve_data_path: Path, output_path: Path
 ) -> pl.DataFrame:
     """This function finds the number of data points that pre-peak
-    and post-peak within 30 days before the peak and 60 days after the peak point."""
+    and post-peak within 30 days before the peak and 60 days after the peak point.
+
+    Args:
+        objects_path (Path): The path to the CSV file that hosts the column of object IDs the user wants to use.
+        light_curve_data_path (Path): The path to the light curve data as a parquet file, it can be a file for the entire library of objects as it is filtered down to the data that is just in the object ID list.
+        output_path (Path): This is the path where you specify where the dataframe is saved as a CSV.
+
+    Returns:
+        pl.DataFrame: This function also returns a polars dataframe with the counts epoch data in each band of the objects that have been passed to the function.
+    """
 
     results = {
         "r:diaObjectId": [],
@@ -204,7 +213,11 @@ def numb_pre_peak_post_peak(
 
 def sampling_statistics(counts_path: Path) -> None:
     """Here we calculate the statistics of the sample upon each test.
-    Specifically we find the mean and quartiles for the bands."""
+    Specifically we find the mean and quartiles for the bands.
+
+    Args:
+        counts_path (Path): The path that leads to where the counts csv file is that houses the data of the number of points withing the timespan from the previous function.
+    """
 
     counts_df = pl.read_csv(counts_path)
 
@@ -220,10 +233,10 @@ def sampling_statistics(counts_path: Path) -> None:
 
 
 def pass_fractions(counts_path: Path) -> None:
-    """_summary_
+    """The fractions of the number of objects that pass the sampling cut and, expects the user to know the divide between SN like and contaminant.
 
     Args:
-        counts_path (Path): _description_
+        counts_path (Path): The path that leads to where the counts csv file is that houses the data of the number of points withing the timespan from the previous function.
     """
 
     counts_df = pl.read_csv(counts_path)
@@ -249,8 +262,6 @@ def pass_fractions(counts_path: Path) -> None:
     sn_pass_2 = sn_pass_1.filter(second_criterion)
     cont_pass_2 = cont_pass_1.filter(second_criterion)
 
-    # print(sn_pass_1)
-    # print(sn_pass_2)
     print(f"SN-like: {sn_pass_2.height}/{sn_pass_1.height}")
     print(f"Contaminants: {cont_pass_2.height}/{cont_pass_1.height}")
 
@@ -262,10 +273,10 @@ def sampling_cut(
     pass_output_path: Path,
     fail_output_path: Path,
 ) -> None:
-    """_summary_
+    """Pass the CSV with the desired objects to do the sampling cut along with the light curve data path and specify the output paths of the sampling count CSV and the objects that pass the cut and fail the cut as CSV files.
 
     Args:
-        candidate_path (Path): _description_
+        candidate_path (Path): The path to where the
         light_curve_data_path (Path): _description_
         count_output_path (Path): _description_
         cut_output_path (Path): _description_
@@ -279,8 +290,8 @@ def sampling_cut(
         (pl.col("i post") >= 1).alias("pass_i_post"),
         (pl.col("r pre") >= 1).alias("pass_r_pre"),
         (pl.col("r post") >= 1).alias("pass_r_post"),
-        (pl.col("g total") >= 0).alias("pass_g"),
-        (pl.col("z total") >= 0).alias("pass_z"),
+        (pl.col("g total") >= 2).alias("pass_g"),
+        (pl.col("z total") >= 2).alias("pass_z"),
     )
 
     sampling_counts_df = sampling_counts_df.with_columns(
@@ -421,8 +432,4 @@ if __name__ == "__main__":
         COUNT_OUTPUT_PATH,
         PASSING_SAMPLING_CUT_OUTPUT,
         FAILING_SAMPLING_CUT_OUTPUT,
-    ).filter((pl.col("sampling_pass") == "false") & (pl.col("number_failed") <= 2))
-
-    pl.Config.set_tbl_cols(-1)
-    pl.Config.set_tbl_rows(-1)
-    print(sampling_cut_df)
+    )
