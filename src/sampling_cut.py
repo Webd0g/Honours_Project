@@ -224,8 +224,8 @@ def sampling_statistics(counts_path: Path) -> None:
     pl.Config.set_tbl_cols(-1)
     pl.Config.set_tbl_width_chars(200)
 
-    sn_counts_df = counts_df.head(10)
-    contaminants_counts_df = counts_df.tail(10)
+    sn_counts_df = counts_df.head(50)
+    contaminants_counts_df = counts_df.tail(50)
 
     print(sn_counts_df.drop("r:diaObjectId").describe([0.25, 0.5, 0.75]))
 
@@ -246,9 +246,9 @@ def pass_fractions(counts_path: Path) -> None:
 
     first_criterion = (
         (pl.col("i pre") >= 1)
-        & (pl.col("i post") >= 1)
+        & (pl.col("i post") >= 5)
         & (pl.col("r pre") >= 1)
-        & (pl.col("r post") >= 1)
+        & (pl.col("r post") >= 5)
     )
 
     sn_pass_1 = sn_counts_df.filter(first_criterion)
@@ -257,7 +257,7 @@ def pass_fractions(counts_path: Path) -> None:
     print(f"SN-like: {sn_pass_1.height}/{sn_counts_df.height}")
     print(f"Contaminants: {cont_pass_1.height}/{contaminants_counts_df.height}")
 
-    second_criterion = (pl.col("g total") >= 2) & (pl.col("z total") >= 2)
+    second_criterion = (pl.col("g total") >= 10) & (pl.col("z total") >= 2)
 
     sn_pass_2 = sn_pass_1.filter(second_criterion)
     cont_pass_2 = cont_pass_1.filter(second_criterion)
@@ -287,10 +287,10 @@ def sampling_cut(
 
     sampling_counts_df = sampling_counts_df.with_columns(
         (pl.col("i pre") >= 1).alias("pass_i_pre"),
-        (pl.col("i post") >= 1).alias("pass_i_post"),
+        (pl.col("i post") >= 5).alias("pass_i_post"),
         (pl.col("r pre") >= 1).alias("pass_r_pre"),
-        (pl.col("r post") >= 1).alias("pass_r_post"),
-        (pl.col("g total") >= 2).alias("pass_g"),
+        (pl.col("r post") >= 5).alias("pass_r_post"),
+        (pl.col("g total") >= 5).alias("pass_g"),
         (pl.col("z total") >= 2).alias("pass_z"),
     )
 
@@ -420,16 +420,16 @@ if __name__ == "__main__":
         / "sampling_fail.csv"
     )
 
-    # numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
+    numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
 
-    # sampling_statistics(OBJECT_TEST_OUTPUT)
+    sampling_statistics(OBJECT_TEST_OUTPUT)
 
-    # pass_fractions(OBJECT_TEST_OUTPUT)
+    pass_fractions(OBJECT_TEST_OUTPUT)
 
-    sampling_cut_df = sampling_cut(
-        CANDIDATES,
-        LIGHT_CURVE_DATA,
-        COUNT_OUTPUT_PATH,
-        PASSING_SAMPLING_CUT_OUTPUT,
-        FAILING_SAMPLING_CUT_OUTPUT,
-    )
+    # sampling_cut_df = sampling_cut(
+    #     CANDIDATES,
+    #     LIGHT_CURVE_DATA,
+    #     COUNT_OUTPUT_PATH,
+    #     PASSING_SAMPLING_CUT_OUTPUT,
+    #     FAILING_SAMPLING_CUT_OUTPUT,
+    # )

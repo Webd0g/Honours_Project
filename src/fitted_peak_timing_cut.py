@@ -278,35 +278,45 @@ if __name__ == "__main__":
         / "fail.csv"
     )
 
-    # pl.Config.set_tbl_rows(-1)
-    # print(
-    #     fitted_peak_times(
-    #         TEST_OBJECTS_PATH,
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-    #     )
-    #     .head(50)
-    #     .describe()
-    # )
-
-    # print(
-    #     fitted_peak_times(
-    #         TEST_OBJECTS_PATH,
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-    #     )
-    #     .tail(50)
-    #     .describe()
-    # )
-
     pl.Config.set_tbl_rows(-1)
+    print(
+        fitted_peak_times(
+            TEST_OBJECTS_PATH,
+            BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
+            BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
+        )
+        .head(50)
+        .describe()
+    )
+
+    print(
+        fitted_peak_times(
+            TEST_OBJECTS_PATH,
+            BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
+            BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
+        )
+        .tail(50)
+        .describe()
+    )
+
     fitted_peak_times_df = peak_timing_cut(
-        OBJECT_PATH,
+        TEST_OBJECTS_PATH,
         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
         50,
-        PASS_DIRECTORY,
-        FAIL_DIRECTORY,
+        TEST_PASS_DIRECTORY,
+        TEST_FAIL_DIRECTORY,
     )
 
-    # x_match(TEST_OBJECTS_PATH, fitted_peak_times_df)
+
+    # pl.Config.set_tbl_rows(-1)
+    # fitted_peak_times_df = peak_timing_cut(
+    #     OBJECT_PATH,
+    #     BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
+    #     BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
+    #     50,
+    #     PASS_DIRECTORY,
+    #     FAIL_DIRECTORY,
+    # )
+
+    x_match(TEST_OBJECTS_PATH, fitted_peak_times_df)
