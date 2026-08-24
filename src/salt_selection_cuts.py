@@ -5,6 +5,18 @@ import polars as pl
 import sncosmo
 from astropy.table import Table
 
+SALT3_FIT_MIN_WAVE = 2800.0  # Angstrom
+SALT3_FIT_MAX_WAVE = 8700.0  # Angstrom
+
+BAND_MAP = {
+    "u": "lsstu",
+    "g": "lsstg",
+    "r": "lsstr",
+    "i": "lssti",
+    "z": "lsstz",
+    "y": "lssty",
+}
+
 
 def bazin_salt_phase_cut(
     salt_fits_path: Path,
@@ -243,6 +255,48 @@ def bazin_salt_phase_cut(
     return results
 
 
+def get_salt3_fitted_bands(
+    redshift: float,
+    model: sncosmo.Model,
+    band_map: dict[str, str] = BAND_MAP,
+) -> set[str]:
+    """
+    Determine which Rubin bands should enter the SALT3 fit.
+
+    A band is included when:
+
+    1. Its rest-frame effective wavelength is within the adopted
+        SALT3 fitting range of 2800--8700 Angstrom.
+
+    2. The full observed bandpass is physically covered by the
+        SALT3 model at the supplied redshift.
+
+    The supplied redshift should be the host-galaxy photo-z for
+    the host-photo-z branch of the analysis.
+    """
+
+    fitted_bands = set()
+
+    for rubin_band, sncosmo_band in band_map.items():
+        bandpass = sncosmo.get_bandpass(sncosmo_band)
+
+        rest_wave_eff = bandpass.wave_eff / (1.0 + redshift)
+
+        in_trusted_range = SALT3_FIT_MIN_WAVE <= rest_wave_eff <= SALT3_FIT_MAX_WAVE
+
+        model_can_evaluate = bool(
+            model.bandoverlap(
+                sncosmo_band,
+                z=redshift,
+            )
+        )
+
+        if in_trusted_range and model_can_evaluate:
+            fitted_bands.add(rubin_band)
+
+    return fitted_bands
+
+
 def bazin_salt_chi2_cut(
     salt_quality_path: Path,
     light_curve_data_path: Path,
@@ -305,15 +359,6 @@ def bazin_salt_chi2_cut(
         )
     }
 
-    band_map = {
-        "u": "lsstu",
-        "g": "lsstg",
-        "r": "lsstr",
-        "i": "lssti",
-        "z": "lsstz",
-        "y": "lssty",
-    }
-
     results = []
 
     # ------------------------------------------------------------
@@ -343,63 +388,69 @@ def bazin_salt_chi2_cut(
         )
 
         # --------------------------------------------------------
-        # Convert Rubin bands to SNCosmo band names
-        # --------------------------------------------------------
-
-        fit_df = group_df.with_columns(
-            pl.col("r:band").replace(band_map).alias("sncosmo_band")
-        )
-
-        data = Table(
-            {
-                "time": fit_df["r:midpointMjdTai"].to_numpy(),
-                "band": fit_df["sncosmo_band"].to_numpy(),
-                "flux": fit_df["r:psfFlux"].to_numpy(),
-                "fluxerr": fit_df["r:psfFluxErr"].to_numpy(),
-                "zp": np.full(fit_df.height, 31.4),
-                "zpsys": np.full(fit_df.height, "ab"),
-            }
-        )
-
-        # --------------------------------------------------------
-        # Determine which bands are actually supported by the
-        # fitted SALT model at this redshift.
-        #
-        # bandoverlap() returns True when the model wavelength
-        # range fully overlaps that observed band.
-        # --------------------------------------------------------
-
-        used_band_mask = np.array(
-            [model.bandoverlap(band) for band in data["band"]],
-            dtype=bool,
-        )
-
-        used_data = sncosmo.select_data(
-            data,
-            used_band_mask,
-        )
-
-        # --------------------------------------------------------
-        # Calculate per-band chi2
+        # Calculate chi2 in bands that actually entered the fit
         # --------------------------------------------------------
 
         band_results = {}
 
-        for band in ["lsstg", "lsstr", "lssti", "lsstz"]:
-            band_mask = np.asarray(used_data["band"]) == band
+        fitted_band_flags = {
+            "g": row["g_fitted"],
+            "r": row["r_fitted"],
+            "i": row["i_fitted"],
+            "z": row["z_fitted"],
+        }
 
-            if not np.any(band_mask):
-                band_results[band] = {
+        for rubin_band, was_fitted in fitted_band_flags.items():
+            sncosmo_band = BAND_MAP[rubin_band]
+
+            if not was_fitted:
+                band_results[rubin_band] = {
                     "chi2": None,
                     "n": 0,
                     "chi2_per_point": None,
                 }
                 continue
 
-            band_data = sncosmo.select_data(
-                used_data,
-                band_mask,
+            band_df = group_df.filter(pl.col("r:band") == rubin_band)
+
+            if band_df.height == 0:
+                band_results[rubin_band] = {
+                    "chi2": None,
+                    "n": 0,
+                    "chi2_per_point": None,
+                }
+                continue
+
+            band_data = Table(
+                {
+                    "time": band_df["r:midpointMjdTai"].to_numpy(),
+                    "band": np.full(
+                        band_df.height,
+                        sncosmo_band,
+                    ),
+                    "flux": band_df["r:psfFlux"].to_numpy(),
+                    "fluxerr": band_df["r:psfFluxErr"].to_numpy(),
+                    "zp": np.full(
+                        band_df.height,
+                        31.4,
+                    ),
+                    "zpsys": np.full(
+                        band_df.height,
+                        "ab",
+                    ),
+                }
             )
+
+            # It is possible for the final fitted z to move far enough
+            # that SALT3 can no longer physically evaluate a band which
+            # was valid at host_photoz.
+            if not model.bandoverlap(sncosmo_band):
+                band_results[rubin_band] = {
+                    "chi2": None,
+                    "n": 0,
+                    "chi2_per_point": None,
+                }
+                continue
 
             chi2 = float(
                 sncosmo.chisq(
@@ -411,69 +462,48 @@ def bazin_salt_chi2_cut(
 
             n_band = len(band_data)
 
-            band_results[band] = {
+            band_results[rubin_band] = {
                 "chi2": chi2,
                 "n": n_band,
                 "chi2_per_point": chi2 / n_band,
             }
 
-        g = band_results["lsstg"]
-        r = band_results["lsstr"]
-        i = band_results["lssti"]
-        z = band_results["lsstz"]
+        g_band = band_results["g"]
+        r_band = band_results["r"]
+        i_band = band_results["i"]
+        z_band = band_results["z"]
 
         # --------------------------------------------------------
         # Calculate unfitted band chi squared
         # --------------------------------------------------------
-        
-        u_unfitted = {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
-        }
 
         g_unfitted = {
             "chi2": None,
             "n_points": 0,
             "chi2_per_point": None,
-        }
-
-        r_unfitted = {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
-        }
-
-        
-        i_unfitted = {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
+            "model_can_evaluate": None,
         }
 
         z_unfitted = {
             "chi2": None,
             "n_points": 0,
             "chi2_per_point": None,
+            "model_can_evaluate": None,
         }
 
-        y_unfitted = {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
-        }
+        if row["g_fitted"] is False:
+            g_unfitted = unfitted_band_chi2(
+                group_df=group_df,
+                fitted_model=model,
+                band="g",
+            )
 
-        unfitted_bands = (
-            u_unfitted, 
-            g_unfitted, 
-            r_unfitted, 
-            i_unfitted, 
-            z_unfitted,
-            y_unfitted
-        )
-        for unfitted_band in unfitted_bands:
-            if not row[unfitted_band]:
-
+        if row["z_fitted"] is False:
+            z_unfitted = unfitted_band_chi2(
+                group_df=group_df,
+                fitted_model=model,
+                band="z",
+            )
         # --------------------------------------------------------
         # Extract results
         # --------------------------------------------------------
@@ -481,18 +511,26 @@ def bazin_salt_chi2_cut(
         results.append(
             {
                 "r:diaObjectId": object_id,
-                "g_chi2": g["chi2"],
-                "g_n_used": g["n"],
-                "g_chi2_per_point": g["chi2_per_point"],
-                "r_chi2": r["chi2"],
-                "r_n_used": r["n"],
-                "r_chi2_per_point": r["chi2_per_point"],
-                "i_chi2": i["chi2"],
-                "i_n_used": i["n"],
-                "i_chi2_per_point": i["chi2_per_point"],
-                "z_chi2": z["chi2"],
-                "z_n_used": z["n"],
-                "z_chi2_per_point": z["chi2_per_point"],
+                "g_chi2": g_band["chi2"],
+                "g_n_used": g_band["n"],
+                "g_chi2_per_point": g_band["chi2_per_point"],
+                "r_chi2": r_band["chi2"],
+                "r_n_used": r_band["n"],
+                "r_chi2_per_point": r_band["chi2_per_point"],
+                "i_chi2": i_band["chi2"],
+                "i_n_used": i_band["n"],
+                "i_chi2_per_point": i_band["chi2_per_point"],
+                "z_chi2": z_band["chi2"],
+                "z_n_used": z_band["n"],
+                "z_chi2_per_point": z_band["chi2_per_point"],
+                "g_unfitted_chi2": g_unfitted["chi2"],
+                "g_unfitted_n": g_unfitted["n_points"],
+                "g_unfitted_chi2_per_point": g_unfitted["chi2_per_point"],
+                "g_unfitted_model_can_evaluate": g_unfitted["model_can_evaluate"],
+                "z_unfitted_chi2": z_unfitted["chi2"],
+                "z_unfitted_n": z_unfitted["n_points"],
+                "z_unfitted_chi2_per_point": z_unfitted["chi2_per_point"],
+                "z_unfitted_model_can_evaluate": z_unfitted["model_can_evaluate"],
             }
         )
 
@@ -527,29 +565,32 @@ def bazin_salt_chi2_cut(
         (pl.col("reduced_chi2") < 6).alias("pass_overall_chi2"),
     )
 
-    results_df = results_df.select(
-        [
-            pl.col("r:diaObjectId"),
-            pl.col("pass_g_fitted_chi2"),
-            pl.col("pass_r_fitted_chi2"),
-            pl.col("pass_i_fitted_chi2"),
-            pl.col("pass_z_fitted_chi2"),
-            pl.col("pass_overall_chi2"),
-        ]
-    )
+    # results_df = results_df.select(
+    #     [
+    #         pl.col("r:diaObjectId"),
+    #         pl.col("pass_g_fitted_chi2"),
+    #         pl.col("pass_r_fitted_chi2"),
+    #         pl.col("pass_i_fitted_chi2"),
+    #         pl.col("pass_z_fitted_chi2"),
+    #         pl.col("pass_overall_chi2"),
+    #     ]
+    # )
 
     results_df.write_csv(output_path / "chi2_requirement_results.csv")
 
     return results_df
 
 
-def unfitted_band_finder(object_path: Path, output_path: Path) -> pl.DataFrame:
-    """This function finds the overlap of the data from an object and the maximum or minimum that can be fit in the
-    SALT LSST bandpasses, this helps us find what redshift select filters can host data up to and can help us seperate different types of SN.
+def unfitted_band_finder(
+    object_path: Path,
+    output_path: Path,
+) -> pl.DataFrame:
+    """
+    Determine which Rubin filters should be included in the SALT3
+    fit at each object's host-galaxy photometric redshift.
 
-
-    Args:
-        objects (Path): Path type object to the CSV with the diaObjectId, host photo z and host photo z error in it.
+    Band inclusion is determined from the rest-frame effective
+    wavelength and the SALT3 model's hard wavelength support.
     """
 
     model = sncosmo.Model(source="salt3")
@@ -562,87 +603,110 @@ def unfitted_band_finder(object_path: Path, output_path: Path) -> pl.DataFrame:
         },
     )
 
-    band_map = {
-        "u": "lsstu",
-        "g": "lsstg",
-        "r": "lsstr",
-        "i": "lssti",
-        "z": "lsstz",
-        "y": "lssty",
-    }
+    coverage = []
 
-    def get_band_coverage(redshift: pl.Float64):
-        """Small helper function to compute the band overlap at an objects specific redshift.
+    for row in objects.iter_rows(named=True):
+        object_id = row["r:diaObjectId"]
+        redshift = row["host_photoz"]
 
-        Args:
-            redshift (Float64): A float type object that represents the object's redshift
-        """
+        if redshift is None or not np.isfinite(redshift):
+            coverage.append(
+                {
+                    "r:diaObjectId": object_id,
+                    "u_fitted": None,
+                    "g_fitted": None,
+                    "r_fitted": None,
+                    "i_fitted": None,
+                    "z_fitted": None,
+                    "y_fitted": None,
+                }
+            )
+            continue
 
-        return {
-            f"{short_band}_fitted": bool(model.bandoverlap(sncosmo_band, z=redshift))
-            for short_band, sncosmo_band in band_map.items()
-        }
+        fitted_bands = get_salt3_fitted_bands(
+            redshift=redshift,
+            model=model,
+        )
 
-    coverage = [
-        {
-            "r:diaObjectId": row["r:diaObjectId"],
-            **get_band_coverage(row["host_photoz"]),
-        }
-        for row in objects.iter_rows(named=True)
-    ]
+        coverage.append(
+            {
+                "r:diaObjectId": object_id,
+                "u_fitted": "u" in fitted_bands,
+                "g_fitted": "g" in fitted_bands,
+                "r_fitted": "r" in fitted_bands,
+                "i_fitted": "i" in fitted_bands,
+                "z_fitted": "z" in fitted_bands,
+                "y_fitted": "y" in fitted_bands,
+            }
+        )
 
     coverage_df = pl.DataFrame(coverage)
 
     results = objects.join(
-        coverage_df, on="r:diaObjectId", how="left", maintain_order="left"
+        coverage_df,
+        on="r:diaObjectId",
+        how="left",
+        maintain_order="left",
     )
 
     results.write_csv(output_path / "unfitted_bands.csv")
 
-    return results.select(
-        [
-            pl.col("r:diaObjectId"),
-            pl.col("host_photoz"),
-            pl.col("u_fitted"),
-            pl.col("g_fitted"),
-            pl.col("r_fitted"),
-            pl.col("i_fitted"),
-            pl.col("z_fitted"),
-            pl.col("y_fitted"),
-        ]
-    )
+    return results
 
 
 def unfitted_band_chi2(
     group_df: pl.DataFrame,
     fitted_model: sncosmo.Model,
     band: str,
-    band_map: dict,
+    band_map: dict[str, str] = BAND_MAP,
 ) -> dict:
     """
-    Calculate chi-square statistics for an unfitted Rubin band
-    against an already-fitted SALT3 model.
+    Calculate chi-square for a band that did not participate in
+    the SALT3 fit.
+
+    The SALT parameters remain fixed. If SALT3 cannot physically
+    evaluate the band at the fitted redshift, the statistic is
+    returned as null rather than extrapolating the model.
     """
 
-    band_df = group_df.filter(pl.col("r:band") == band).with_columns(
-        pl.col("r:band").replace(band_map).alias("sncosmo_band")
-    )
+    sncosmo_band = band_map[band]
+
+    # Can the final fitted SALT3 model physically evaluate this band?
+    if not fitted_model.bandoverlap(sncosmo_band):
+        return {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+            "model_can_evaluate": False,
+        }
+
+    band_df = group_df.filter(pl.col("r:band") == band)
 
     if band_df.height == 0:
         return {
             "chi2": None,
             "n_points": 0,
             "chi2_per_point": None,
+            "model_can_evaluate": True,
         }
 
     data = Table(
         {
             "time": band_df["r:midpointMjdTai"].to_numpy(),
-            "band": band_df["sncosmo_band"].to_numpy(),
+            "band": np.full(
+                band_df.height,
+                sncosmo_band,
+            ),
             "flux": band_df["r:psfFlux"].to_numpy(),
             "fluxerr": band_df["r:psfFluxErr"].to_numpy(),
-            "zp": np.full(band_df.height, 31.4),
-            "zpsys": np.full(band_df.height, "ab"),
+            "zp": np.full(
+                band_df.height,
+                31.4,
+            ),
+            "zpsys": np.full(
+                band_df.height,
+                "ab",
+            ),
         }
     )
 
@@ -660,6 +724,7 @@ def unfitted_band_chi2(
         "chi2": chi2,
         "n_points": n_points,
         "chi2_per_point": chi2 / n_points,
+        "model_can_evaluate": True,
     }
 
 
@@ -713,9 +778,13 @@ if __name__ == "__main__":
     )
 
     # bazin_salt_phase_cut(WITH_PHOTOZ_TEST_OBJECTS, LIGHT_CURVE_DATA, TEST_OUTPUT)
-    # result = bazin_salt_chi2_cut(TEST_OUTPUT, LIGHT_CURVE_DATA, CHI2_OUTPUT_DIR)
-    # print(result)
+    result = bazin_salt_chi2_cut(
+        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/50_object_test/chi2_requirements_results/unfitted_bands.csv",
+        LIGHT_CURVE_DATA,
+        CHI2_OUTPUT_DIR,
+    )
+    print(result)
 
-    results = unfitted_band_chi2(WITH_PHOTOZ_TEST_OBJECTS, CHI2_OUTPUT_DIR)
-    pl.Config.set_tbl_rows(-1)
-    print(results)
+    # results = unfitted_band_finder(TEST_OUTPUT, CHI2_OUTPUT_DIR)
+    # pl.Config.set_tbl_rows(-1)
+    # print(results)
