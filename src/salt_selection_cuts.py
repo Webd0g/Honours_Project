@@ -6,7 +6,7 @@ import sncosmo
 from astropy.table import Table
 
 
-def bazin_salt_quality_cut(
+def bazin_salt_phase_cut(
     salt_fits_path: Path,
     light_curve_data_path: Path,
     output_path: Path | None = None,
@@ -243,67 +243,6 @@ def bazin_salt_quality_cut(
     return results
 
 
-def calculate_band_chi2(
-    data: Table,
-    fitted_model: sncosmo.Model,
-    data_mask: np.ndarray,
-) -> dict:
-    """
-    Calculate chi-square statistics in each filter for a fitted SALT model.
-
-    Only observations that were actually used by sncosmo.fit_lc are included.
-
-    Returns
-    -------
-    dict
-        Dictionary keyed by SNCosmo band name. Each band contains:
-        - chi2
-        - n_points
-        - chi2_per_point
-    """
-
-    used_data = sncosmo.select_data(
-        data,
-        data_mask,
-    )
-
-    results = {}
-
-    bands = np.unique(np.asarray(used_data["band"]))
-
-    for band in bands:
-        band_mask = np.asarray(used_data["band"]) == band
-
-        band_data = sncosmo.select_data(
-            used_data,
-            band_mask,
-        )
-
-        n_points = len(band_data)
-
-        chi2 = sncosmo.chisq(
-            band_data,
-            fitted_model,
-            modelcov=True,
-        )
-
-        results[band] = {
-            "chi2": float(chi2),
-            "n_points": n_points,
-            "chi2_per_point": (float(chi2) / n_points if n_points > 0 else None),
-        }
-
-    return results
-
-
-from pathlib import Path
-
-import numpy as np
-import polars as pl
-import sncosmo
-from astropy.table import Table
-
-
 def bazin_salt_chi2_cut(
     salt_quality_path: Path,
     light_curve_data_path: Path,
@@ -478,14 +417,66 @@ def bazin_salt_chi2_cut(
                 "chi2_per_point": chi2 / n_band,
             }
 
-        # --------------------------------------------------------
-        # Extract results
-        # --------------------------------------------------------
-
         g = band_results["lsstg"]
         r = band_results["lsstr"]
         i = band_results["lssti"]
         z = band_results["lsstz"]
+
+        # --------------------------------------------------------
+        # Calculate unfitted band chi squared
+        # --------------------------------------------------------
+        
+        u_unfitted = {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+        }
+
+        g_unfitted = {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+        }
+
+        r_unfitted = {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+        }
+
+        
+        i_unfitted = {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+        }
+
+        z_unfitted = {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+        }
+
+        y_unfitted = {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+        }
+
+        unfitted_bands = (
+            u_unfitted, 
+            g_unfitted, 
+            r_unfitted, 
+            i_unfitted, 
+            z_unfitted,
+            y_unfitted
+        )
+        for unfitted_band in unfitted_bands:
+            if not row[unfitted_band]:
+
+        # --------------------------------------------------------
+        # Extract results
+        # --------------------------------------------------------
 
         results.append(
             {
@@ -508,7 +499,6 @@ def bazin_salt_chi2_cut(
     chi2_df = pl.DataFrame(results)
     pl.Config.set_tbl_cols(-1)
     pl.Config.set_tbl_rows(-1)
-    print (chi2_df)
     # ------------------------------------------------------------
     # Join per-band statistics back onto the phase-quality table
     # ------------------------------------------------------------
@@ -537,13 +527,140 @@ def bazin_salt_chi2_cut(
         (pl.col("reduced_chi2") < 6).alias("pass_overall_chi2"),
     )
 
-    results_df = results_df.select([pl.col("r:diaObjectId"), pl.col("pass_g_fitted_chi2"), pl.col("pass_r_fitted_chi2"), pl.col("pass_i_fitted_chi2"), pl.col("pass_z_fitted_chi2"), pl.col("pass_overall_chi2")])
+    results_df = results_df.select(
+        [
+            pl.col("r:diaObjectId"),
+            pl.col("pass_g_fitted_chi2"),
+            pl.col("pass_r_fitted_chi2"),
+            pl.col("pass_i_fitted_chi2"),
+            pl.col("pass_z_fitted_chi2"),
+            pl.col("pass_overall_chi2"),
+        ]
+    )
 
-    results_df.write_csv(output_path)
+    results_df.write_csv(output_path / "chi2_requirement_results.csv")
 
     return results_df
 
 
+def unfitted_band_finder(object_path: Path, output_path: Path) -> pl.DataFrame:
+    """This function finds the overlap of the data from an object and the maximum or minimum that can be fit in the
+    SALT LSST bandpasses, this helps us find what redshift select filters can host data up to and can help us seperate different types of SN.
+
+
+    Args:
+        objects (Path): Path type object to the CSV with the diaObjectId, host photo z and host photo z error in it.
+    """
+
+    model = sncosmo.Model(source="salt3")
+
+    objects = pl.read_csv(
+        object_path,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "host_photoz": pl.Float64,
+        },
+    )
+
+    band_map = {
+        "u": "lsstu",
+        "g": "lsstg",
+        "r": "lsstr",
+        "i": "lssti",
+        "z": "lsstz",
+        "y": "lssty",
+    }
+
+    def get_band_coverage(redshift: pl.Float64):
+        """Small helper function to compute the band overlap at an objects specific redshift.
+
+        Args:
+            redshift (Float64): A float type object that represents the object's redshift
+        """
+
+        return {
+            f"{short_band}_fitted": bool(model.bandoverlap(sncosmo_band, z=redshift))
+            for short_band, sncosmo_band in band_map.items()
+        }
+
+    coverage = [
+        {
+            "r:diaObjectId": row["r:diaObjectId"],
+            **get_band_coverage(row["host_photoz"]),
+        }
+        for row in objects.iter_rows(named=True)
+    ]
+
+    coverage_df = pl.DataFrame(coverage)
+
+    results = objects.join(
+        coverage_df, on="r:diaObjectId", how="left", maintain_order="left"
+    )
+
+    results.write_csv(output_path / "unfitted_bands.csv")
+
+    return results.select(
+        [
+            pl.col("r:diaObjectId"),
+            pl.col("host_photoz"),
+            pl.col("u_fitted"),
+            pl.col("g_fitted"),
+            pl.col("r_fitted"),
+            pl.col("i_fitted"),
+            pl.col("z_fitted"),
+            pl.col("y_fitted"),
+        ]
+    )
+
+
+def unfitted_band_chi2(
+    group_df: pl.DataFrame,
+    fitted_model: sncosmo.Model,
+    band: str,
+    band_map: dict,
+) -> dict:
+    """
+    Calculate chi-square statistics for an unfitted Rubin band
+    against an already-fitted SALT3 model.
+    """
+
+    band_df = group_df.filter(pl.col("r:band") == band).with_columns(
+        pl.col("r:band").replace(band_map).alias("sncosmo_band")
+    )
+
+    if band_df.height == 0:
+        return {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+        }
+
+    data = Table(
+        {
+            "time": band_df["r:midpointMjdTai"].to_numpy(),
+            "band": band_df["sncosmo_band"].to_numpy(),
+            "flux": band_df["r:psfFlux"].to_numpy(),
+            "fluxerr": band_df["r:psfFluxErr"].to_numpy(),
+            "zp": np.full(band_df.height, 31.4),
+            "zpsys": np.full(band_df.height, "ab"),
+        }
+    )
+
+    chi2 = float(
+        sncosmo.chisq(
+            data,
+            fitted_model,
+            modelcov=True,
+        )
+    )
+
+    n_points = len(data)
+
+    return {
+        "chi2": chi2,
+        "n_points": n_points,
+        "chi2_per_point": chi2 / n_points,
+    }
 
 
 if __name__ == "__main__":
@@ -592,10 +709,13 @@ if __name__ == "__main__":
         / "data"
         / "salt_fitting"
         / "50_object_test"
-        / "chi2_requirement_results"
-        / "chi2_requirement_results.csv"
+        / "chi2_requirements_results"
     )
 
-    bazin_salt_quality_cut(WITH_PHOTOZ_TEST_OBJECTS, LIGHT_CURVE_DATA, TEST_OUTPUT)
-    result = bazin_salt_chi2_cut(TEST_OUTPUT, LIGHT_CURVE_DATA, CHI2_OUTPUT_DIR)
-    print (result)
+    # bazin_salt_phase_cut(WITH_PHOTOZ_TEST_OBJECTS, LIGHT_CURVE_DATA, TEST_OUTPUT)
+    # result = bazin_salt_chi2_cut(TEST_OUTPUT, LIGHT_CURVE_DATA, CHI2_OUTPUT_DIR)
+    # print(result)
+
+    results = unfitted_band_chi2(WITH_PHOTOZ_TEST_OBJECTS, CHI2_OUTPUT_DIR)
+    pl.Config.set_tbl_rows(-1)
+    print(results)

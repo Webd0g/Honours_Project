@@ -160,7 +160,7 @@ def single_object_salt3_fit_test(
         model,
         ["t0", "x0", "x1", "c"],
         bounds={
-            # "z": (z_min, z_max),
+            "z": (z_min, z_max),
             "t0": (peak_mjd - 30, peak_mjd + 30),
             "x1": (-5, 5),
             "c": (-0.5, 0.5),
@@ -390,10 +390,45 @@ def many_object_salt3_fits(
         # Convert Rubin bands to SNCosmo bands
         # ----------------------------------------------------------
 
-        fit_df = group_df.with_columns(
+        model = sncosmo.Model(source="salt3")
+
+        fitted_bands = {
+            band
+            for band, sncosmo_band in band_map.items()
+            if model.bandoverlap(sncosmo_band, z=redshift)
+        }
+
+        fit_df = group_df.filter(pl.col("r:band").is_in(fitted_bands)).with_columns(
             pl.col("r:band").replace(band_map).alias("sncosmo_band")
         )
 
+        if fit_df.height == 0:
+            results.append(
+                {
+                    "r:diaObjectId": object_id,
+                    # Host-galaxy information
+                    "host_photoz": redshift,
+                    "host_photoz_err": redshift_err,
+                    "fitted_z": None,
+                    "fitted_z_err": None,
+                    "t0": None,
+                    "t0_err": None,
+                    "x0": None,
+                    "x0_err": None,
+                    "x1": None,
+                    "x1_err": None,
+                    "c": None,
+                    "c_err": None,
+                    "chi2": None,
+                    "ndof": None,
+                    "reduced_chi2": None,
+                    "n_data": group_df.height,
+                    "n_used": 0,
+                    "fit_success": False,
+                    "fit_message": "No data after removing unsupported bands",
+                }
+            )
+            continue
         data = Table(
             {
                 "time": fit_df["r:midpointMjdTai"].to_numpy(),
@@ -417,8 +452,6 @@ def many_object_salt3_fits(
         z_max = redshift + 2.0 * redshift_err
 
         try:
-            model = sncosmo.Model(source="salt3")
-
             # Initial guess is the host photo-z.
             model.set(z=redshift)
 
@@ -445,12 +478,15 @@ def many_object_salt3_fits(
             results.append(
                 {
                     "r:diaObjectId": object_id,
+                    
                     # Host-galaxy information
                     "host_photoz": redshift,
                     "host_photoz_err": redshift_err,
+
                     # SALT fitted redshift
                     "fitted_z": fitted_model["z"],
                     "fitted_z_err": result.errors.get("z"),
+
                     # SALT parameters
                     "t0": fitted_model["t0"],
                     "t0_err": result.errors.get("t0"),
@@ -460,13 +496,22 @@ def many_object_salt3_fits(
                     "x1_err": result.errors.get("x1"),
                     "c": fitted_model["c"],
                     "c_err": result.errors.get("c"),
+
                     # Fit statistics
                     "chi2": result.chisq,
                     "ndof": result.ndof,
                     "reduced_chi2": reduced_chi2,
-                    "n_data": len(data),
+                    "n_total_data": group_df.height, 
+                    "n_fit_data": len(data),
                     "n_used": n_used,
                     "fit_success": result.success,
+                    "fitted_bands": ",".join(sorted(fitted_bands)),
+                    "u_fitted": "u" in fitted_bands,
+                    "g_fitted": "g" in fitted_bands,
+                    "r_fitted": "r" in fitted_bands,
+                    "i_fitted": "i" in fitted_bands,
+                    "z_fitted": "z" in fitted_bands,
+                    "y_fitted": "y" in fitted_bands,
                     "fit_message": str(result.message),
                 }
             )
@@ -586,6 +631,7 @@ if __name__ == "__main__":
         / "data"
         / "salt_fitting"
         / "50_object_test"
+        / "fit_values"
         / "50_object_test_values.csv"
     )
 
