@@ -539,9 +539,11 @@ def bazin_salt_chi2_cut(
 
     results_df = results_df.select([pl.col("r:diaObjectId"), pl.col("pass_g_fitted_chi2"), pl.col("pass_r_fitted_chi2"), pl.col("pass_i_fitted_chi2"), pl.col("pass_z_fitted_chi2"), pl.col("pass_overall_chi2")])
 
-    # results_df.write_csv(output_path)
+    results_df.write_csv(output_path)
 
     return results_df
+
+
 
 
 if __name__ == "__main__":
