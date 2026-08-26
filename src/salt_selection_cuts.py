@@ -585,7 +585,7 @@ def bazin_salt_chi2_cut(
         ).alias("pass_chi2_quality")
     )
 
-    results_df.write_csv(values_output_path / "chi2_requirement_values.csv")
+    results_df.write_csv(values_output_path)
     results_df.filter(pl.col("pass_chi2_quality") == "true").write_csv(pass_output_path)
     results_df.filter(pl.col("pass_chi2_quality") == "false").write_csv(
         fail_output_path
@@ -750,8 +750,8 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "50_object_test"
-        / "with_photo_z.csv"
+        / "with_hostz"
+        / "salt_fit_values.csv"
     )
 
     LIGHT_CURVE_DATA = (
@@ -773,8 +773,8 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "50_object_test"
-        / "salt_phase_cuts_results"
+        / "with_hostz"
+        / "phase_cuts_results"
         / "pass.csv"
     )
 
@@ -786,8 +786,8 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "50_object_test"
-        / "salt_phase_cuts_results"
+        / "with_hostz"
+        / "phase_cuts_results"
         / "fail.csv"
     )
 
@@ -799,8 +799,8 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "50_object_test"
-        / "salt_phase_cuts_results"
+        / "with_hostz"
+        / "phase_cuts_results"
         / "salt_phase_cuts_values.csv"
     )
 
@@ -812,8 +812,9 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "50_object_test"
-        / "chi2_requirements_results"
+        / "with_hostz"
+        / "chi2_results"
+        / "values.csv"
     )
 
     CHI2_PASS_OUTPUT_DIR = (
@@ -824,8 +825,8 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "50_object_test"
-        / "chi2_requirements_results"
+        / "with_hostz"
+        / "chi2_results"
         / "pass.csv"
     )
 
@@ -837,21 +838,47 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "50_object_test"
-        / "chi2_requirements_results"
+        / "with_hostz"
+        / "chi2_results"
         / "fail.csv"
     )
 
-    # bazin_salt_phase_cut(WITH_PHOTOZ_TEST_OBJECTS, LIGHT_CURVE_DATA, TEST_PHASE_PASS_OUTPUT, TEST_PHASE_FAIL_OUTPUT, TEST_PHASE_VALUES_OUTPUT)
+    # bazin_salt_phase_cut(
+    #     WITH_PHOTOZ_TEST_OBJECTS,
+    #     LIGHT_CURVE_DATA,
+    #     TEST_PHASE_PASS_OUTPUT,
+    #     TEST_PHASE_FAIL_OUTPUT,
+    #     TEST_PHASE_VALUES_OUTPUT,
+    # )
 
-    # results = unfitted_band_finder(TEST_PHASE_PASS_OUTPUT, CHI2_OUTPUT_DIR)
+    # results = unfitted_band_finder(
+    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_hostz/phase_cuts_results/pass.csv",
+    #     Path.home()
+    #     / "Documents"
+    #     / "University"
+    #     / "Honours"
+    #     / "Honours_Project"
+    #     / "data"
+    #     / "salt_fitting"
+    #     / "with_hostz"
+    #     / "chi2_results",
+    # )
     # pl.Config.set_tbl_rows(-1)
     # print(results)
 
     result = bazin_salt_chi2_cut(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/50_object_test/chi2_requirements_results/unfitted_bands.csv",
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "salt_fitting"
+        / "with_hostz"
+        / "chi2_results"
+        / "unfitted_bands.csv",
         LIGHT_CURVE_DATA,
         CHI2_VALUES_OUTPUT_DIR,
         CHI2_PASS_OUTPUT_DIR,
-        CHI2_FAIL_OUTPUT_DIR
+        CHI2_FAIL_OUTPUT_DIR,
     )

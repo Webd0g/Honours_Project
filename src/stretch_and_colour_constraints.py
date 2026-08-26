@@ -98,9 +98,61 @@ if __name__ == "__main__":
         / "values.csv"
     )
 
+    OBJECT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "salt_fitting"
+        / "with_hostz"
+        / "chi2_results"
+        / "pass.csv"
+    )
+
+    PASS_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "salt_fitting"
+        / "with_hostz"
+        / "colour_stretch_results"
+        / "pass.csv"
+    )
+
+    FAIL_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "salt_fitting"
+        / "with_hostz"
+        / "colour_stretch_results"
+        / "fail.csv"
+    )
+
+    VALUES_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "salt_fitting"
+        / "with_hostz"
+        / "colour_stretch_results"
+        / "values.csv"
+    )
+
     colour_stretch_cut(
-        TEST_OBJECT_PATH,
-        TEST_PASS_OUTPUT_PATH,
-        TEST_FAIL_OUTPUT_PATH,
-        TEST_VALUES_OUTPUT_PATH,
+        OBJECT_PATH,
+        PASS_OUTPUT_PATH,
+        FAIL_OUTPUT_PATH,
+        VALUES_OUTPUT_PATH,
     )

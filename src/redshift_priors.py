@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import polars as pl
 
 FINK_OBJECTS_URL = "https://api.lsst.fink-portal.org/api/v1/sources"
@@ -174,5 +175,5 @@ if __name__ == "__main__":
     )
 
     # # host_photo_z_distro(PATH_TO_OBJECTS_WITH_REDSHIFT)
-    host_photoz_vs_salt3_z(PATH_TO_OBJECTS, HOST_PHOTOZ_VS_SALT3Z_PLOT_OUTPUT_PATH)
-    normalised_z_residuals_plot(PATH_TO_OBJECTS, HOST_PHOTOZ_VS_SALT3Z_PLOT_OUTPUT_PATH)
+    # host_photoz_vs_salt3_z(PATH_TO_OBJECTS, HOST_PHOTOZ_VS_SALT3Z_PLOT_OUTPUT_PATH)
+    # normalised_z_residuals_plot(PATH_TO_OBJECTS, HOST_PHOTOZ_VS_SALT3Z_PLOT_OUTPUT_PATH)

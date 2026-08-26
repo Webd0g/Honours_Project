@@ -395,7 +395,7 @@ def many_object_salt3_fits(
         fitted_bands = {
             band
             for band, sncosmo_band in band_map.items()
-            # if model.bandoverlap(sncosmo_band, z=redshift)
+            if model.bandoverlap(sncosmo_band, z=redshift)
         }
 
         fit_df = group_df.filter(pl.col("r:band").is_in(fitted_bands)).with_columns(
@@ -443,16 +443,17 @@ def many_object_salt3_fits(
         # ----------------------------------------------------------
         # Photometric-redshift bounds
         # ----------------------------------------------------------
-        # if redshift and redshift_err != None:
-        #     z_min = max(
-        #         0.001,
-        #         redshift - 2.0 * redshift_err,
-        #     )
+        if redshift and redshift_err != None:
+            z_min = max(
+                0.001,
+                redshift - 2.0 * redshift_err,
+            )
 
-        #     z_max = redshift + 2.0 * redshift_err
-        # else:
-        z_min = 0.001
-        z_max = 2.00
+            z_max = redshift + 2.0 * redshift_err
+        else:
+            continue
+            # z_min = 0.001
+            # z_max = 2.00
 
         try:
             # Initial guess is the host photo-z.
@@ -654,7 +655,7 @@ if __name__ == "__main__":
         / "objects_with_host_z.csv"
     )
 
-    WITHOUT_PHOTO_Z_TEST_PATH = (
+    WITH_PHOTO_Z_PATH = (
         Path.home()
         / "Documents"
         / "University"
@@ -662,11 +663,11 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "without_photo_z_tests"
-        / "with_photo_z_without_z_test.csv"
+        / "with_hostz"
+        / "salt_fit_values.csv"
     )
 
-    WITHOUT_PHOTO_Z_TEST_PLOTS_PATH = (
+    WITH_PHOTO_Z_PLOTS_PATH = (
         Path.home()
         / "Documents"
         / "University"
@@ -686,8 +687,8 @@ if __name__ == "__main__":
     results = many_object_salt3_fits(
         OBJECT_PATH,
         LIGHT_CURVE_DATA_PATH,
-        WITHOUT_PHOTO_Z_TEST_PATH,
-        WITHOUT_PHOTO_Z_TEST_PLOTS_PATH,
+        WITH_PHOTO_Z_PATH,
+        WITH_PHOTO_Z_PLOTS_PATH,
     )
 
     # pl.Config.set_tbl_cols(-1)
