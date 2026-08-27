@@ -53,9 +53,8 @@ if __name__ == "__main__":
         / "Honours"
         / "Honours_Project"
         / "data"
-        / "constant_minus_shape_results"
-        / "z_band"
-        / "fail.csv"
+        / "sampling_results"
+        / "sampling_pass.csv"
     )
 
     LIGHT_CURVE_DATA_PATH = (
@@ -76,9 +75,8 @@ if __name__ == "__main__":
         / "Honours"
         / "Honours_Project"
         / "images"
-        / "constant_minus_shape_plots"
-        / "z_band"
-        / "fail"
+        / "sampling_plots"
+        / "pass"
     )
 
     batch_plotter(CANDIDATES_PATH, LIGHT_CURVE_DATA_PATH, OUTPUT_PATH)

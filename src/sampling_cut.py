@@ -69,7 +69,14 @@ def numb_pre_peak_post_peak(
         if group_df is None:
             continue
 
-        group_df = group_df.filter(pl.col("r:psfFlux") > 0)
+        group_df = group_df.unique(
+            subset=["r:diaSourceId"],
+            keep="first",
+        )
+
+        sampling_df = group_df.filter(
+            pl.col("r:psfFlux").is_finite()
+            & pl.col("r:midpointMjdTai").is_finite())
 
         peak_rows = group_df.sort("r:psfFlux", descending=True).unique(
             subset=["r:band"], keep="first"
@@ -88,29 +95,33 @@ def numb_pre_peak_post_peak(
             u_post_peak = 0
         else:
             u_peak_time = u_peak_row["r:midpointMjdTai"].item()
-            u_pre_peak = group_df.filter(
+            u_pre_peak = sampling_df.filter(
                 (pl.col("r:band") == "u")
                 & (pl.col("r:midpointMjdTai") >= u_peak_time - 30)
                 & (pl.col("r:midpointMjdTai") < u_peak_time)
             ).height
-            u_post_peak = group_df.filter(
+            u_post_peak = sampling_df.filter(
                 (pl.col("r:band") == "u")
                 & (pl.col("r:midpointMjdTai") <= u_peak_time + 60)
                 & (pl.col("r:midpointMjdTai") > u_peak_time)
             ).height
 
-        if g_peak_row.height == 0 or i_peak_row.height == 0:
+        if g_peak_row.height == 0:
             print(f"Object {object_id} doesn't have any g band data")
+            g_pre_peak = 0
+            g_post_peak = 0
+        elif i_peak_row.height == 0:
+            print(f"Object {object_id} doesn't have any i band data")
             g_pre_peak = 0
             g_post_peak = 0
         else:
             i_peak_time = i_peak_row["r:midpointMjdTai"].item()
-            g_pre_peak = group_df.filter(
+            g_pre_peak = sampling_df.filter(
                 (pl.col("r:band") == "g")
                 & (pl.col("r:midpointMjdTai") >= i_peak_time - 30)
                 & (pl.col("r:midpointMjdTai") < i_peak_time)
             ).height
-            g_post_peak = group_df.filter(
+            g_post_peak = sampling_df.filter(
                 (pl.col("r:band") == "g")
                 & (pl.col("r:midpointMjdTai") <= i_peak_time + 60)
                 & (pl.col("r:midpointMjdTai") > i_peak_time)
@@ -122,12 +133,12 @@ def numb_pre_peak_post_peak(
             r_post_peak = 0
         else:
             r_peak_time = r_peak_row["r:midpointMjdTai"].item()
-            r_pre_peak = group_df.filter(
+            r_pre_peak = sampling_df.filter(
                 (pl.col("r:band") == "r")
                 & (pl.col("r:midpointMjdTai") >= r_peak_time - 30)
                 & (pl.col("r:midpointMjdTai") < r_peak_time)
             ).height
-            r_post_peak = group_df.filter(
+            r_post_peak = sampling_df.filter(
                 (pl.col("r:band") == "r")
                 & (pl.col("r:midpointMjdTai") <= r_peak_time + 60)
                 & (pl.col("r:midpointMjdTai") > r_peak_time)
@@ -139,29 +150,33 @@ def numb_pre_peak_post_peak(
             i_post_peak = 0
         else:
             i_peak_time = i_peak_row["r:midpointMjdTai"].item()
-            i_pre_peak = group_df.filter(
+            i_pre_peak = sampling_df.filter(
                 (pl.col("r:band") == "i")
                 & (pl.col("r:midpointMjdTai") >= i_peak_time - 30)
                 & (pl.col("r:midpointMjdTai") < i_peak_time)
-            ).n_unique(subset=["r:diaSourceId"])
-            i_post_peak = group_df.filter(
+            ).height
+            i_post_peak = sampling_df.filter(
                 (pl.col("r:band") == "i")
                 & (pl.col("r:midpointMjdTai") <= i_peak_time + 60)
                 & (pl.col("r:midpointMjdTai") > i_peak_time)
-            ).n_unique(subset=["r:diaSourceId"])
+            ).height
 
-        if z_peak_row.height == 0 or i_peak_row.height == 0:
+        if z_peak_row.height == 0:
             print(f"Object {object_id} doesn't have any z band data")
+            z_pre_peak = 0
+            z_post_peak = 0
+        elif i_peak_row.height == 0:
+            print(f"Object {object_id} doesn't have any i band data")
             z_pre_peak = 0
             z_post_peak = 0
         else:
             i_peak_time = i_peak_row["r:midpointMjdTai"].item()
-            z_pre_peak = group_df.filter(
+            z_pre_peak = sampling_df.filter(
                 (pl.col("r:band") == "z")
                 & (pl.col("r:midpointMjdTai") >= i_peak_time - 30)
                 & (pl.col("r:midpointMjdTai") < i_peak_time)
             ).height
-            z_post_peak = group_df.filter(
+            z_post_peak = sampling_df.filter(
                 (pl.col("r:band") == "z")
                 & (pl.col("r:midpointMjdTai") <= i_peak_time + 60)
                 & (pl.col("r:midpointMjdTai") > i_peak_time)
@@ -173,12 +188,12 @@ def numb_pre_peak_post_peak(
             y_post_peak = 0
         else:
             y_peak_time = y_peak_row["r:midpointMjdTai"].item()
-            y_pre_peak = group_df.filter(
+            y_pre_peak = sampling_df.filter(
                 (pl.col("r:band") == "y")
                 & (pl.col("r:midpointMjdTai") >= y_peak_time - 30)
                 & (pl.col("r:midpointMjdTai") < y_peak_time)
             ).height
-            y_post_peak = group_df.filter(
+            y_post_peak = sampling_df.filter(
                 (pl.col("r:band") == "y")
                 & (pl.col("r:midpointMjdTai") <= y_peak_time + 60)
                 & (pl.col("r:midpointMjdTai") > y_peak_time)
@@ -262,14 +277,15 @@ def sampling_cut(
     count_output_path: Path,
     pass_output_path: Path,
     fail_output_path: Path,
-) -> None:
+) -> pl.DataFrame:
     """Pass the CSV with the desired objects to do the sampling cut along with the light curve data path and specify the output paths of the sampling count CSV and the objects that pass the cut and fail the cut as CSV files.
 
     Args:
-        candidate_path (Path): The path to where the
-        light_curve_data_path (Path): _description_
-        count_output_path (Path): _description_
-        cut_output_path (Path): _description_
+        candidate_path (Path): The path to where the objects are to test the sampling cut on.
+        light_curve_data_path (Path): THe path to the light curve information for each of the objects.
+        count_output_path (Path): The output path for the count values.
+        pass_output_path (Path): The path to the directory to save the passing objects CSV file.
+        fail_output_path (Path): The path to the directory to save the failing objects CSV file.
     """
     sampling_counts_df = numb_pre_peak_post_peak(
         candidate_path, light_curve_data_path, count_output_path
@@ -280,7 +296,7 @@ def sampling_cut(
         (pl.col("i post") >= 5).alias("pass_i_post"),
         (pl.col("r pre") >= 1).alias("pass_r_pre"),
         (pl.col("r post") >= 5).alias("pass_r_post"),
-        (pl.col("g total") >= 5).alias("pass_g"),
+        (pl.col("g total") >= 2).alias("pass_g"),
         (pl.col("z total") >= 2).alias("pass_z"),
     )
 
@@ -346,7 +362,8 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "constant_minus_shape_results"
-        / "constant_minus_shape_passed.csv"
+        / "i_band"
+        / "pass.csv"
     )
 
     LIGHT_CURVE_DATA = (
@@ -405,11 +422,11 @@ if __name__ == "__main__":
         / "sampling_fail.csv"
     )
 
-    # numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
+    numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
 
-    # sampling_statistics(OBJECT_TEST_OUTPUT)
+    sampling_statistics(OBJECT_TEST_OUTPUT)
 
-    # pass_fractions(OBJECT_TEST_OUTPUT)
+    pass_fractions(OBJECT_TEST_OUTPUT)
 
     sampling_cut_df = sampling_cut(
         CANDIDATES,
@@ -418,3 +435,19 @@ if __name__ == "__main__":
         PASSING_SAMPLING_CUT_OUTPUT,
         FAILING_SAMPLING_CUT_OUTPUT,
     )
+
+    sampling_cut_df = sampling_cut_df.with_columns(
+    pl.sum_horizontal(
+        pl.col("pass_g_i"),
+        pl.col("pass_r_z"),
+        pl.col("pass_i_z"),
+    ).alias("number_colour_pairs")
+)
+
+    print(
+        sampling_cut_df
+        .filter(pl.col("sampling_pass"))
+        .group_by("number_colour_pairs")
+        .len()
+        .sort("number_colour_pairs")
+)
