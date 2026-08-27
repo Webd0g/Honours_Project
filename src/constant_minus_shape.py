@@ -191,7 +191,9 @@ def constant_batch_fits(
         if group_df is None:
             continue
 
-        band_df = group_df.sort("r:midpointMjdTai")
+        band_df = group_df.sort("r:midpointMjdTai").unique(
+            subset=["r:midpointMjdTai"], keep="first", maintain_order=True
+        )
 
         if len(band_df) < 2:
             continue
@@ -227,7 +229,7 @@ def compute_delta_chi(
     object_path: Path,
     light_curve_data_path: Path,
     band: str,
-    bazin_fit_i_band_data_path: Path,
+    bazin_fit_data_path: Path,
     output_path: Path,
 ) -> pl.DataFrame:
     """Here we compute the difference between the constant fit and the Bazin
@@ -241,7 +243,7 @@ def compute_delta_chi(
         {"reduced_chi2": "constant_reduced_chi2"}
     )
 
-    bazin_fit_chi_squared = pl.read_csv(bazin_fit_i_band_data_path).with_columns(
+    bazin_fit_chi_squared = pl.read_csv(bazin_fit_data_path).with_columns(
         pl.col("r:diaObjectId").cast(pl.String)
     )
 
@@ -264,8 +266,8 @@ def compute_delta_chi(
     return delta_chi_df
 
 
-def delta_chi_agaisnt_chi_SN_plot(
-    path_to_delta_chi_results: Path, output_path: Path
+def delta_chi_against_chi_SN_plot(
+    path_to_delta_chi_results: Path, output_path: Path, band: str
 ) -> None:
     """Here we plot the difference between the fit by a constant and the shape fit as a function of the shape fit in the i band."""
 
@@ -275,7 +277,14 @@ def delta_chi_agaisnt_chi_SN_plot(
 
     labels = delta_chi_df.select("r:diaObjectId").to_series()
 
-    colors = ["red" if str(obj_id) in SN_LIKE_OBJECTS else "blue" for obj_id in labels]
+    colors = [
+        "red"
+        if str(obj_id) in SN_LIKE_OBJECTS
+        else "blue"
+        if str(obj_id) in NOT_SN_LIKE_OBJECTS
+        else "grey"
+        for obj_id in labels
+    ]
     plt.scatter(
         delta_chi_df["bazin_reduced_chi2"],
         delta_chi_df["delta_reduced_chi2"],
@@ -306,9 +315,9 @@ def delta_chi_agaisnt_chi_SN_plot(
     upper = max(ax.get_xlim()[1], ax.get_ylim()[1])
 
     ax.plot([lower, upper], [lower, upper], "r--", label="unity")
-    plt.title("Delta chi squared as a function of bazin chi squared in the i band")
-    plt.xlabel("Chi squared of the bazin fit in the i band")
-    plt.ylabel("delta chi squared in the i band")
+    plt.title(f"Constant vs Bazin fit comparison in {band} band")
+    plt.xlabel(rf"Bazin reduced $\chi^2$ ({band} band)")
+    plt.ylabel(rf"$\Delta\chi^2_\nu$ ({band} band)")
     plt.savefig(output_path)
     plt.show()
 
@@ -391,7 +400,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "bazin_fits_results"
-        / "bazin_fits_i_band_results.csv"
+        / "bazin_fits_z_band_results.csv"
     )
 
     CANDIDATES = (
@@ -405,21 +414,214 @@ if __name__ == "__main__":
         / "timing_cuts_passed.csv"
     )
 
-    compute_delta_chi(
-        CANDIDATES,
-        LIGHT_CURVE_DATA,
-        "i",
-        BAZIN_FITS_DATA_PATH,
-        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_values.csv",
+    G_BAND_VALUES_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "g_band"
+        / "constant_minus_shape_values.csv"
     )
 
-    delta_chi_agaisnt_chi_SN_plot(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_values.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/Figure.png",
+    G_BAND_PASS_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "g_band"
+        / "pass.csv"
+    )
+
+    G_BAND_FAIL_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "g_band"
+        / "fail.csv"
+    )
+
+    G_BAND_PLOT_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "constant_minus_shape_plots"
+        / "g_band"
+        / "g_band_constant_minus_shape.png"
+    )
+
+    R_BAND_VALUES_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "r_band"
+        / "constant_minus_shape_values.csv"
+    )
+
+    R_BAND_PASS_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "r_band"
+        / "pass.csv"
+    )
+
+    R_BAND_FAIL_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "r_band"
+        / "fail.csv"
+    )
+
+    R_BAND_PLOT_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "constant_minus_shape_plots"
+        / "r_band"
+        / "r_band_constant_minus_shape.png"
+    )
+
+    I_BAND_VALUES_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "i_band"
+        / "constant_minus_shape_values.csv"
+    )
+
+    I_BAND_PASS_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "i_band"
+        / "pass.csv"
+    )
+
+    I_BAND_FAIL_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "i_band"
+        / "fail.csv"
+    )
+
+    I_BAND_PLOT_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "constant_minus_shape_plots"
+        / "i_band"
+        / "i_band_constant_minus_shape.png"
+    )
+
+    Z_BAND_VALUES_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "z_band"
+        / "constant_minus_shape_values.csv"
+    )
+
+    Z_BAND_PASS_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "z_band"
+        / "pass.csv"
+    )
+
+    Z_BAND_FAIL_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "constant_minus_shape_results"
+        / "z_band"
+        / "fail.csv"
+    )
+
+    Z_BAND_PLOT_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "constant_minus_shape_plots"
+        / "z_band"
+        / "z_band_constant_minus_shape.png"
+    )
+
+    compute_delta_chi(
+        object_path=CANDIDATES,
+        light_curve_data_path=LIGHT_CURVE_DATA,
+        band="z",
+        bazin_fit_data_path=BAZIN_FITS_DATA_PATH,
+        output_path=Z_BAND_VALUES_OUTPUT_PATH,
+    )
+
+    delta_chi_against_chi_SN_plot(
+        path_to_delta_chi_results=Z_BAND_VALUES_OUTPUT_PATH,
+        output_path=Z_BAND_PLOT_OUTPUT_PATH,
+        band="z",
     )
 
     save_pass_fail_objects(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_values.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_passed.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_failed.csv",
+        path_to_delta_chi_results=Z_BAND_VALUES_OUTPUT_PATH,
+        output_path_pass=Z_BAND_PASS_OUTPUT_PATH,
+        output_path_fail=Z_BAND_FAIL_OUTPUT_PATH,
     )

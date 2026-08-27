@@ -14,13 +14,13 @@ Install with: pip install feets
 # custom curve_fit implementation), following review of feets' documented
 # BazinFit extractor and its MCMC-based fitting algorithm.
 
-import pandas as pd
-import polars as pl
 from pathlib import Path
+
+import light_curve as licu
 import matplotlib.pyplot as plt
 import numpy as np
-import light_curve as licu
-from rate_of_rise_cut import chunked_light_curve_data
+import pandas as pd
+import polars as pl
 
 
 def fit_bazin_single_object(
@@ -179,9 +179,20 @@ def bazin_batch_fits(
         schema_overrides={"r:diaObjectId": pl.String},
         columns=["r:diaObjectId"],
     )["r:diaObjectId"].to_list()
-    light_curve_data = pl.read_parquet(light_curve_data_path)
+
+    light_curve_data = pl.read_parquet(
+        light_curve_data_path,
+        columns=[
+            "r:diaObjectId",
+            "r:band",
+            "r:psfFlux",
+            "r:psfFluxErr",
+            "r:midpointMjdTai",
+        ],
+    ).with_columns(pl.col("r:diaObjectId").cast(pl.String))
+
     light_curve_data_filtered = light_curve_data.filter(
-        pl.col("r:diaObjectId").cast(pl.String).is_in(objects)
+        pl.col("r:diaObjectId").is_in(objects) & (pl.col("r:band") == band)
     )
 
     groups = {
@@ -196,7 +207,13 @@ def bazin_batch_fits(
         if group_df is None:
             continue
         band_df = (
-            group_df.filter((pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0))
+            group_df.filter(
+                (pl.col("r:psfFlux") > 0)
+                & pl.col("r:psfFlux").is_finite()
+                & pl.col("r:psfFluxErr").is_finite()
+                & (pl.col("r:psfFluxErr") > 0)
+                & pl.col("r:midpointMjdTai").is_finite()
+            )
             .sort("r:midpointMjdTai")
             .unique(subset=["r:midpointMjdTai"], keep="first", maintain_order=True)
         )
@@ -220,8 +237,6 @@ def bazin_batch_fits(
         flux = band_df["r:psfFlux"].to_numpy().astype(np.float64)
         flux_err = band_df["r:psfFluxErr"].to_numpy().astype(np.float64)
         time = band_df["r:midpointMjdTai"].to_numpy().astype(np.float64)
-        peak_flux = band_df["r:psfFlux"].max()
-        peak_time = band_df["r:midpointMjdTai"].max()
 
         lightcurves.append((time, flux, flux_err))
         object_ids_in_order.append(str(object_id))
@@ -239,7 +254,9 @@ def bazin_batch_fits(
 
     bazin_results_df = pl.DataFrame(bazin_results)
 
-    return bazin_results_df.write_csv(output_path)
+    bazin_results_df.write_csv(output_path)
+
+    return bazin_results_df
 
 
 def bazin_curve(
@@ -313,7 +330,7 @@ def plot_bazin_fit_single_object(
     ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(output_path / f"{diaObjectId}_{i}_band.png")
+    plt.savefig(output_path / f"{diaObjectId}_{band}_band.png")
     print(f"saved the plot of object {diaObjectId}")
     plt.close(fig)
 
@@ -373,35 +390,53 @@ def plot_bazin_fit_batch(
 
 
 if __name__ == "__main__":
+    bands = [
+        "g",
+        "r",
+        "i",
+        "z",
+    ]
 
-    # object = ["313699514821640259"]
-    # print (fit_bazin_single_object(object, "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet", "i", "mcmc", 2000))
-    bands = ["u", "g", "r", "i", "z", "y"]
-    for i in bands:
-        csv_path = (
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "data"
-            / "timing_cuts_results"
-            / "timing_cuts_passed.csv"
-        )
-        result = bazin_batch_fits(
-            csv_path,
-            "/home/riley/Documents/University/Honours/Honours_Project/data/light_curve_data/combined_light_curve_data.parquet",
-            i,
-            "mcmc",
-            2000,
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "data"
-            / "bazin_fits_results"
-            / f"bazin_fits_{i}_band_results.csv",
+    TIMING_CUT_PASSED = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "timing_cuts_results"
+        / "timing_cuts_passed.csv"
+    )
+
+    LIGHT_CURVE_DATA = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "light_curve_data"
+        / "combined_light_curve_data.parquet"
+    )
+
+    BAZIN_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "bazin_fits_results"
+    )
+
+    for band in bands:
+        bazin_batch_fits(
+            csv_path=TIMING_CUT_PASSED,
+            light_curve_data_path=LIGHT_CURVE_DATA,
+            band=band,
+            algorithm="mcmc",
+            mcmc_niter=2000,
+            output_path=BAZIN_OUTPUT_PATH / f"bazin_fits_{band}_band_results.csv",
         )
         plot_bazin_fit_batch(
             Path.home()
@@ -411,8 +446,8 @@ if __name__ == "__main__":
             / "Honours_Project"
             / "data"
             / "bazin_fits_results"
-            / f"bazin_fits_{i}_band_results.csv",
-            csv_path,
+            / f"bazin_fits_{band}_band_results.csv",
+            TIMING_CUT_PASSED,
             Path.home()
             / "Documents"
             / "University"
@@ -421,7 +456,7 @@ if __name__ == "__main__":
             / "data"
             / "light_curve_data"
             / "combined_light_curve_data.parquet",
-            i,
+            band,
             Path.home()
             / "Documents"
             / "University"
@@ -429,5 +464,5 @@ if __name__ == "__main__":
             / "Honours_Project"
             / "images"
             / "bazin_fits_plots"
-            / f"{i}_band",
+            / f"{band}_band",
         )

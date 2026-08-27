@@ -53,7 +53,8 @@ if __name__ == "__main__":
         / "Honours"
         / "Honours_Project"
         / "data"
-        / "fitted_peak_timing_results"
+        / "constant_minus_shape_results"
+        / "z_band"
         / "fail.csv"
     )
 
@@ -75,7 +76,8 @@ if __name__ == "__main__":
         / "Honours"
         / "Honours_Project"
         / "images"
-        / "fitted_peak_timing_plots"
+        / "constant_minus_shape_plots"
+        / "z_band"
         / "fail"
     )
 
