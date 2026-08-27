@@ -457,7 +457,7 @@ def many_object_salt3_fits(
 
         try:
             # Initial guess is the host photo-z.
-            # model.set(z=redshift)
+            model.set(z=redshift)
 
             result, fitted_model = sncosmo.fit_lc(
                 data,
@@ -558,12 +558,10 @@ def many_object_salt3_fits(
 
     results_df = pl.DataFrame(results)
 
-
     results_df = results_df.with_columns(
         (pl.col("fitted_z") - pl.col("host_photoz")).alias("delta_z"),
         (
-            (pl.col("fitted_z") - pl.col("host_photoz"))
-            / (1 + pl.col("host_photoz"))
+            (pl.col("fitted_z") - pl.col("host_photoz")) / (1 + pl.col("host_photoz"))
         ).alias("delta_z_normalised"),
     )
 
@@ -573,18 +571,15 @@ def many_object_salt3_fits(
 
 
 if __name__ == "__main__":
-    TEST_OBJECT = "170032917163016282"
-
-    TEST_OBJECT_PATH = (
+    OBJECT_PATH = (
         Path.home()
         / "Documents"
         / "University"
         / "Honours"
         / "Honours_Project"
         / "data"
-        / "test_data"
-        / "salt_fit_tests"
-        / "50_object_test.csv"
+        / "salt_fitting"
+        / "objects_with_host_z.csv"
     )
 
     LIGHT_CURVE_DATA_PATH = (
@@ -598,63 +593,6 @@ if __name__ == "__main__":
         / "combined_light_curve_data.parquet"
     )
 
-    PLOT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "salt_plots"
-    )
-
-    TEST_PLOT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "salt_plots"
-        / "50_object_test"
-    )
-
-    CONFIRMED_IA_CSV = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "confirmed_ia_tests"
-        / "confirmed_ia.csv"
-    )
-
-    TEST_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "50_object_test"
-        / "fit_values"
-        / "50_object_test_values.csv"
-    )
-
-    OBJECT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "objects_with_host_z.csv"
-    )
-
     WITH_PHOTO_Z_PATH = (
         Path.home()
         / "Documents"
@@ -663,7 +601,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "salt_fit_values.csv"
     )
 
@@ -676,13 +614,13 @@ if __name__ == "__main__":
         / "images"
         / "salt_plots"
         / "with_photo_z_plots"
+        / "sample_v2_702_objects"
     )
-
     # result, fitted_model = single_object_salt3_fit_test(
     #     TEST_OBJECT, LIGHT_CURVE_DATA_PATH, PLOT_OUTPUT_PATH
     # )
 
-    # get_host_photoz_from_fink(TEST_OBJECT_PATH, TEST_OBJECT_PATH)
+    # get_host_photoz_from_fink(OBJECT_PATH, OUTPUT_PATH)
 
     results = many_object_salt3_fits(
         OBJECT_PATH,
