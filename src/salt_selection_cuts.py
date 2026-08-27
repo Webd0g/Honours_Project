@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import sncosmo
@@ -253,10 +254,102 @@ def bazin_salt_phase_cut(
     )
 
     results.write_csv(values_output_path)
-    results.filter(pl.col("pass_salt_quality") == "true").write_csv(pass_output_path)
-    results.filter(pl.col("pass_salt_quality") == "false").write_csv(fail_output_path)
+    results.filter(pl.col("pass_salt_quality")).write_csv(pass_output_path)
+    results.filter(~pl.col("pass_salt_quality")).write_csv(fail_output_path)
 
     return results
+
+
+def plot_salt_phase_diagnostic(
+    phase_results_path: Path, light_curve_data_path: Path, output_dir: Path
+) -> None:
+    """This function makes plots of the SALT fitted objects but plots the tau parameters as vertical lines to understand where objects are failing and if the phase cuts are doing what they are supposed to be doing, a diagnostic.
+
+    Args:
+        phase_results_path (Path): Path to the results from the phase cuts values.
+        light_curve_data_path (Path): Path to the light curve data for the objects.
+        output_dir (Path): Path to the directory where the user wants the plots saved.
+    """
+    phase_results = pl.read_csv(
+        phase_results_path,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "host_photoz": pl.Float64,
+            "t0": pl.Float64,
+        },
+    )
+
+    light_curve_data = pl.read_parquet(
+        light_curve_data_path,
+        columns=[
+            "r:diaObjectId",
+            "r:band",
+            "r:psfFlux",
+            "r:psfFluxErr",
+            "r:midpointMjdTai",
+        ],
+    ).with_columns(pl.col("r:diaObjectId").cast(pl.String))
+
+    tau_edges = [-10, 5, 20, 35]
+
+    for row in phase_results.iter_rows(named=True):
+        object_id = row["r:diaObjectId"]
+        t0 = row["t0"]
+        host_photoz = row["host_photoz"]
+
+        object_data = light_curve_data.filter(pl.col("r:diaObjectId") == object_id)
+
+        t_edges = [t0 + tau * (1.0 + host_photoz) for tau in tau_edges]
+
+        data = Table(
+    {
+        "time": object_data["r:midpointMjdTai"].to_numpy(),
+        "band": [BAND_MAP[b] for b in object_data["r:band"].to_list()],
+        "flux": object_data["r:psfFlux"].to_numpy(),
+        "fluxerr": object_data["r:psfFluxErr"].to_numpy(),
+        "zp": np.full(object_data.height, 31.4),
+        "zpsys": np.full(object_data.height, "ab"),
+    }
+)
+        # Rebuilding the fitted model from the SALT fitted parameters of the object
+        model = sncosmo.Model(source="salt3")
+
+        model.set(
+            z = row["host_photoz"],
+            t0 = row["t0"],
+            x0 = row["x0"],
+            x1 = row["x1"],
+            c = row["c"],
+        )
+
+        fig = sncosmo.plot_lc(
+            data,
+            model=model,
+        )
+
+        for ax in fig.axes:
+            for t_edge in t_edges:
+                ax.axvline(
+                    t_edge,
+                    linestyle="--",
+                    alpha=0.5,
+                )
+                phase_text = (
+                    f"Peak phase: {row['pass_peak_phase']}\n"
+                    f"Shape phase: {row['pass_shape_phase']}\n"
+                    f"Colour: {row['pass_colour']}\n"
+                    f"Overall: {row['pass_salt_quality']}"
+                )
+
+                fig.text(
+                    0.82,
+                    0.5,
+                    phase_text,
+                    va="center",
+                )
+
+        plt.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
+        plt.close()
 
 
 def get_salt3_fitted_bands(
