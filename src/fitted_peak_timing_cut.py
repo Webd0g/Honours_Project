@@ -81,6 +81,7 @@ def peak_timing_cut(
     i_band_bazin_fits_path: Path,
     r_band_bazin_fits_path: Path,
     peak_time_difference_threshold: int,
+    peak_time_difference_output_path: Path,
     pass_output_path: Path,
     fail_output_path: Path,
 ) -> None:
@@ -96,19 +97,21 @@ def peak_timing_cut(
     fitted_peak_times_df = fitted_peak_times(
         objects_path, i_band_bazin_fits_path, r_band_bazin_fits_path
     ).with_columns(
-        (
-            pl.col("peak_time_difference").is_finite()
-            & (pl.col("peak_time_difference") <= peak_time_difference_threshold)
-        ).alias("passes_peak_timing")
-    )
+        pl.when(pl.col("valid_i_peak") & pl.col("valid_r_peak"))
+        .then(pl.col("peak_time_difference") <= peak_time_difference_threshold)
+        .otherwise(True)
+        .alias("passes_peak_timing")
+    ).with_columns((pl.col("valid_i_peak") & pl.col("valid_r_peak")).alias("fitted_peak_testable"))
 
-    fitted_peak_times_df.filter(pl.col("passes_peak_timing") == "true").write_csv(
+    fitted_peak_times_df.filter(pl.col("passes_peak_timing")).write_csv(
         pass_output_path
     )
 
-    fitted_peak_times_df.filter(pl.col("passes_peak_timing") == "false").write_csv(
+    fitted_peak_times_df.filter(pl.col("passes_peak_timing") == False).write_csv(
         fail_output_path
     )
+
+    fitted_peak_times_df.write_csv(peak_time_difference_output_path)
 
     return fitted_peak_times_df
 
@@ -198,7 +201,6 @@ def x_match(test_csv_path: Path, fitted_peak_times_df: pl.DataFrame) -> None:
 
 
 if __name__ == "__main__":
-
     TEST_OBJECTS_PATH = (
         Path.home()
         / "Documents"
@@ -256,6 +258,17 @@ if __name__ == "__main__":
         / "fail.csv"
     )
 
+    FITTED_PEAK_TIMES_VALUES_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "fitted_peak_timing_results"
+        / "values.csv"
+    )
+
     PASS_DIRECTORY = (
         Path.home()
         / "Documents"
@@ -278,45 +291,56 @@ if __name__ == "__main__":
         / "fail.csv"
     )
 
-    pl.Config.set_tbl_rows(-1)
-    print(
-        fitted_peak_times(
-            TEST_OBJECTS_PATH,
-            BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-            BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-        )
-        .head(50)
-        .describe()
-    )
-
-    print(
-        fitted_peak_times(
-            TEST_OBJECTS_PATH,
-            BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-            BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-        )
-        .tail(50)
-        .describe()
-    )
-
-    fitted_peak_times_df = peak_timing_cut(
-        TEST_OBJECTS_PATH,
-        BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-        BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-        50,
-        TEST_PASS_DIRECTORY,
-        TEST_FAIL_DIRECTORY,
-    )
-
-
     # pl.Config.set_tbl_rows(-1)
+    # print(
+    #     fitted_peak_times(
+    #         TEST_OBJECTS_PATH,
+    #         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
+    #         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
+    #     )
+    #     .head(50)
+    #     .describe()
+    # )
+
+    # print(
+    #     fitted_peak_times(
+    #         TEST_OBJECTS_PATH,
+    #         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
+    #         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
+    #     )
+    #     .tail(50)
+    #     .describe()
+    # )
+
     # fitted_peak_times_df = peak_timing_cut(
-    #     OBJECT_PATH,
+    #     TEST_OBJECTS_PATH,
     #     BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
     #     BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
     #     50,
-    #     PASS_DIRECTORY,
-    #     FAIL_DIRECTORY,
+    #     TEST_PASS_DIRECTORY,
+    #     TEST_FAIL_DIRECTORY,
     # )
 
-    x_match(TEST_OBJECTS_PATH, fitted_peak_times_df)
+    # pl.Config.set_tbl_rows(-1)
+    fitted_peak_times_df = peak_timing_cut(
+        OBJECT_PATH,
+        BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
+        BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
+        50,
+        FITTED_PEAK_TIMES_VALUES_OUTPUT_PATH,
+        PASS_DIRECTORY,
+        FAIL_DIRECTORY,
+    )
+
+    print(
+        fitted_peak_times_df.select(
+            (~pl.col("valid_i_peak")).sum().alias("invalid_i_peak"),
+            (~pl.col("valid_r_peak")).sum().alias("invalid_r_peak"),
+            (~pl.col("valid_i_peak") & ~pl.col("valid_r_peak"))
+            .sum()
+            .alias("invalid_both"),
+            pl.col("passes_peak_timing").is_null().sum().alias("untested"),
+        )
+    )
+
+    # x_match(TEST_OBJECTS_PATH, fitted_peak_times_df)
