@@ -155,11 +155,26 @@ def constant_batch_fits(
         columns=["r:diaObjectId"],
     )["r:diaObjectId"].to_list()
 
-    light_curve_data = pl.read_parquet(light_curve_data_path).with_columns(
-        pl.col("r:diaObjectId").cast(pl.String)
-    )
+    light_curve_data = pl.read_parquet(
+        light_curve_data_path,
+        columns=[
+            "r:diaObjectId",
+            "r:band",
+            "r:psfFlux",
+            "r:psfFluxErr",
+            "r:midpointMjdTai",
+            "r:diaSourceId",
+        ],
+    ).with_columns(pl.col("r:diaObjectId").cast(pl.String))
 
-    light_curve_data = light_curve_data.filter(pl.col("r:diaObjectId").is_in(objects))
+    light_curve_data = light_curve_data.filter(
+        pl.col("r:diaObjectId").is_in(objects)
+        & (pl.col("r:band") == band)
+        & (pl.col("r:psfFlux") > 0)
+        & pl.col("r:psfFlux").is_finite()
+        & pl.col("r:psfFluxErr").is_finite()
+        & (pl.col("r:psfFluxErr") > 0)
+    )
 
     results = {"r:diaObjectId": [], "constant": [], "reduced_chi2": []}
 
@@ -171,15 +186,12 @@ def constant_batch_fits(
     }
 
     for object_id in objects:
-
         group_df = groups.get(object_id)
 
         if group_df is None:
             continue
 
-        band_df = group_df.filter(
-            (pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0)
-        ).sort("r:midpointMjdTai")
+        band_df = group_df.sort("r:midpointMjdTai")
 
         if len(band_df) < 2:
             continue
@@ -257,7 +269,9 @@ def delta_chi_agaisnt_chi_SN_plot(
 ) -> None:
     """Here we plot the difference between the fit by a constant and the shape fit as a function of the shape fit in the i band."""
 
-    delta_chi_df = pl.read_csv(path_to_delta_chi_results)
+    delta_chi_df = pl.read_csv(path_to_delta_chi_results).filter(
+        (pl.col("bazin_reduced_chi2") > 0) & (pl.col("delta_reduced_chi2") > 0)
+    )
 
     labels = delta_chi_df.select("r:diaObjectId").to_series()
 
@@ -326,9 +340,9 @@ def save_pass_fail_objects(
 
     delta_chi_df = delta_chi_check(path_to_delta_chi_results)
 
-    delta_chi_df_pass = delta_chi_df.filter(pl.col("passes_delta_chi_cut") == "true")
+    delta_chi_df_pass = delta_chi_df.filter(pl.col("passes_delta_chi_cut"))
 
-    delta_chi_df_fail = delta_chi_df.filter(pl.col("failed_delta_chi_cut") == "true")
+    delta_chi_df_fail = delta_chi_df.filter(pl.col("failed_delta_chi_cut"))
 
     delta_chi_df_pass.write_csv(output_path_pass)
 
@@ -336,7 +350,6 @@ def save_pass_fail_objects(
 
 
 if __name__ == "__main__":
-
     TEST_DATA = (
         Path.home()
         / "Documents"
@@ -370,7 +383,7 @@ if __name__ == "__main__":
         / "100_object_test.csv"
     )
 
-    BAZIN_FITS_I_BAND_PATH = (
+    BAZIN_FITS_DATA_PATH = (
         Path.home()
         / "Documents"
         / "University"
@@ -396,7 +409,7 @@ if __name__ == "__main__":
         CANDIDATES,
         LIGHT_CURVE_DATA,
         "i",
-        BAZIN_FITS_I_BAND_PATH,
+        BAZIN_FITS_DATA_PATH,
         "/home/riley/Documents/University/Honours/Honours_Project/data/constant_minus_shape_results/constant_minus_shape_values.csv",
     )
 
