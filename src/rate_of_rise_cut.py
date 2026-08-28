@@ -9,19 +9,55 @@ empirical threshold version, since that was found to miss objects whose only cle
 pre-peak rise was in a band other than g or r (e.g. i-band for higher redshift SNe).
 """
 
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import polars as pl
-import numpy as np
-from pathlib import Path
+
 from light_curve_plotter import collect_light_curve_data
 
 # Directories for the objects that passed the first filtering done through the tags, second directory is for the output of the rate of rise cut.
-TEST_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "data" / "test_data"
-PLOTS_DIR = Path.home() / "Documents" / "University" / "Honours" / "Honours_Project" / "images" / "test_data_images"
+TEST_DIR = (
+    Path.home()
+    / "Documents"
+    / "University"
+    / "Honours"
+    / "Honours_Project"
+    / "data"
+    / "test_data"
+)
+PLOTS_DIR = (
+    Path.home()
+    / "Documents"
+    / "University"
+    / "Honours"
+    / "Honours_Project"
+    / "images"
+    / "test_data_images"
+)
 TEST_PASSED_DIR = TEST_DIR / "test_passed.csv"
 TEST_FAILED_DIR = TEST_DIR / "test_failed.csv"
-FAILED_DIR = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"slope_fitting_results"/"objects_failing_slope_fit.csv"
-PASSED_DIR = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"slope_fitting_results"/ "objects_passing_slope_fit.csv"
+FAILED_DIR = (
+    Path.home()
+    / "Documents"
+    / "University"
+    / "Honours"
+    / "Honours_Project"
+    / "data"
+    / "slope_fitting_results"
+    / "objects_failing_slope_fit.csv"
+)
+PASSED_DIR = (
+    Path.home()
+    / "Documents"
+    / "University"
+    / "Honours"
+    / "Honours_Project"
+    / "data"
+    / "slope_fitting_results"
+    / "objects_passing_slope_fit.csv"
+)
 # Reading the csv for the objects that passed the Fink tag filtering and creating the CSVs where data will be stored.
 
 # Specifying how many objects go into each query to the API.
@@ -42,7 +78,10 @@ MIN_PRE_PEAK_TIME_SPAN_DAYS = 5
 # This is so we remove spurious and noisey data that skews the results of the fit process too much
 MIN_PEAK_SNR = 10
 
-def collect_light_curve_info_with_fallback(candidates: list[str]) -> pd.DataFrame | None:
+
+def collect_light_curve_info_with_fallback(
+    candidates: list[str],
+) -> pd.DataFrame | None:
     """This function collects the lightcurve info of an object
     and factors in a recursive self repair incase the script timesout
     while running on large requests."""
@@ -73,49 +112,62 @@ def chunked_light_curve_data(candidates: list, chunk_size: int = 500) -> pd.Data
     candidate_results = []
 
     for diaObjectId in range(0, len(candidates), chunk_size):
-        chunked_ids = candidates[diaObjectId:diaObjectId + chunk_size]
-        candidates_light_curve_data = collect_light_curve_info_with_fallback(chunked_ids)
+        chunked_ids = candidates[diaObjectId : diaObjectId + chunk_size]
+        candidates_light_curve_data = collect_light_curve_info_with_fallback(
+            chunked_ids
+        )
         if candidates_light_curve_data is not None:
             candidate_results.append(candidates_light_curve_data)
 
     if not candidate_results:
-        raise RuntimeError(f"No light curve data returned for candidate batch of size {len(candidates)}")
+        raise RuntimeError(
+            f"No light curve data returned for candidate batch of size {len(candidates)}"
+        )
 
     return pd.concat(candidate_results, ignore_index=True)
 
+
 def add_night_and_SNR_columns(band_df: pl.DataFrame) -> pl.DataFrame:
     """
-    Takes the dataframe of all the bands data and filters it further to 
-    one point per night of observation, with that point being the 
-    point with the highest SNR. 
+    Takes the dataframe of all the bands data and filters it further to
+    one point per night of observation, with that point being the
+    point with the highest SNR.
 
-    This is so that when the slope fitting happens it doesn't fit to 
+    This is so that when the slope fitting happens it doesn't fit to
     points that have been clustered and ensures that the points
     that are being fit to are actually changing in time.
     """
 
-    band_df = band_df.with_columns((pl.col("r:midpointMjdTai").cast(int)).alias("night"))
-    band_df = band_df.with_columns((pl.col("r:psfFlux")/pl.col("r:psfFluxErr")).alias("SNR"))
+    band_df = band_df.with_columns(
+        (pl.col("r:midpointMjdTai").cast(int)).alias("night")
+    )
+    band_df = band_df.with_columns(
+        (pl.col("r:psfFlux") / pl.col("r:psfFluxErr")).alias("SNR")
+    )
 
     return band_df
 
-def slope_calculation(group_df: pl.DataFrame,band: str,min_points: int = MIN_PRE_PEAK_POINTS,min_time_span: int = MIN_PRE_PEAK_TIME_SPAN_DAYS,min_peak_snr: int = MIN_PEAK_SNR,) -> tuple[float, int] | None:
+
+def slope_calculation(
+    group_df: pl.DataFrame,
+    band: str,
+    min_points: int = MIN_PRE_PEAK_POINTS,
+    min_time_span: int = MIN_PRE_PEAK_TIME_SPAN_DAYS,
+    min_peak_snr: int = MIN_PEAK_SNR,
+) -> tuple[float, int] | None:
     """This function finds the slope of the band of the lightcurve prepeak by fitting a
 
     polynomial of degree 1 to the points of the light curve before the brightest point
     of the light curve. Returns None if there isn't enough pre-peak data in this band
     to attempt a fit.
     """
-    band_df = group_df.filter(
-        (pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0)
-    )
+    band_df = group_df.filter((pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0))
     if band_df.is_empty():
         return None
 
-    
-    peak_row = band_df.filter(
-        pl.col("r:psfFlux") == pl.col("r:psfFlux").max()
-    ).row(0, named=True)
+    peak_row = band_df.filter(pl.col("r:psfFlux") == pl.col("r:psfFlux").max()).row(
+        0, named=True
+    )
 
     peak_flux = peak_row["r:psfFlux"]
     peak_flux_err = peak_row["r:psfFluxErr"]
@@ -155,7 +207,9 @@ def slope_calculation(group_df: pl.DataFrame,band: str,min_points: int = MIN_PRE
     return float(slope), len(pre_peak_best_points)
 
 
-def compute_all_band_slopes(group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS) -> dict[str, tuple[float, int]]:
+def compute_all_band_slopes(
+    group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS
+) -> dict[str, tuple[float, int]]:
     """
     Computes the pre-peak slope for every band present in this object's light curve,
     not just a fixed pair. Returns a dict of band -> (slope, n_points) for every band
@@ -173,7 +227,9 @@ def compute_all_band_slopes(group_df: pd.DataFrame, min_points: int = MIN_PRE_PE
     return slopes
 
 
-def check_rate_of_rise(group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS) -> bool:
+def check_rate_of_rise(
+    group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS
+) -> bool:
     """
     Computes the pre-peak slope across every available band for this object, and
     passes the object if at least one band shows a nonzero (positive) pre-peak rise.
@@ -192,7 +248,12 @@ def check_rate_of_rise(group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_PO
     return any(slope > 0.001 for slope, _ in slopes.values())
 
 
-def applying_the_rate_of_rise(object_csv_path: Path, light_curve_data_path: Path, output_path_passed: Path = None, output_path_failed: Path = None) -> tuple[list[str], list[str]]:
+def applying_the_rate_of_rise(
+    object_csv_path: Path,
+    light_curve_data_path: Path,
+    output_path_passed: Path | None = None,
+    output_path_failed: Path | None = None,
+) -> tuple[list[str], list[str]]:
     """
     This function pulls the light curve data for the specified list of object ids and
     the chunk size can be customised if you have a large list of objects or small. The
@@ -202,9 +263,15 @@ def applying_the_rate_of_rise(object_csv_path: Path, light_curve_data_path: Path
     """
     passed, failed = [], []
 
-    objects = pl.read_csv(object_csv_path, schema_overrides={"r:diaObjectId": pl.String}, columns=["r:diaObjectId"])["r:diaObjectId"].to_list()
+    objects = pl.read_csv(
+        object_csv_path,
+        schema_overrides={"r:diaObjectId": pl.String},
+        columns=["r:diaObjectId"],
+    )["r:diaObjectId"].to_list()
     light_curve_data = pl.read_parquet(light_curve_data_path)
-    light_curve_data_filtered = light_curve_data.filter(pl.col("r:diaObjectId").cast(pl.Utf8).is_in(objects))
+    light_curve_data_filtered = light_curve_data.filter(
+        pl.col("r:diaObjectId").cast(pl.String).is_in(objects)
+    )
 
     for object_id, group_df in light_curve_data_filtered.group_by("r:diaObjectId"):
         if check_rate_of_rise(group_df):
@@ -219,7 +286,29 @@ def applying_the_rate_of_rise(object_csv_path: Path, light_curve_data_path: Path
 
 
 if __name__ == "__main__":
-
-    CANDIDATES = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"object_id_collection_results" / "all_objects.csv"
-    LIGHT_CURVE_DATA_PATH = Path.home() / "Documents"/"University"/"Honours"/"Honours_Project"/"data"/"light_curve_data"/"combined_light_curve_data.parquet"
-    applying_the_rate_of_rise(CANDIDATES, LIGHT_CURVE_DATA_PATH, PASSED_DIR, FAILED_DIR)
+    CANDIDATES = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "sn_ia_test_results"
+        / "confirmed_ia.csv"
+    )
+    LIGHT_CURVE_DATA_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "light_curve_data"
+        / "combined_light_curve_data.parquet"
+    )
+    applying_the_rate_of_rise(
+        CANDIDATES,
+        LIGHT_CURVE_DATA_PATH,
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/rate_of_rise_results/pass.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/rate_of_rise_results/fail.csv",
+    )

@@ -294,62 +294,65 @@ def plot_salt_phase_diagnostic(
 
     for row in phase_results.iter_rows(named=True):
         object_id = row["r:diaObjectId"]
-        t0 = row["t0"]
         host_photoz = row["host_photoz"]
 
         object_data = light_curve_data.filter(pl.col("r:diaObjectId") == object_id)
 
-        t_edges = [t0 + tau * (1.0 + host_photoz) for tau in tau_edges]
+        phase_positions = [tau * (1 + host_photoz) for tau in tau_edges]
 
         data = Table(
-    {
-        "time": object_data["r:midpointMjdTai"].to_numpy(),
-        "band": [BAND_MAP[b] for b in object_data["r:band"].to_list()],
-        "flux": object_data["r:psfFlux"].to_numpy(),
-        "fluxerr": object_data["r:psfFluxErr"].to_numpy(),
-        "zp": np.full(object_data.height, 31.4),
-        "zpsys": np.full(object_data.height, "ab"),
-    }
-)
+            {
+                "time": object_data["r:midpointMjdTai"].to_numpy(),
+                "band": [BAND_MAP[b] for b in object_data["r:band"].to_list()],
+                "flux": object_data["r:psfFlux"].to_numpy(),
+                "fluxerr": object_data["r:psfFluxErr"].to_numpy(),
+                "zp": np.full(object_data.height, 31.4),
+                "zpsys": np.full(object_data.height, "ab"),
+            }
+        )
         # Rebuilding the fitted model from the SALT fitted parameters of the object
         model = sncosmo.Model(source="salt3")
 
-        model.set(
-            z = row["host_photoz"],
-            t0 = row["t0"],
-            x0 = row["x0"],
-            x1 = row["x1"],
-            c = row["c"],
-        )
+        if row["fitted_z"] == None:
+            continue
 
-        fig = sncosmo.plot_lc(
-            data,
-            model=model,
-        )
+        else:
+            model.set(
+                z=row["fitted_z"],
+                t0=row["t0"],
+                x0=row["x0"],
+                x1=row["x1"],
+                c=row["c"],
+            )
 
-        for ax in fig.axes:
-            for t_edge in t_edges:
-                ax.axvline(
-                    t_edge,
-                    linestyle="--",
-                    alpha=0.5,
-                )
-                phase_text = (
-                    f"Peak phase: {row['pass_peak_phase']}\n"
-                    f"Shape phase: {row['pass_shape_phase']}\n"
-                    f"Colour: {row['pass_colour']}\n"
-                    f"Overall: {row['pass_salt_quality']}"
-                )
+            fig = sncosmo.plot_lc(
+                data,
+                model=model,
+            )
 
-                fig.text(
-                    0.82,
-                    0.5,
-                    phase_text,
-                    va="center",
-                )
+            for ax in fig.axes:
+                for tau, t_edge in zip(tau_edges, phase_positions):
+                    ax.axvline(
+                        t_edge,
+                        linestyle="--",
+                        alpha=0.5,
+                    )
+            phase_text = (
+                f"Peak phase: {row['pass_peak_phase']}\n"
+                f"Shape phase: {row['pass_shape_phase']}\n"
+                f"Colour: {row['pass_colour']}\n"
+                f"Overall: {row['pass_salt_quality']}"
+            )
 
-        plt.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
-        plt.close()
+            fig.text(
+                0.82,
+                0.5,
+                phase_text,
+                va="center",
+            )
+
+            fig.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
+            plt.close(fig)
 
 
 def get_salt3_fitted_bands(
@@ -843,7 +846,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "salt_fit_values.csv"
     )
 
@@ -866,7 +869,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "phase_cuts_results"
         / "pass.csv"
     )
@@ -879,7 +882,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "phase_cuts_results"
         / "fail.csv"
     )
@@ -892,9 +895,33 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "phase_cuts_results"
         / "salt_phase_cuts_values.csv"
+    )
+
+    PASS_PHASE_CUT_PLOT_OUTPUT_DIR = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "salt_plots"
+        / "phase_cuts"
+        / "pass"
+    )
+
+    FAIL_PHASE_CUT_PLOT_OUTPUT_DIR = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "salt_plots"
+        / "phase_cuts"
+        / "fail"
     )
 
     CHI2_VALUES_OUTPUT_DIR = (
@@ -905,7 +932,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "chi2_results"
         / "values.csv"
     )
@@ -918,7 +945,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "chi2_results"
         / "pass.csv"
     )
@@ -931,7 +958,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "with_hostz"
+        / "with_hostz_results"
         / "chi2_results"
         / "fail.csv"
     )
@@ -943,6 +970,12 @@ if __name__ == "__main__":
     #     TEST_PHASE_FAIL_OUTPUT,
     #     TEST_PHASE_VALUES_OUTPUT,
     # )
+
+    plot_salt_phase_diagnostic(
+        phase_results_path=TEST_PHASE_FAIL_OUTPUT,
+        light_curve_data_path=LIGHT_CURVE_DATA,
+        output_dir=FAIL_PHASE_CUT_PLOT_OUTPUT_DIR,
+    )
 
     # results = unfitted_band_finder(
     #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_hostz/phase_cuts_results/pass.csv",
@@ -959,19 +992,19 @@ if __name__ == "__main__":
     # pl.Config.set_tbl_rows(-1)
     # print(results)
 
-    result = bazin_salt_chi2_cut(
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz"
-        / "chi2_results"
-        / "unfitted_bands.csv",
-        LIGHT_CURVE_DATA,
-        CHI2_VALUES_OUTPUT_DIR,
-        CHI2_PASS_OUTPUT_DIR,
-        CHI2_FAIL_OUTPUT_DIR,
-    )
+    # result = bazin_salt_chi2_cut(
+    #     Path.home()
+    #     / "Documents"
+    #     / "University"
+    #     / "Honours"
+    #     / "Honours_Project"
+    #     / "data"
+    #     / "salt_fitting"
+    #     / "with_hostz"
+    #     / "chi2_results"
+    #     / "unfitted_bands.csv",
+    #     LIGHT_CURVE_DATA,
+    #     CHI2_VALUES_OUTPUT_DIR,
+    #     CHI2_PASS_OUTPUT_DIR,
+    #     CHI2_FAIL_OUTPUT_DIR,
+    # )
