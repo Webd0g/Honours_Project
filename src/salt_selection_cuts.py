@@ -75,7 +75,7 @@ def bazin_salt_phase_cut(
         salt_fits_path,
         schema_overrides={
             "r:diaObjectId": pl.String,
-            "host_photoz": pl.Float64,
+            "z_used": pl.Float64,
             "t0": pl.Float64,
             "fit_success": pl.Boolean,
         },
@@ -107,7 +107,7 @@ def bazin_salt_phase_cut(
     phase_data = light_curve_data.join(
         salt_fits.select(
             "r:diaObjectId",
-            "redshift",
+            "z_used",
             "t0",
             "fit_success",
         ),
@@ -123,9 +123,9 @@ def bazin_salt_phase_cut(
     # --------------------------------------------------------------
 
     phase_data = phase_data.with_columns(
-        (
-            (pl.col("r:midpointMjdTai") - pl.col("t0")) / (1.0 + pl.col("redshift"))
-        ).alias("tau")
+        ((pl.col("r:midpointMjdTai") - pl.col("t0")) / (1.0 + pl.col("z_used"))).alias(
+            "tau"
+        )
     )
 
     # --------------------------------------------------------------
@@ -200,9 +200,9 @@ def bazin_salt_phase_cut(
             pl.col("fit_success").fill_null(False)
             & pl.col("t0").is_not_null()
             & pl.col("t0").is_finite()
-            & pl.col("redshift").is_not_null()
-            & pl.col("redshift").is_finite()
-            & (pl.col("redshift") > 0)
+            & pl.col("z_used").is_not_null()
+            & pl.col("z_used").is_finite()
+            & (pl.col("z_used") > 0)
         ).alias("has_quality_inputs"),
         # Criterion (i)
         (pl.col("n_peak_phase") >= 1).alias("pass_peak_phase"),
@@ -274,7 +274,7 @@ def plot_salt_phase_diagnostic(
         phase_results_path,
         schema_overrides={
             "r:diaObjectId": pl.String,
-            "redshift": pl.Float64,
+            "z_used": pl.Float64,
             "t0": pl.Float64,
         },
     )
@@ -294,11 +294,16 @@ def plot_salt_phase_diagnostic(
 
     for row in phase_results.iter_rows(named=True):
         object_id = row["r:diaObjectId"]
-        host_photoz = row["redshift"]
+        redshift = row["z_used"]
+        if not row["fit_success"]:
+            continue
 
         object_data = light_curve_data.filter(pl.col("r:diaObjectId") == object_id)
 
-        phase_positions = [tau * (1 + host_photoz) for tau in tau_edges]
+        if row["z_used"] is None or not np.isfinite(row["z_used"]):
+            continue
+
+        phase_positions = [tau * (1 + redshift) for tau in tau_edges]
 
         data = Table(
             {
@@ -313,46 +318,42 @@ def plot_salt_phase_diagnostic(
         # Rebuilding the fitted model from the SALT fitted parameters of the object
         model = sncosmo.Model(source="salt3")
 
-        if row["redshift"] == None:
-            continue
+        model.set(
+            z=row["z_used"],
+            t0=row["t0"],
+            x0=row["x0"],
+            x1=row["x1"],
+            c=row["c"],
+        )
 
-        else:
-            model.set(
-                z=row["redshift"],
-                t0=row["t0"],
-                x0=row["x0"],
-                x1=row["x1"],
-                c=row["c"],
-            )
+        fig = sncosmo.plot_lc(
+            data,
+            model=model,
+        )
 
-            fig = sncosmo.plot_lc(
-                data,
-                model=model,
-            )
+        for ax in fig.axes:
+            for tau, t_edge in zip(tau_edges, phase_positions):
+                ax.axvline(
+                    t_edge,
+                    linestyle="--",
+                    alpha=0.5,
+                )
+        phase_text = (
+            f"Peak phase: {row['pass_peak_phase']}\n"
+            f"Shape phase: {row['pass_shape_phase']}\n"
+            f"Colour: {row['pass_colour']}\n"
+            f"Overall: {row['pass_salt_quality']}"
+        )
 
-            for ax in fig.axes:
-                for tau, t_edge in zip(tau_edges, phase_positions):
-                    ax.axvline(
-                        t_edge,
-                        linestyle="--",
-                        alpha=0.5,
-                    )
-            phase_text = (
-                f"Peak phase: {row['pass_peak_phase']}\n"
-                f"Shape phase: {row['pass_shape_phase']}\n"
-                f"Colour: {row['pass_colour']}\n"
-                f"Overall: {row['pass_salt_quality']}"
-            )
+        fig.text(
+            0.82,
+            0.5,
+            phase_text,
+            va="center",
+        )
 
-            fig.text(
-                0.82,
-                0.5,
-                phase_text,
-                va="center",
-            )
-
-            fig.savefig(output_dir + "/" + f"{object_id}_phase_diagnostic.png")
-            plt.close(fig)
+        fig.savefig(output_dir + "/" + f"{object_id}_phase_diagnostic.png")
+        plt.close(fig)
 
 
 def get_salt3_fitted_bands(
@@ -482,7 +483,7 @@ def bazin_salt_chi2_cut(
         model = sncosmo.Model(source="salt3")
 
         model.set(
-            z=row["redshift"],
+            z=row["z_used"],
             t0=row["t0"],
             x0=row["x0"],
             x1=row["x1"],
@@ -682,85 +683,10 @@ def bazin_salt_chi2_cut(
     )
 
     results_df.write_csv(values_output_path)
-    results_df.filter(pl.col("pass_chi2_quality") == "true").write_csv(pass_output_path)
-    results_df.filter(pl.col("pass_chi2_quality") == "false").write_csv(
-        fail_output_path
-    )
+    results_df.filter(pl.col("pass_chi2_quality")).write_csv(pass_output_path)
+    results_df.filter(~pl.col("pass_chi2_quality")).write_csv(fail_output_path)
 
     return results_df
-
-
-def unfitted_band_finder(
-    object_path: Path,
-    output_path: Path,
-) -> pl.DataFrame:
-    """
-    Determine which Rubin filters should be included in the SALT3
-    fit at each object's host-galaxy photometric redshift.
-
-    Band inclusion is determined from the rest-frame effective
-    wavelength and the SALT3 model's hard wavelength support.
-    """
-
-    model = sncosmo.Model(source="salt3")
-
-    objects = pl.read_csv(
-        object_path,
-        schema_overrides={
-            "r:diaObjectId": pl.String,
-            "host_photoz": pl.Float64,
-        },
-    )
-
-    coverage = []
-
-    for row in objects.iter_rows(named=True):
-        object_id = row["r:diaObjectId"]
-        redshift = row["redshift"]
-
-        if redshift is None or not np.isfinite(redshift):
-            coverage.append(
-                {
-                    "r:diaObjectId": object_id,
-                    "u_fitted": None,
-                    "g_fitted": None,
-                    "r_fitted": None,
-                    "i_fitted": None,
-                    "z_fitted": None,
-                    "y_fitted": None,
-                }
-            )
-            continue
-
-        fitted_bands = get_salt3_fitted_bands(
-            redshift=redshift,
-            model=model,
-        )
-
-        coverage.append(
-            {
-                "r:diaObjectId": object_id,
-                "u_fitted": "u" in fitted_bands,
-                "g_fitted": "g" in fitted_bands,
-                "r_fitted": "r" in fitted_bands,
-                "i_fitted": "i" in fitted_bands,
-                "z_fitted": "z" in fitted_bands,
-                "y_fitted": "y" in fitted_bands,
-            }
-        )
-
-    coverage_df = pl.DataFrame(coverage)
-
-    results = objects.join(
-        coverage_df,
-        on="r:diaObjectId",
-        how="left",
-        maintain_order="left",
-    )
-
-    results.write_csv(output_path + "/" + "unfitted_bands.csv")
-
-    return results
 
 
 def unfitted_band_chi2(
@@ -964,30 +890,26 @@ if __name__ == "__main__":
     )
 
     # bazin_salt_phase_cut(
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/confirmed_ia_tests/confirmed_ia_results.csv",
+    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/salt_fit_values.csv",
     #     LIGHT_CURVE_DATA,
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/phase_results/pass.csv",
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/phase_results/fail.csv",
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/phase_results/values.csv",
+    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/pass.csv",
+    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/fail.csv",
+    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/values.csv",
     # )
 
     # plot_salt_phase_diagnostic(
-    #     phase_results_path="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/phase_results/pass.csv",
+    #     phase_results_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/fail.csv",
     #     light_curve_data_path=LIGHT_CURVE_DATA,
-    #     output_dir="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/phase_results/pass_plots",
+    #     output_dir="/home/riley/Documents/University/Honours/Honours_Project/images/salt_plots/phase_cuts/fail",
     # )
 
-    results = unfitted_band_finder(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/confirmed_ia_tests/confirmed_ia_results.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/salt_chi2_results",
-    )
     # pl.Config.set_tbl_rows(-1)
     # # print(results)
 
     result = bazin_salt_chi2_cut(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/salt_chi2_results/unfitted_bands.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/pass.csv",
         LIGHT_CURVE_DATA,
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/salt_chi2_results/values.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/salt_chi2_results/pass.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/salt_chi2_results/fail.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/chi2_results/values.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/chi2_results/pass.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/chi2_results/fail.csv",
     )

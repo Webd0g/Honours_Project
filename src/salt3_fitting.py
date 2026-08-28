@@ -7,10 +7,12 @@ import requests as re
 import sncosmo
 from astropy.table import Table
 
+from salt_selection_cuts import get_salt3_fitted_bands
+
 FINK_OBJECTS_URL = "https://api.lsst.fink-portal.org/api/v1/sources"
 
 
-def fetch_host_photoz_with_fallback(
+def fetch_object_z_with_fallback(
     object_ids: list[str],
 ) -> list[dict]:
     """
@@ -31,7 +33,7 @@ def fetch_host_photoz_with_fallback(
             json={
                 "diaObjectId": ",".join(object_ids),
                 "columns": (
-                    "r:diaObjectId,f:xm_legacydr8_zphot,f:xm_legacydr8_e_zphot"
+                    "r:diaObjectId,f:xm_legacydr8_zphot,f:xm_legacydr8_e_zphot,f:xm_tns_redshift"
                 ),
                 "output-format": "json",
             },
@@ -61,7 +63,7 @@ def fetch_host_photoz_with_fallback(
             raise
 
         if len(object_ids) <= 1:
-            print(f"Could not retrieve photo-z for {object_ids[0]}: {error}")
+            print(f"Could not retrieve z for {object_ids[0]}: {error}")
             return []
 
         mid = len(object_ids) // 2
@@ -71,9 +73,9 @@ def fetch_host_photoz_with_fallback(
             f"Splitting into {mid} and {len(object_ids) - mid}."
         )
 
-        left = fetch_host_photoz_with_fallback(object_ids[:mid])
+        left = fetch_object_z_with_fallback(object_ids[:mid])
 
-        right = fetch_host_photoz_with_fallback(object_ids[mid:])
+        right = fetch_object_z_with_fallback(object_ids[mid:])
 
         return left + right
 
@@ -119,7 +121,7 @@ def get_host_photoz_from_fink(
 
     object_ids = objects["r:diaObjectId"].to_list()
 
-    records = fetch_host_photoz_with_fallback(object_ids)
+    records = fetch_object_z_with_fallback(object_ids)
 
     if len(records) == 0:
         results_df = objects.with_columns(
@@ -131,36 +133,53 @@ def get_host_photoz_from_fink(
                 None,
                 dtype=pl.Float64,
             ).alias("host_photoz_err"),
+            pl.lit(
+                None,
+                dtype=pl.Float64,
+            ).alias("redshift"),
         )
 
     else:
-        fink_df = (
-            pl.DataFrame(records)
-            .select(
-                pl.col("r:diaObjectId").cast(pl.String),
+        raw_df = pl.DataFrame(
+            records,
+            infer_schema_length=None,
+        ).with_columns(
+            pl.col("r:diaObjectId").cast(pl.String),
+        )
+        host_df = (
+            raw_df.select(
+                pl.col("r:diaObjectId"),
                 pl.col("f:xm_legacydr8_zphot")
-                .cast(
-                    pl.Float64,
-                    strict=False,
-                )
+                .cast(pl.Float64, strict=False)
                 .alias("host_photoz"),
                 pl.col("f:xm_legacydr8_e_zphot")
-                .cast(
-                    pl.Float64,
-                    strict=False,
-                )
+                .cast(pl.Float64, strict=False)
                 .alias("host_photoz_err"),
             )
-            .unique(
-                subset="r:diaObjectId",
-                keep="first",
+            .group_by("r:diaObjectId")
+            .agg(
+                pl.col("host_photoz").drop_nulls().first().alias("host_photoz"),
+                pl.col("host_photoz_err").drop_nulls().first().alias("host_photoz_err"),
             )
         )
+        tns_df = (
+            raw_df.select(
+                pl.col("r:diaObjectId"),
+                pl.col("f:xm_tns_redshift")
+                .cast(pl.Float64, strict=False)
+                .alias("redshift"),
+            )
+            .group_by("r:diaObjectId")
+            .agg(pl.col("redshift").drop_nulls().first().alias("redshift"))
+        )
 
-        # Left join ensures objects with no returned photo-z
-        # remain in the sample as nulls.
         results_df = objects.join(
-            fink_df,
+            host_df,
+            on="r:diaObjectId",
+            how="left",
+            maintain_order="left",
+        ).join(
+            tns_df,
             on="r:diaObjectId",
             how="left",
             maintain_order="left",
@@ -272,22 +291,38 @@ def many_object_salt3_fits(
     while redshift is allowed to vary within +/- 2 host photo-z uncertainties.
     """
 
-    objects_df = pl.read_csv(
-        objects_path,
-        schema_overrides={
-            "r:diaObjectId": pl.String,
-            "host_photoz": pl.Float64,
-            "host_photoz_err": pl.Float64,
-        },
-    ).filter(
-        pl.col("host_photoz").is_not_null() & pl.col("host_photoz_err").is_not_null()
+    objects_df = (
+        pl.read_csv(
+            objects_path,
+            schema_overrides={
+                "r:diaObjectId": pl.String,
+                "redshift": pl.Float64,
+                "host_photoz": pl.Float64,
+                "host_photoz_err": pl.Float64,
+            },
+        )
+        .with_columns(
+            pl.when(pl.col("redshift").is_not_null() & pl.col("redshift").is_finite())
+            .then(pl.col("redshift"))
+            .otherwise(pl.col("host_photoz"))
+            .alias("z_used"),
+            pl.when(pl.col("redshift").is_not_null() & pl.col("redshift").is_finite())
+            .then(pl.lit("spectroscopic"))
+            .otherwise(pl.lit("host_photoz"))
+            .alias("z_source"),
+        )
+        .filter(
+            pl.col("z_used").is_not_null()
+            & pl.col("z_used").is_finite()
+            & (pl.col("z_used") > 0)
+        )
     )
-
     light_curve_data = (
         pl.read_parquet(light_curve_data_path)
         .with_columns(pl.col("r:diaObjectId").cast(pl.String))
         .filter(
             pl.col("r:diaObjectId").is_in(objects_df["r:diaObjectId"])
+            & pl.col("r:midpointMjdTai").is_finite()
             & pl.col("r:psfFlux").is_finite()
             & pl.col("r:psfFluxErr").is_finite()
             & (pl.col("r:psfFluxErr") > 0)
@@ -311,12 +346,17 @@ def many_object_salt3_fits(
         "y": "lssty",
     }
 
+    if plot_output_path is not None:
+        plot_output_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
     results = []
 
     for row in objects_df.iter_rows(named=True):
         object_id = row["r:diaObjectId"]
-        redshift = row["host_photoz"]
-        redshift_err = row["host_photoz_err"]
+        redshift = row["z_used"]
+        z_source = row["z_source"]
 
         # ----------------------------------------------------------
         # Require host photo-z information
@@ -328,10 +368,11 @@ def many_object_salt3_fits(
             results.append(
                 {
                     "r:diaObjectId": object_id,
-                    "host_photoz": redshift,
-                    "host_photoz_err": redshift_err,
-                    "fitted_z": None,
-                    "fitted_z_err": None,
+                    "z_used": redshift,
+                    "z_source": z_source,
+                    "host_photoz": row["host_photoz"],
+                    "host_photoz_err": row["host_photoz_err"],
+                    "spec_z": row["redshift"],
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -343,7 +384,8 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_data": 0,
+                    "n_total_data": group_df.height,
+                    "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
                     "fit_message": "No light-curve data",
@@ -361,10 +403,11 @@ def many_object_salt3_fits(
             results.append(
                 {
                     "r:diaObjectId": object_id,
-                    "host_photoz": redshift,
-                    "host_photoz_err": redshift_err,
-                    "fitted_z": None,
-                    "fitted_z_err": None,
+                    "z_used": redshift,
+                    "z_source": z_source,
+                    "host_photoz": row["host_photoz"],
+                    "host_photoz_err": row["host_photoz_err"],
+                    "spec_z": row["redshift"],
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -376,7 +419,8 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_data": group_df.height,
+                    "n_total_data": group_df.height,
+                    "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
                     "fit_message": "No i-band data",
@@ -392,11 +436,10 @@ def many_object_salt3_fits(
 
         model = sncosmo.Model(source="salt3")
 
-        fitted_bands = {
-            band
-            for band, sncosmo_band in band_map.items()
-            if model.bandoverlap(sncosmo_band, z=redshift)
-        }
+        fitted_bands = get_salt3_fitted_bands(
+            redshift=redshift,
+            model=model,
+        )
 
         fit_df = group_df.filter(pl.col("r:band").is_in(fitted_bands)).with_columns(
             pl.col("r:band").replace(band_map).alias("sncosmo_band")
@@ -406,11 +449,11 @@ def many_object_salt3_fits(
             results.append(
                 {
                     "r:diaObjectId": object_id,
-                    # Host-galaxy information
-                    "host_photoz": redshift,
-                    "host_photoz_err": redshift_err,
-                    "fitted_z": None,
-                    "fitted_z_err": None,
+                    "z_used": redshift,
+                    "z_source": z_source,
+                    "host_photoz": row["host_photoz"],
+                    "host_photoz_err": row["host_photoz_err"],
+                    "spec_z": row["redshift"],
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -422,7 +465,8 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_data": group_df.height,
+                    "n_total_data": group_df.height,
+                    "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
                     "fit_message": "No data after removing unsupported bands",
@@ -443,18 +487,17 @@ def many_object_salt3_fits(
         # ----------------------------------------------------------
         # Photometric-redshift bounds
         # ----------------------------------------------------------
-        if redshift and redshift_err != None:
-            z_min = max(
-                0.001,
-                redshift - 2.0 * redshift_err,
-            )
+        # if redshift and redshift_err != None:
+        #     z_min = max(
+        #         0.001,
+        #         redshift - 2.0 * redshift_err,
+        #     )
 
-            z_max = redshift + 2.0 * redshift_err
-        else:
-            continue
-            # z_min = 0.001
-            # z_max = 2.00
-
+        #     z_max = redshift + 2.0 * redshift_err
+        # else:
+        #     continue
+        #     # z_min = 0.001
+        #     # z_max = 2.00
         try:
             # Initial guess is the host photo-z.
             model.set(z=redshift)
@@ -462,9 +505,8 @@ def many_object_salt3_fits(
             result, fitted_model = sncosmo.fit_lc(
                 data,
                 model,
-                ["z", "t0", "x0", "x1", "c"],
+                ["t0", "x0", "x1", "c"],
                 bounds={
-                    "z": (z_min, z_max),
                     "t0": (
                         peak_mjd - 30,
                         peak_mjd + 30,
@@ -483,11 +525,11 @@ def many_object_salt3_fits(
                 {
                     "r:diaObjectId": object_id,
                     # Host-galaxy information
-                    "host_photoz": redshift,
-                    "host_photoz_err": redshift_err,
-                    # SALT fitted redshift
-                    "fitted_z": fitted_model["z"],
-                    "fitted_z_err": result.errors.get("z"),
+                    "z_used": redshift,
+                    "z_source": z_source,
+                    "host_photoz": row["host_photoz"],
+                    "host_photoz_err": row["host_photoz_err"],
+                    "spec_z": row["redshift"],
                     # SALT parameters
                     "t0": fitted_model["t0"],
                     "t0_err": result.errors.get("t0"),
@@ -516,28 +558,28 @@ def many_object_salt3_fits(
                 }
             )
 
-            if plot_output_path is not None:
-                sncosmo.plot_lc(
-                    data,
-                    model=fitted_model,
-                    errors=result.errors,
-                )
+            sncosmo.plot_lc(
+                data,
+                model=fitted_model,
+                errors=result.errors,
+            )
 
-                plt.savefig(
-                    plot_output_path / f"{object_id}_SALT3.png",
-                    bbox_inches="tight",
-                )
+            plt.savefig(
+                plot_output_path / f"{object_id}_SALT3.png",
+                bbox_inches="tight",
+            )
 
-                plt.close()
+            plt.close()
 
         except Exception as error:
             results.append(
                 {
                     "r:diaObjectId": object_id,
-                    "host_photoz": redshift,
-                    "host_photoz_err": redshift_err,
-                    "fitted_z": None,
-                    "fitted_z_err": None,
+                    "z_used": redshift,
+                    "z_source": z_source,
+                    "host_photoz": row["host_photoz"],
+                    "host_photoz_err": row["host_photoz_err"],
+                    "spec_z": row["redshift"],
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -549,7 +591,8 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_data": len(data),
+                    "n_total_data": group_df.height,
+                    "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
                     "fit_message": str(error),
@@ -558,19 +601,34 @@ def many_object_salt3_fits(
 
     results_df = pl.DataFrame(results)
 
-    results_df = results_df.with_columns(
-        (pl.col("fitted_z") - pl.col("host_photoz")).alias("delta_z"),
-        (
-            (pl.col("fitted_z") - pl.col("host_photoz")) / (1 + pl.col("host_photoz"))
-        ).alias("delta_z_normalised"),
-    )
-
     results_df.write_csv(output_path)
 
     return results_df
 
 
 if __name__ == "__main__":
+    GET_REDSHIFT_INPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "fitted_peak_timing_results"
+        / "pass.csv"
+    )
+
+    GET_REDSHIFT_OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "salt_fitting"
+        / "objects_with_z.csv"
+    )
+
     OBJECT_PATH = (
         Path.home()
         / "Documents"
@@ -620,13 +678,21 @@ if __name__ == "__main__":
     #     TEST_OBJECT, LIGHT_CURVE_DATA_PATH, PLOT_OUTPUT_PATH
     # )
 
-    # get_host_photoz_from_fink(OBJECT_PATH, OUTPUT_PATH)
+    # get_host_photoz_from_fink(GET_REDSHIFT_INPUT_PATH, GET_REDSHIFT_OUTPUT_PATH)
 
     results = many_object_salt3_fits(
-        OBJECT_PATH,
-        LIGHT_CURVE_DATA_PATH,
-        WITH_PHOTO_Z_PATH,
-        WITH_PHOTO_Z_PLOTS_PATH,
+        objects_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/objects_with_z.csv",
+        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+        output_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/salt_fit_values.csv",
+        plot_output_path=Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "salt_plots"
+        / "with_z_plots"
+        / "sample_v2_708_objects",
     )
 
     # pl.Config.set_tbl_cols(-1)
