@@ -151,8 +151,8 @@ if __name__ == "__main__":
     )
 
     colour_stretch_cut(
-        OBJECT_PATH,
-        PASS_OUTPUT_PATH,
-        FAIL_OUTPUT_PATH,
-        VALUES_OUTPUT_PATH,
+        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/confirmed_ia_tests/confirmed_ia_results.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/stretch_colour_results/pass.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/stretch_colour_results/fail.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/stretch_colour_results/values.csv",
     )

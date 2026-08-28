@@ -323,24 +323,24 @@ if __name__ == "__main__":
 
     # pl.Config.set_tbl_rows(-1)
     fitted_peak_times_df = peak_timing_cut(
-        OBJECT_PATH,
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/confirmed_ia.csv",
         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
         50,
-        FITTED_PEAK_TIMES_VALUES_OUTPUT_PATH,
-        PASS_DIRECTORY,
-        FAIL_DIRECTORY,
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/fitted_peak_timing_results/values.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/fitted_peak_timing_results/pass.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/fitted_peak_timing_results/fail.csv",
     )
 
-    print(
-        fitted_peak_times_df.select(
-            (~pl.col("valid_i_peak")).sum().alias("invalid_i_peak"),
-            (~pl.col("valid_r_peak")).sum().alias("invalid_r_peak"),
-            (~pl.col("valid_i_peak") & ~pl.col("valid_r_peak"))
-            .sum()
-            .alias("invalid_both"),
-            pl.col("passes_peak_timing").is_null().sum().alias("untested"),
-        )
-    )
+    # print(
+    #     fitted_peak_times_df.select(
+    #         (~pl.col("valid_i_peak")).sum().alias("invalid_i_peak"),
+    #         (~pl.col("valid_r_peak")).sum().alias("invalid_r_peak"),
+    #         (~pl.col("valid_i_peak") & ~pl.col("valid_r_peak"))
+    #         .sum()
+    #         .alias("invalid_both"),
+    #         pl.col("passes_peak_timing").is_null().sum().alias("untested"),
+    #     )
+    # )
 
     # x_match(TEST_OBJECTS_PATH, fitted_peak_times_df)

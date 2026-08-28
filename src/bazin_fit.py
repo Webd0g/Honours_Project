@@ -431,7 +431,7 @@ if __name__ == "__main__":
 
     for band in bands:
         bazin_batch_fits(
-            csv_path=TIMING_CUT_PASSED,
+            csv_path="TIMING_CUT_PASSED",
             light_curve_data_path=LIGHT_CURVE_DATA,
             band=band,
             algorithm="mcmc",

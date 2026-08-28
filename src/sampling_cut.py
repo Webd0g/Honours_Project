@@ -422,32 +422,32 @@ if __name__ == "__main__":
         / "sampling_fail.csv"
     )
 
-    numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
+    # numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
 
-    sampling_statistics(OBJECT_TEST_OUTPUT)
+    # sampling_statistics(OBJECT_TEST_OUTPUT)
 
-    pass_fractions(OBJECT_TEST_OUTPUT)
+    # pass_fractions(OBJECT_TEST_OUTPUT)
 
     sampling_cut_df = sampling_cut(
-        CANDIDATES,
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/confirmed_ia.csv",
         LIGHT_CURVE_DATA,
-        COUNT_OUTPUT_PATH,
-        PASSING_SAMPLING_CUT_OUTPUT,
-        FAILING_SAMPLING_CUT_OUTPUT,
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/sampling_results/values.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/sampling_results/pass.csv",
+        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/sampling_results/fail.csv",
     )
 
-    sampling_cut_df = sampling_cut_df.with_columns(
-    pl.sum_horizontal(
-        pl.col("pass_g_i"),
-        pl.col("pass_r_z"),
-        pl.col("pass_i_z"),
-    ).alias("number_colour_pairs")
-)
+#     sampling_cut_df = sampling_cut_df.with_columns(
+#     pl.sum_horizontal(
+#         pl.col("pass_g_i"),
+#         pl.col("pass_r_z"),
+#         pl.col("pass_i_z"),
+#     ).alias("number_colour_pairs")
+# )
 
-    print(
-        sampling_cut_df
-        .filter(pl.col("sampling_pass"))
-        .group_by("number_colour_pairs")
-        .len()
-        .sort("number_colour_pairs")
-)
+#     print(
+#         sampling_cut_df
+#         .filter(pl.col("sampling_pass"))
+#         .group_by("number_colour_pairs")
+#         .len()
+#         .sort("number_colour_pairs")
+# )

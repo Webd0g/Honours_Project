@@ -400,7 +400,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "bazin_fits_results"
-        / "bazin_fits_z_band_results.csv"
+        / "bazin_fits_i_band_results.csv"
     )
 
     CANDIDATES = (
@@ -607,21 +607,21 @@ if __name__ == "__main__":
     )
 
     compute_delta_chi(
-        object_path=CANDIDATES,
+        object_path="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/confirmed_ia.csv",
         light_curve_data_path=LIGHT_CURVE_DATA,
-        band="z",
+        band="i",
         bazin_fit_data_path=BAZIN_FITS_DATA_PATH,
-        output_path=Z_BAND_VALUES_OUTPUT_PATH,
+        output_path="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/values.csv",
     )
 
-    delta_chi_against_chi_SN_plot(
-        path_to_delta_chi_results=Z_BAND_VALUES_OUTPUT_PATH,
-        output_path=Z_BAND_PLOT_OUTPUT_PATH,
-        band="z",
-    )
+    # delta_chi_against_chi_SN_plot(
+    #     path_to_delta_chi_results=Z_BAND_VALUES_OUTPUT_PATH,
+    #     output_path=Z_BAND_PLOT_OUTPUT_PATH,
+    #     band="z",
+    # )
 
     save_pass_fail_objects(
-        path_to_delta_chi_results=Z_BAND_VALUES_OUTPUT_PATH,
-        output_path_pass=Z_BAND_PASS_OUTPUT_PATH,
-        output_path_fail=Z_BAND_FAIL_OUTPUT_PATH,
+        path_to_delta_chi_results="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/values.csv",
+        output_path_pass="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/pass.csv",
+        output_path_fail="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/fail.csv",
     )
