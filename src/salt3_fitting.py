@@ -681,9 +681,9 @@ if __name__ == "__main__":
     # get_host_photoz_from_fink(GET_REDSHIFT_INPUT_PATH, GET_REDSHIFT_OUTPUT_PATH)
 
     results = many_object_salt3_fits(
-        objects_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/objects_with_z.csv",
+        objects_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/core_collapse_results/confirmed_CC_SN_tns.csv",
         light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-        output_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/salt_fit_values.csv",
+        output_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/core_collapse_results/salt_fit_values.csv",
         plot_output_path=Path.home()
         / "Documents"
         / "University"
@@ -691,8 +691,7 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "images"
         / "salt_plots"
-        / "with_z_plots"
-        / "sample_v2_708_objects",
+        / "confirmed_cc",
     )
 
     # pl.Config.set_tbl_cols(-1)
