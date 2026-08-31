@@ -310,9 +310,13 @@ def delta_chi_against_chi_SN_plot(
     delta_chi_df = pl.concat(
         [
             photometric_delta_chi_df,
-            ia_delta_chi_df,
             ii_delta_chi_df,
+            ia_delta_chi_df,
         ]
+    ).unique(
+        subset="r:diaObjectId",
+        keep="last",
+        maintain_order=True,
     )
 
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -327,8 +331,9 @@ def delta_chi_against_chi_SN_plot(
         photometric["bazin_reduced_chi2"],
         photometric["delta_reduced_chi2"],
         color="black",
-        alpha=0.7,
+        alpha=0.3,
         label="Photometric",
+        s= 10
     )
 
     ax.scatter(
@@ -338,6 +343,8 @@ def delta_chi_against_chi_SN_plot(
         alpha=0.9,
         label="Spectroscopic SN Ia",
         zorder=3,
+        s=15,
+        marker="^",
     )
 
     ax.scatter(
@@ -347,6 +354,8 @@ def delta_chi_against_chi_SN_plot(
         alpha=0.9,
         label="Spectroscopic CC",
         zorder=3,
+        s=15,
+        marker="s",
     )
 
     ax.set_xscale("log")
