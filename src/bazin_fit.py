@@ -391,10 +391,12 @@ def plot_bazin_fit_batch(
 
 if __name__ == "__main__":
     bands = [
+        "u",
         "g",
         "r",
         "i",
         "z",
+        "y",
     ]
 
     TIMING_CUT_PASSED = (
@@ -404,8 +406,9 @@ if __name__ == "__main__":
         / "Honours"
         / "Honours_Project"
         / "data"
-        / "timing_cuts_results"
-        / "timing_cuts_passed.csv"
+        / "salt_fitting"
+        / "confirmed_ia_tests"
+        / "confirmed_ia.csv"
     )
 
     LIGHT_CURVE_DATA = (
@@ -427,42 +430,44 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "bazin_fits_results"
+        / "spectroscopic_tests"
+        / "ia_tests"
     )
 
     for band in bands:
         bazin_batch_fits(
-            csv_path="TIMING_CUT_PASSED",
+            csv_path=TIMING_CUT_PASSED,
             light_curve_data_path=LIGHT_CURVE_DATA,
             band=band,
             algorithm="mcmc",
             mcmc_niter=2000,
             output_path=BAZIN_OUTPUT_PATH / f"bazin_fits_{band}_band_results.csv",
         )
-        plot_bazin_fit_batch(
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "data"
-            / "bazin_fits_results"
-            / f"bazin_fits_{band}_band_results.csv",
-            TIMING_CUT_PASSED,
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "data"
-            / "light_curve_data"
-            / "combined_light_curve_data.parquet",
-            band,
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "images"
-            / "bazin_fits_plots"
-            / f"{band}_band",
-        )
+        # plot_bazin_fit_batch(
+        #     Path.home()
+        #     / "Documents"
+        #     / "University"
+        #     / "Honours"
+        #     / "Honours_Project"
+        #     / "data"
+        #     / "bazin_fits_results"
+        #     / f"bazin_fits_{band}_band_results.csv",
+        #     TIMING_CUT_PASSED,
+        #     Path.home()
+        #     / "Documents"
+        #     / "University"
+        #     / "Honours"
+        #     / "Honours_Project"
+        #     / "data"
+        #     / "light_curve_data"
+        #     / "combined_light_curve_data.parquet",
+        #     band,
+        #     Path.home()
+        #     / "Documents"
+        #     / "University"
+        #     / "Honours"
+        #     / "Honours_Project"
+        #     / "images"
+        #     / "bazin_fits_plots"
+        #     / f"{band}_band",
+        # )
