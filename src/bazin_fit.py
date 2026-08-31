@@ -407,8 +407,8 @@ if __name__ == "__main__":
         / "Honours_Project"
         / "data"
         / "salt_fitting"
-        / "confirmed_ia_tests"
-        / "confirmed_ia.csv"
+        / "core_collapse_results"
+        / "confirmed_CC_SN_tns.csv"
     )
 
     LIGHT_CURVE_DATA = (
@@ -431,7 +431,7 @@ if __name__ == "__main__":
         / "data"
         / "bazin_fits_results"
         / "spectroscopic_tests"
-        / "ia_tests"
+        / "ii_tests"
     )
 
     for band in bands:

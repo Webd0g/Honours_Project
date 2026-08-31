@@ -267,58 +267,126 @@ def compute_delta_chi(
 
 
 def delta_chi_against_chi_SN_plot(
-    path_to_delta_chi_results: Path, output_path: Path, band: str
+    path_to_ii_delta_chi_results: Path,
+    path_to_ia_delta_chi_results: Path,
+    path_to_photometric_delta_chi_results: Path,
+    output_path: Path,
+    band: str,
 ) -> None:
-    """Here we plot the difference between the fit by a constant and the shape fit as a function of the shape fit in the i band."""
 
-    delta_chi_df = pl.read_csv(path_to_delta_chi_results).filter(
-        (pl.col("bazin_reduced_chi2") > 0) & (pl.col("delta_reduced_chi2") > 0)
+    ii_delta_chi_df = (
+        pl.read_csv(path_to_ii_delta_chi_results)
+        .filter((pl.col("bazin_reduced_chi2") > 0) & (pl.col("delta_reduced_chi2") > 0))
+        .select(
+            "r:diaObjectId",
+            "bazin_reduced_chi2",
+            "delta_reduced_chi2",
+        )
+        .with_columns(pl.lit("Core-Collapse").alias("class"))
     )
 
-    labels = delta_chi_df.select("r:diaObjectId").to_series()
+    ia_delta_chi_df = (
+        pl.read_csv(path_to_ia_delta_chi_results)
+        .filter((pl.col("bazin_reduced_chi2") > 0) & (pl.col("delta_reduced_chi2") > 0))
+        .select(
+            "r:diaObjectId",
+            "bazin_reduced_chi2",
+            "delta_reduced_chi2",
+        )
+        .with_columns(pl.lit("SN Ia").alias("class"))
+    )
 
-    colors = [
-        "red"
-        if str(obj_id) in SN_LIKE_OBJECTS
-        else "blue"
-        if str(obj_id) in NOT_SN_LIKE_OBJECTS
-        else "grey"
-        for obj_id in labels
-    ]
-    plt.scatter(
-        delta_chi_df["bazin_reduced_chi2"],
-        delta_chi_df["delta_reduced_chi2"],
-        c=colors,
+    photometric_delta_chi_df = (
+        pl.read_csv(path_to_photometric_delta_chi_results)
+        .filter((pl.col("bazin_reduced_chi2") > 0) & (pl.col("delta_reduced_chi2") > 0))
+        .select(
+            "r:diaObjectId",
+            "bazin_reduced_chi2",
+            "delta_reduced_chi2",
+        )
+        .with_columns(pl.lit("Photometric").alias("class"))
+    )
+
+    delta_chi_df = pl.concat(
+        [
+            photometric_delta_chi_df,
+            ia_delta_chi_df,
+            ii_delta_chi_df,
+        ]
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    photometric = delta_chi_df.filter(pl.col("class") == "Photometric")
+
+    ia = delta_chi_df.filter(pl.col("class") == "SN Ia")
+
+    cc = delta_chi_df.filter(pl.col("class") == "Core-Collapse")
+
+    ax.scatter(
+        photometric["bazin_reduced_chi2"],
+        photometric["delta_reduced_chi2"],
+        color="black",
         alpha=0.7,
+        label="Photometric",
     )
 
-    plt.legend(
-        title="r:diaObjectId",
-        handles=[
-            plt.Line2D(
-                [0], [0], marker="o", color="red", markersize=10, linestyle="None"
-            ),
-            plt.Line2D(
-                [0], [0], marker="o", color="blue", markersize=10, linestyle="None"
-            ),
-        ],
-        labels=["SN-like", "Non-SN-like"],
+    ax.scatter(
+        ia["bazin_reduced_chi2"],
+        ia["delta_reduced_chi2"],
+        color="green",
+        alpha=0.9,
+        label="Spectroscopic SN Ia",
+        zorder=3,
     )
 
-    plt.xscale("log")
-    plt.yscale("log")
+    ax.scatter(
+        cc["bazin_reduced_chi2"],
+        cc["delta_reduced_chi2"],
+        color="red",
+        alpha=0.9,
+        label="Spectroscopic CC",
+        zorder=3,
+    )
 
-    ax = plt.gca()
+    ax.set_xscale("log")
+    ax.set_yscale("log")
 
-    lower = min(ax.get_xlim()[0], ax.get_ylim()[0])
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
 
-    upper = max(ax.get_xlim()[1], ax.get_ylim()[1])
+    lower = min(xlim[0], ylim[0])
+    upper = max(xlim[1], ylim[1])
 
-    ax.plot([lower, upper], [lower, upper], "r--", label="unity")
-    plt.title(f"Constant vs Bazin fit comparison in {band} band")
-    plt.xlabel(rf"Bazin reduced $\chi^2$ ({band} band)")
-    plt.ylabel(rf"$\Delta\chi^2_\nu$ ({band} band)")
-    plt.savefig(output_path)
+    ax.plot(
+        [lower, upper],
+        [lower, upper],
+        linestyle="--",
+        color="black",
+        label="Selection boundary",
+    )
+
+    ax.set_xlim(xlim)
+    ax.set_ylim(ylim)
+
+    ax.set_xlabel(rf"Bazin reduced $\chi^2$ ({band} band)")
+    ax.set_ylabel(rf"$\Delta\chi^2_\nu$ ({band} band)")
+    ax.set_title(f"Constant vs Bazin fit comparison in {band} band")
+
+    ax.legend()
+
+    output_path.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    fig.tight_layout()
+
+    fig.savefig(
+        output_path / f"{band}_band_constant_minus_bazin.png",
+        bbox_inches="tight",
+    )
+
     plt.show()
 
 
@@ -606,19 +674,88 @@ if __name__ == "__main__":
         / "z_band_constant_minus_shape.png"
     )
 
-    compute_delta_chi(
-        object_path="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/confirmed_ia.csv",
-        light_curve_data_path=LIGHT_CURVE_DATA,
-        band="i",
-        bazin_fit_data_path=BAZIN_FITS_DATA_PATH,
-        output_path="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/values.csv",
+    PATH_TO_IA_SPECTRO_RESULTS = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "bazin_fits_results"
+        / "spectroscopic_tests"
+        / "ia_tests"
+        / "bazin_fits_i_band_results.csv"
     )
 
-    # delta_chi_against_chi_SN_plot(
-    #     path_to_delta_chi_results=Z_BAND_VALUES_OUTPUT_PATH,
-    #     output_path=Z_BAND_PLOT_OUTPUT_PATH,
-    #     band="z",
-    # )
+    PATH_TO_II_SPECTRO_RESULTS = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "bazin_fits_results"
+        / "spectroscopic_tests"
+        / "ii_tests"
+        / "bazin_fits_i_band_results.csv"
+    )
+
+    compute_delta_chi(
+        object_path=PATH_TO_II_SPECTRO_RESULTS,
+        light_curve_data_path=LIGHT_CURVE_DATA,
+        band="i",
+        bazin_fit_data_path=PATH_TO_II_SPECTRO_RESULTS,
+        output_path=Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "sn_ii_test_results"
+        / "constant_minus_shape_results"
+        / "values.csv",
+    )
+
+    delta_chi_against_chi_SN_plot(
+        path_to_ii_delta_chi_results=Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "sn_ii_test_results"
+        / "constant_minus_shape_results"
+        / "values.csv",
+        path_to_ia_delta_chi_results=(
+            Path.home()
+            / "Documents"
+            / "University"
+            / "Honours"
+            / "Honours_Project"
+            / "data"
+            / "sn_ia_test_results"
+            / "constant_minus_shape_results"
+            / "values.csv"
+        ),
+        path_to_photometric_delta_chi_results=(
+            Path.home()
+            / "Documents"
+            / "University"
+            / "Honours"
+            / "Honours_Project"
+            / "data"
+            / "constant_minus_shape_results"
+            / "constant_minus_shape_values.csv"
+        ),
+        output_path=Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "results_plots",
+        band="i",
+    )
 
     save_pass_fail_objects(
         path_to_delta_chi_results="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/values.csv",
