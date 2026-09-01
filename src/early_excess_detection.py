@@ -250,7 +250,10 @@ def eex_salt_fits_with_mask(
     pull_output_path: Path | None = None,
     plot_output_path: Path | None = None,
 ) -> pl.DataFrame:
-    """Refit SALT3 after masking the potential early-excess window."""
+    """
+    Reconstruct existing SALT3 fits and calculate early-excess pulls
+    over the first four rest-frame days after t_fd.
+    """
 
     band_map = {
         "u": "lsstu",
@@ -262,7 +265,7 @@ def eex_salt_fits_with_mask(
     }
 
     excess_mask = (pl.col("r:midpointMjdTai") >= pl.col("t_fd")) & (
-        pl.col("r:midpointMjdTai") <= pl.col("t_fd") + 4.0 * (1.0 + pl.col("z_used"))
+        pl.col("r:midpointMjdTai") <= (pl.col("t_fd") + 4.0 * (1.0 + pl.col("z_used")))
     )
 
     withheld_df = object_df.filter(excess_mask)
@@ -298,72 +301,79 @@ def eex_salt_fits_with_mask(
             model=model,
         )
 
-        object_fit_df = group_df.filter(
+        object_data_df = group_df.filter(
             pl.col("r:band").is_in(fitted_bands)
         ).with_columns(pl.col("r:band").replace(band_map).alias("sncosmo_band"))
 
-        if object_fit_df.height == 0:
+        if object_data_df.height == 0:
             results.append(
                 {
                     "r:diaObjectId": object_id,
                     "z_used": z_used,
-                    "t0": None,
-                    "t0_err": None,
-                    "x0": None,
-                    "x0_err": None,
-                    "x1": None,
-                    "x1_err": None,
-                    "c": None,
-                    "c_err": None,
-                    "chi2": None,
-                    "ndof": None,
-                    "reduced_chi2": None,
-                    "n_fit_data": 0,
-                    "n_used": 0,
-                    "fit_success": False,
-                    "fit_message": "No supported SALT3 bands",
+                    "t0": t0,
+                    "x0": x0,
+                    "x1": x1,
+                    "c": c,
+                    "n_data": 0,
                     "n_withheld_points": 0,
                     "n_excess_points": 0,
                     "n_excess_nights": 0,
                     "early_excess": False,
+                    "reconstruction_success": False,
+                    "message": "No supported SALT3 bands",
                 }
             )
             continue
 
         data = Table(
             {
-                "time": object_fit_df["r:midpointMjdTai"].to_numpy(),
-                "band": object_fit_df["sncosmo_band"].to_numpy(),
-                "flux": object_fit_df["r:psfFlux"].to_numpy(),
-                "fluxerr": object_fit_df["r:psfFluxErr"].to_numpy(),
-                "zp": np.full(object_fit_df.height, 31.4),
-                "zpsys": np.full(object_fit_df.height, "ab"),
+                "time": object_data_df["r:midpointMjdTai"].to_numpy(),
+                "band": object_data_df["sncosmo_band"].to_numpy(),
+                "flux": object_data_df["r:psfFlux"].to_numpy(),
+                "fluxerr": object_data_df["r:psfFluxErr"].to_numpy(),
+                "zp": np.full(
+                    object_data_df.height,
+                    31.4,
+                ),
+                "zpsys": np.full(
+                    object_data_df.height,
+                    "ab",
+                ),
             }
         )
 
         try:
-            model.set(z=z_used, t0=t0, x0=x0, x1=x1, c=c)
-
-            fitted_model = model
-
-            withheld_object_df = withheld_df.filter(
-                pl.col("r:diaObjectId") == object_id
+            model.set(
+                z=z_used,
+                t0=t0,
+                x0=x0,
+                x1=x1,
+                c=c,
             )
 
-            withheld_object_df = withheld_object_df.filter(
-                pl.col("r:band").is_in(fitted_bands)
-            ).with_columns(pl.col("r:band").replace(band_map).alias("sncosmo_band"))
+            withheld_object_df = (
+                withheld_df.filter(pl.col("r:diaObjectId") == object_id)
+                .filter(pl.col("r:band").is_in(fitted_bands))
+                .with_columns(pl.col("r:band").replace(band_map).alias("sncosmo_band"))
+            )
 
             model_fluxes = []
 
             for row in withheld_object_df.iter_rows(named=True):
-                model_flux = fitted_model.bandflux(
-                    row["sncosmo_band"], row["r:midpointMjdTai"], zp=31.4, zpsys="ab"
+                model_flux = model.bandflux(
+                    row["sncosmo_band"],
+                    row["r:midpointMjdTai"],
+                    zp=31.4,
+                    zpsys="ab",
                 )
-                model_fluxes.append(model_flux)
+
+                model_fluxes.append(float(model_flux))
 
             withheld_object_df = withheld_object_df.with_columns(
-                pl.Series("model_flux", model_fluxes)
+                pl.Series(
+                    "model_flux",
+                    model_fluxes,
+                )
             )
 
             withheld_object_df = withheld_object_df.with_columns(
@@ -391,9 +401,10 @@ def eex_salt_fits_with_mask(
                 ).to_dicts()
             )
 
+            significant_points = withheld_object_df.filter(pl.col("significant_excess"))
+
             excess_nights = (
-                withheld_object_df.filter(pl.col("significant_excess"))
-                .with_columns(
+                significant_points.with_columns(
                     pl.col("r:midpointMjdTai").floor().cast(pl.Int64).alias("night")
                 )
                 .select("night")
@@ -402,43 +413,28 @@ def eex_salt_fits_with_mask(
 
             is_early_excess = excess_nights >= 2
 
-            reduced_chi2 = model.chisq / model.ndof if model.ndof > 0 else None
-
-            n_used = int(np.sum(model.data_mask))
-
             results.append(
                 {
                     "r:diaObjectId": object_id,
                     "z_used": z_used,
-                    "t0": fitted_model["t0"],
-                    "t0_err": model.errors.get("t0"),
-                    "x0": fitted_model["x0"],
-                    "x0_err": model.errors.get("x0"),
-                    "x1": fitted_model["x1"],
-                    "x1_err": model.errors.get("x1"),
-                    "c": fitted_model["c"],
-                    "c_err": model.errors.get("c"),
-                    "chi2": model.chisq,
-                    "ndof": model.ndof,
-                    "reduced_chi2": reduced_chi2,
-                    "n_fit_data": len(data),
-                    "n_used": n_used,
-                    "fit_success": model.success,
-                    "fit_message": str(model.message),
+                    "t0": t0,
+                    "x0": x0,
+                    "x1": x1,
+                    "c": c,
+                    "n_data": object_data_df.height,
                     "n_withheld_points": withheld_object_df.height,
-                    "n_excess_points": (
-                        withheld_object_df.filter(pl.col("significant_excess")).height
-                    ),
+                    "n_excess_points": significant_points.height,
                     "n_excess_nights": excess_nights,
                     "early_excess": is_early_excess,
+                    "reconstruction_success": True,
+                    "message": "SALT3 model reconstructed",
                 }
             )
 
             if plot_output_path is not None:
                 sncosmo.plot_lc(
                     data,
-                    model=fitted_model,
-                    errors=model.errors,
+                    model=model,
                 )
 
                 plt.savefig(
@@ -450,29 +446,22 @@ def eex_salt_fits_with_mask(
 
         except Exception as error:
             print(f"{object_id}: {type(error).__name__}: {error}")
+
             results.append(
                 {
                     "r:diaObjectId": object_id,
                     "z_used": z_used,
-                    "t0": None,
-                    "t0_err": None,
-                    "x0": None,
-                    "x0_err": None,
-                    "x1": None,
-                    "x1_err": None,
-                    "c": None,
-                    "c_err": None,
-                    "chi2": None,
-                    "ndof": None,
-                    "reduced_chi2": None,
-                    "n_fit_data": len(data),
-                    "n_used": 0,
-                    "fit_success": False,
-                    "fit_message": str(error),
+                    "t0": t0,
+                    "x0": x0,
+                    "x1": x1,
+                    "c": c,
+                    "n_data": object_data_df.height,
                     "n_withheld_points": 0,
                     "n_excess_points": 0,
                     "n_excess_nights": 0,
                     "early_excess": False,
+                    "reconstruction_success": False,
+                    "message": str(error),
                 }
             )
 
