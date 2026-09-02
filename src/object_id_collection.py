@@ -19,9 +19,10 @@ TAGS = [
 ]
 
 # To query just the latest alerts from the API
-STARTDATE = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
-STOPDATE  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
-
+# STARTDATE = (datetime.now(tz=timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+# STOPDATE  = (datetime.now(tz=timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+STARTDATE = "2025-10-24"
+STOPDATE = "2026-07-16"
 # To limit the number of alerts we query for so that we can get full alert volume from the tags and not be limited.
 N_ALERTS = 100000
 
