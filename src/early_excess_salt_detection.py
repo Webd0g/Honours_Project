@@ -12,7 +12,7 @@ from salt_selection_cuts import get_salt3_fitted_bands
 
 
 def loading_light_curve_data_and_objects(
-    object_path: Path, light_curve_data_path: Path
+    objects_path: Path, light_curve_data_path: Path
 ) -> pl.DataFrame:
     """This function loads the dataframes for the objects from a CSV file and the light curve data for those objects in the CSV file.
 
@@ -24,16 +24,27 @@ def loading_light_curve_data_and_objects(
         pl.DataFrame: The returned polars dataframe that contains the light curve data for the objects and the list of objects themselves.
     """
 
-    objects = pl.read_csv(
-        object_path,
+    objects_df = pl.read_csv(
+        objects_path,
         schema_overrides={
             "r:diaObjectId": pl.String,
-            "z_used": pl.Float64,
-            "t0": pl.Float64,
+            "z_usedt0": pl.Float64,
             "x0": pl.Float64,
             "x1": pl.Float64,
             "c": pl.Float64,
         },
+    ).filter(
+        pl.col("z_used").is_not_null()
+        & pl.col("z_used").is_finite()
+        & (pl.col("z_used") > 0)
+        & pl.col("t0").is_not_null()
+        & pl.col("t0").is_finite()
+        & pl.col("x0").is_not_null()
+        & pl.col("x0").is_finite()
+        & pl.col("x1").is_not_null()
+        & pl.col("x1").is_finite()
+        & pl.col("c").is_not_null()
+        & pl.col("c").is_finite()
     )
 
     light_curve_data = (
@@ -50,7 +61,7 @@ def loading_light_curve_data_and_objects(
         )
         .with_columns(pl.col("r:diaObjectId").cast(pl.String))
         .filter(
-            pl.col("r:diaObjectId").is_in(objects["r:diaObjectId"])
+            pl.col("r:diaObjectId").is_in(objects_df["r:diaObjectId"])
             & pl.col("r:psfFlux").is_finite()
             & pl.col("r:psfFluxErr").is_finite()
             & pl.col("r:midpointMjdTai").is_finite()
@@ -59,9 +70,20 @@ def loading_light_curve_data_and_objects(
     )
 
     light_curve_data = light_curve_data.join(
-        objects.select("r:diaObjectId", "z_used", "t0", "x0", "x1", "c"),
+        objects_df.select(
+            "r:diaObjectId",
+            "z_used",
+            "t0",
+            "x0",
+            "x1",
+            "c",
+        ),
         on="r:diaObjectId",
         how="inner",
+    )
+
+    print(
+        "Objects entering the EEx search:", light_curve_data["r:diaObjectId"].n_unique()
     )
 
     return light_curve_data
@@ -241,12 +263,16 @@ def find_first_detection(nightly_data: pl.DataFrame) -> pl.DataFrame:
         )
     )
 
+    print("Objects with t_fd:", first_detections["r:diaObjectId"].n_unique())
+
     return first_detections
 
 
 def eex_salt_fits_with_mask(
     object_df: pl.DataFrame,
-    salt_fit_output_path: Path | None = None,
+    pass_output_path: Path | None = None,
+    fail_output_path: Path | None = None,
+    values_output_path: Path | None = None,
     pull_output_path: Path | None = None,
     plot_output_path: Path | None = None,
 ) -> pl.DataFrame:
@@ -293,6 +319,7 @@ def eex_salt_fits_with_mask(
         x0 = group_df["x0"].item(0)
         x1 = group_df["x1"].item(0)
         c = group_df["c"].item(0)
+        t_fd = group_df["t_fd"].item(0)
 
         model = sncosmo.Model(source="salt3")
 
@@ -314,6 +341,7 @@ def eex_salt_fits_with_mask(
                     "x0": x0,
                     "x1": x1,
                     "c": c,
+                    "t_fd": t_fd,
                     "n_data": 0,
                     "n_withheld_points": 0,
                     "n_excess_points": 0,
@@ -421,6 +449,7 @@ def eex_salt_fits_with_mask(
                     "x0": x0,
                     "x1": x1,
                     "c": c,
+                    "t_fd": t_fd,
                     "n_data": object_data_df.height,
                     "n_withheld_points": withheld_object_df.height,
                     "n_excess_points": significant_points.height,
@@ -455,6 +484,7 @@ def eex_salt_fits_with_mask(
                     "x0": x0,
                     "x1": x1,
                     "c": c,
+                    "t_fd": t_fd,
                     "n_data": object_data_df.height,
                     "n_withheld_points": 0,
                     "n_excess_points": 0,
@@ -468,8 +498,14 @@ def eex_salt_fits_with_mask(
     results_df = pl.DataFrame(results)
     pull_results_df = pl.DataFrame(pull_results)
 
-    if salt_fit_output_path is not None:
-        results_df.write_csv(salt_fit_output_path)
+    if pass_output_path is not None:
+        results_df.filter(pl.col("early_excess")).write_csv(pass_output_path)
+
+    if fail_output_path is not None:
+        results_df.filter(~pl.col("early_excess")).write_csv(fail_output_path)
+
+    if values_output_path is not None:
+        results_df.write_csv(values_output_path)
 
     if pull_output_path is not None:
         pull_results_df.write_csv(pull_output_path)
@@ -477,67 +513,101 @@ def eex_salt_fits_with_mask(
     return results_df
 
 
+def plot_eex_salt_candidate_diagnostic(
+    object_df_path: Path, plot_output_path: Path | None = None
+) -> None:
+    """Generate the custom plot for the few SALT EEx objects that were succesfully detected.
+
+    Args:
+        object_df_path (Path): Path to the CSV that hosts the passing objects.
+        plot_output_path (Path | None, optional): Path to where the plot will go when made. Defaults to None.
+    """
+
+    band_map = {
+        "u": "lsstu",
+        "g": "lsstg",
+        "r": "lsstr",
+        "i": "lssti",
+        "z": "lsstz",
+        "y": "lssty",
+    }
+
+    BAND_COLORS = {
+        "u": "blue",
+        "g": "dodgerblue",
+        "r": "mediumspringgreen",
+        "i": "gold",
+        "z": "orangered",
+        "y": "firebrick",
+    }
+
+    object_df = pl.read_csv(
+        object_df_path,
+        schema_overrides={
+            "diaObjectId": pl.String,
+            "z_used" : pl.Float64,
+            "t0": pl.Float64,
+            "x0": pl.Float64,
+            "x1": pl.Float64,
+            "c": pl.Float64,
+            "t_fd": pl.Float64,
+        },
+    )
+
+    groups = {
+        key[0]: group_df.sort("r:midpointMjdTai")
+        for key, group_df in object_df.group_by(
+            "r:diaObjectId",
+            maintain_order=True,
+        )
+    }
+
+    print (groups)
+
+
 if __name__ == "__main__":
+    PROJECT_ROOT = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+    )
+
+    DATA_DIR = PROJECT_ROOT / "data"
+
+    IMAGE_DIR = PROJECT_ROOT / "images"
+
     OBJECTS_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_z_results"
-        / "colour_stretch_results"
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "colour_stretch_cuts_results"
         / "pass.csv"
     )
 
     LIGHT_CURVE_DATA_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    EEX_SALT_RESULTS_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "eex_results"
-        / "salt_method"
-        / "colour_stretch_results_test"
-        / "salt3_fits.csv"
+    EEX_PASS_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "pass.csv"
+    )
+
+    EEX_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "fail.csv"
+    )
+
+    EEX_VALUES_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
     )
 
     EEX_PULL_RESULTS_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
+        DATA_DIR
         / "eex_results"
         / "salt_method"
-        / "colour_stretch_results_test"
+        / "eex_cut_results"
         / "pull_results.csv"
     )
 
     EEX_SALT_PLOTS_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "early_excess_plots"
-        / "salt_plots"
-        / "colour_stretch_results_test"
+        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results"
     )
 
     light_curve_data = loading_light_curve_data_and_objects(
@@ -562,7 +632,11 @@ if __name__ == "__main__":
     )
     results = eex_salt_fits_with_mask(
         light_curve_data,
-        salt_fit_output_path=EEX_SALT_RESULTS_PATH,
+        pass_output_path=EEX_PASS_OUTPUT_PATH,
+        fail_output_path=EEX_FAIL_OUTPUT_PATH,
+        values_output_path=EEX_VALUES_OUTPUT_PATH,
         pull_output_path=EEX_PULL_RESULTS_PATH,
         plot_output_path=EEX_SALT_PLOTS_PATH,
     )
+
+    print(results.group_by("early_excess").len())
