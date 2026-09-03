@@ -352,7 +352,7 @@ def plot_salt_phase_diagnostic(
             va="center",
         )
 
-        fig.savefig(output_dir + "/" + f"{object_id}_phase_diagnostic.png")
+        fig.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
         plt.close(fig)
 
 
@@ -399,7 +399,7 @@ def get_salt3_fitted_bands(
 
 
 def bazin_salt_chi2_cut(
-    salt_quality_path: Path,
+    phase_cuts_path: Path,
     light_curve_data_path: Path,
     values_output_path: Path,
     pass_output_path: Path,
@@ -432,7 +432,7 @@ def bazin_salt_chi2_cut(
     # ------------------------------------------------------------
 
     objects_df = pl.read_csv(
-        salt_quality_path,
+        phase_cuts_path,
         schema_overrides={
             "r:diaObjectId": pl.String,
         },
@@ -764,152 +764,18 @@ def unfitted_band_chi2(
 
 
 if __name__ == "__main__":
-    WITH_PHOTOZ_TEST_OBJECTS = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
-        / "salt_fit_values.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    LIGHT_CURVE_DATA = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    OBJECTS_PATH = (
+        DATA_DIR / "eex_results" / "salt_method" / "phase_cuts_results" / "pass.csv"
     )
 
-    TEST_PHASE_PASS_OUTPUT = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
-        / "phase_cuts_results"
-        / "pass.csv"
-    )
-
-    TEST_PHASE_FAIL_OUTPUT = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
-        / "phase_cuts_results"
-        / "fail.csv"
-    )
-
-    TEST_PHASE_VALUES_OUTPUT = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
-        / "phase_cuts_results"
-        / "salt_phase_cuts_values.csv"
-    )
-
-    PASS_PHASE_CUT_PLOT_OUTPUT_DIR = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "salt_plots"
-        / "phase_cuts"
-        / "pass"
-    )
-
-    FAIL_PHASE_CUT_PLOT_OUTPUT_DIR = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "salt_plots"
-        / "phase_cuts"
-        / "fail"
-    )
-
-    CHI2_VALUES_OUTPUT_DIR = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
-        / "chi2_results"
-        / "values.csv"
-    )
-
-    CHI2_PASS_OUTPUT_DIR = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
-        / "chi2_results"
-        / "pass.csv"
-    )
-
-    CHI2_FAIL_OUTPUT_DIR = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
-        / "chi2_results"
-        / "fail.csv"
-    )
-
-    # bazin_salt_phase_cut(
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/salt_fit_values.csv",
-    #     LIGHT_CURVE_DATA,
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/pass.csv",
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/fail.csv",
-    #     "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/values.csv",
-    # )
-
-    # plot_salt_phase_diagnostic(
-    #     phase_results_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/fail.csv",
-    #     light_curve_data_path=LIGHT_CURVE_DATA,
-    #     output_dir="/home/riley/Documents/University/Honours/Honours_Project/images/salt_plots/phase_cuts/fail",
-    # )
-
-    # pl.Config.set_tbl_rows(-1)
-    # # print(results)
-
-    result = bazin_salt_chi2_cut(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/phase_cuts_results/pass.csv",
-        LIGHT_CURVE_DATA,
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/chi2_results/values.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/chi2_results/pass.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/chi2_results/fail.csv",
+    LIGHT_CURVE_DATA_PATH = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )

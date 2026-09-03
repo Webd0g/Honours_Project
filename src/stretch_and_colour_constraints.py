@@ -46,113 +46,14 @@ def colour_stretch_cut(
 
 
 if __name__ == "__main__":
-    TEST_OBJECT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "50_object_test"
-        / "chi2_requirements_results"
-        / "pass.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    TEST_PASS_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "50_object_test"
-        / "colour_stretch_results"
-        / "pass.csv"
-    )
+    DATA_DIR = PROJECT_DIR / "data"
 
-    TEST_FAIL_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "50_object_test"
-        / "colour_stretch_results"
-        / "fail.csv"
-    )
+    IMAGE_DIR = PROJECT_DIR / "images"
 
-    TEST_VALUES_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "50_object_test"
-        / "colour_stretch_results"
-        / "values.csv"
-    )
-
-    OBJECT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz"
-        / "chi2_results"
-        / "pass.csv"
-    )
-
-    PASS_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz"
-        / "colour_stretch_results"
-        / "pass.csv"
-    )
-
-    FAIL_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz"
-        / "colour_stretch_results"
-        / "fail.csv"
-    )
-
-    VALUES_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz"
-        / "colour_stretch_results"
-        / "values.csv"
-    )
-
-    colour_stretch_cut(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/chi2_results/pass.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/colour_stretch_results/pass.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/colour_stretch_results/fail.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/with_z_results/colour_stretch_results/values.csv",
+    OBJECTS_PATH = (
+        DATA_DIR / "eex_results" / "salt_method" / "chi2_cuts_results" / "pass.csv"
     )
