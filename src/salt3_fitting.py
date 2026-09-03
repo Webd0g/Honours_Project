@@ -291,31 +291,23 @@ def many_object_salt3_fits(
     while redshift is allowed to vary within +/- 2 host photo-z uncertainties.
     """
 
-    objects_df = (
-        pl.read_csv(
-            objects_path,
-            schema_overrides={
-                "r:diaObjectId": pl.String,
-                "redshift": pl.Float64,
-                "host_photoz": pl.Float64,
-                "host_photoz_err": pl.Float64,
-            },
-        )
-        .with_columns(
-            pl.when(pl.col("redshift").is_not_null() & pl.col("redshift").is_finite())
-            .then(pl.col("redshift"))
-            .otherwise(pl.col("host_photoz"))
-            .alias("z_used"),
-            pl.when(pl.col("redshift").is_not_null() & pl.col("redshift").is_finite())
-            .then(pl.lit("spectroscopic"))
-            .otherwise(pl.lit("host_photoz"))
-            .alias("z_source"),
-        )
-        .filter(
-            pl.col("z_used").is_not_null()
-            & pl.col("z_used").is_finite()
-            & (pl.col("z_used") > 0)
-        )
+    objects_df = pl.read_csv(
+        objects_path,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "z_used": pl.Float64,
+            "host_photoz": pl.Float64,
+            "host_photoz_err": pl.Float64,
+            "spec_z": pl.Float64,
+            "t0": pl.Float64,
+        },
+    ).filter(
+        pl.col("fit_success")
+        & pl.col("z_used").is_not_null()
+        & pl.col("z_used").is_finite()
+        & (pl.col("z_used") > 0)
+        & pl.col("t0").is_not_null()
+        & pl.col("t0").is_finite()
     )
     light_curve_data = (
         pl.read_parquet(light_curve_data_path)
@@ -357,6 +349,7 @@ def many_object_salt3_fits(
         object_id = row["r:diaObjectId"]
         redshift = row["z_used"]
         z_source = row["z_source"]
+        old_t0 = row["t0"]
 
         # ----------------------------------------------------------
         # Require host photo-z information
@@ -372,7 +365,8 @@ def many_object_salt3_fits(
                     "z_source": z_source,
                     "host_photoz": row["host_photoz"],
                     "host_photoz_err": row["host_photoz_err"],
-                    "spec_z": row["redshift"],
+                    "spec_z": row["spec_z"],
+                    "old_t0": old_t0,
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -384,7 +378,8 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_total_data": group_df.height,
+                    "n_total_data": 0,
+                    "n_phase_data": 0,
                     "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
@@ -393,13 +388,25 @@ def many_object_salt3_fits(
             )
             continue
 
+        n_total_data = group_df.height
+
         # ----------------------------------------------------------
         # Initialise t0 using observed i-band maximum
         # ----------------------------------------------------------
 
-        i_band = group_df.filter(pl.col("r:band") == "i")
+        group_df = group_df.with_columns(
+            ((pl.col("r:midpointMjdTai") - old_t0) / (1.0 + redshift)).alias(
+                "rest_frame_phase"
+            )
+        )
 
-        if i_band.height == 0:
+        group_df = group_df.filter(
+            (pl.col("rest_frame_phase") >= -10) & (pl.col("rest_frame_phase") <= 40)
+        )
+
+        n_phase_data = group_df.height
+
+        if n_phase_data == 0:
             results.append(
                 {
                     "r:diaObjectId": object_id,
@@ -407,7 +414,8 @@ def many_object_salt3_fits(
                     "z_source": z_source,
                     "host_photoz": row["host_photoz"],
                     "host_photoz_err": row["host_photoz_err"],
-                    "spec_z": row["redshift"],
+                    "spec_z": row["spec_z"],
+                    "old_t0": old_t0,
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -419,16 +427,15 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_total_data": group_df.height,
+                    "n_total_data": 0,
+                    "n_phase_data": 0,
                     "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
-                    "fit_message": "No i-band data",
+                    "fit_message": "No light-curve data",
                 }
             )
             continue
-
-        peak_mjd = i_band.sort("r:psfFlux", descending=True)["r:midpointMjdTai"].item(0)
 
         # ----------------------------------------------------------
         # Convert Rubin bands to SNCosmo bands
@@ -453,7 +460,7 @@ def many_object_salt3_fits(
                     "z_source": z_source,
                     "host_photoz": row["host_photoz"],
                     "host_photoz_err": row["host_photoz_err"],
-                    "spec_z": row["redshift"],
+                    "spec_z": row["spec_z"],
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -465,7 +472,8 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_total_data": group_df.height,
+                    "n_total_data": n_total_data,
+                    "n_phase_data": n_phase_data,
                     "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
@@ -500,7 +508,10 @@ def many_object_salt3_fits(
         #     # z_max = 2.00
         try:
             # Initial guess is the host photo-z.
-            model.set(z=redshift)
+            model.set(
+                z=redshift,
+                t0=old_t0,
+            )
 
             result, fitted_model = sncosmo.fit_lc(
                 data,
@@ -508,8 +519,8 @@ def many_object_salt3_fits(
                 ["t0", "x0", "x1", "c"],
                 bounds={
                     "t0": (
-                        peak_mjd - 30,
-                        peak_mjd + 30,
+                        old_t0 - 30,
+                        old_t0 + 30,
                     ),
                     "x1": (-5, 5),
                     "c": (-0.5, 0.5),
@@ -529,7 +540,7 @@ def many_object_salt3_fits(
                     "z_source": z_source,
                     "host_photoz": row["host_photoz"],
                     "host_photoz_err": row["host_photoz_err"],
-                    "spec_z": row["redshift"],
+                    "spec_z": row["spec_z"],
                     # SALT parameters
                     "t0": fitted_model["t0"],
                     "t0_err": result.errors.get("t0"),
@@ -543,7 +554,8 @@ def many_object_salt3_fits(
                     "chi2": result.chisq,
                     "ndof": result.ndof,
                     "reduced_chi2": reduced_chi2,
-                    "n_total_data": group_df.height,
+                    "n_total_data": n_total_data,
+                    "n_phase_data": n_phase_data,
                     "n_fit_data": len(data),
                     "n_used": n_used,
                     "fit_success": result.success,
@@ -558,18 +570,19 @@ def many_object_salt3_fits(
                 }
             )
 
-            sncosmo.plot_lc(
-                data,
-                model=fitted_model,
-                errors=result.errors,
-            )
+            if plot_output_path is not None:
+                sncosmo.plot_lc(
+                    data,
+                    model=fitted_model,
+                    errors=result.errors,
+                )
 
-            plt.savefig(
-                plot_output_path / f"{object_id}_SALT3.png",
-                bbox_inches="tight",
-            )
+                plt.savefig(
+                    plot_output_path / f"{object_id}_SALT3.png",
+                    bbox_inches="tight",
+                )
 
-            plt.close()
+                plt.close()
 
         except Exception as error:
             results.append(
@@ -579,7 +592,7 @@ def many_object_salt3_fits(
                     "z_source": z_source,
                     "host_photoz": row["host_photoz"],
                     "host_photoz_err": row["host_photoz_err"],
-                    "spec_z": row["redshift"],
+                    "spec_z": row["spec_z"],
                     "t0": None,
                     "t0_err": None,
                     "x0": None,
@@ -591,7 +604,8 @@ def many_object_salt3_fits(
                     "chi2": None,
                     "ndof": None,
                     "reduced_chi2": None,
-                    "n_total_data": group_df.height,
+                    "n_total_data": n_total_data,
+                    "n_phase_data": n_phase_data,
                     "n_fit_data": 0,
                     "n_used": 0,
                     "fit_success": False,
@@ -607,92 +621,41 @@ def many_object_salt3_fits(
 
 
 if __name__ == "__main__":
-    GET_REDSHIFT_INPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "fitted_peak_timing_results"
-        / "pass.csv"
+    PROJECT_ROOT = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    GET_REDSHIFT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
+    DATA_DIR = PROJECT_ROOT / "data"
+
+    IMAGE_DIR = PROJECT_ROOT / "images"
+
+    OBJECTS_PATH = (
+        DATA_DIR
         / "salt_fitting"
-        / "objects_with_z.csv"
-    )
-
-    OBJECT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "objects_with_host_z.csv"
-    )
-
-    LIGHT_CURVE_DATA_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
-    )
-
-    WITH_PHOTO_Z_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "with_hostz_results"
+        / "ia_search"
+        / "with_z_results"
         / "salt_fit_values.csv"
     )
 
-    WITH_PHOTO_Z_PLOTS_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "salt_plots"
-        / "with_photo_z_plots"
-        / "sample_v2_702_objects"
+    LIGHT_CURVE_DATA_PATH = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
-    # result, fitted_model = single_object_salt3_fit_test(
-    #     TEST_OBJECT, LIGHT_CURVE_DATA_PATH, PLOT_OUTPUT_PATH
-    # )
 
-    # get_host_photoz_from_fink(GET_REDSHIFT_INPUT_PATH, GET_REDSHIFT_OUTPUT_PATH)
+    EEX_SALT_RESULTS_PATH = (
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "salt_fits"
+        / "salt_fit_values.csv"
+    )
+
+    EEX_SALT_PLOTS_PATH = (
+        IMAGE_DIR / "salt_plots" / "eex_search" / "salt_fits"
+    )
 
     results = many_object_salt3_fits(
-        objects_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/core_collapse_results/confirmed_CC_SN_tns.csv",
+        objects_path=OBJECTS_PATH,
         light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-        output_path="/home/riley/Documents/University/Honours/Honours_Project/data/salt_fitting/core_collapse_results/salt_fit_values.csv",
-        plot_output_path=Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "salt_plots"
-        / "confirmed_cc",
+        output_path=EEX_SALT_RESULTS_PATH,
+        plot_output_path=EEX_SALT_PLOTS_PATH,
     )
-
-    # pl.Config.set_tbl_cols(-1)
-    # print(confirmed_ia_results.describe([0.25, 0.5, 0.75]))
