@@ -50,12 +50,41 @@ def find_fifty_per_cent_time(
     ).with_columns(pl.col("r:midpointMjdTai").alias("peak_mjd"))
 
     # Join the df that contains the peak info and the df with all the objects in it.
-    df = fifty_per_cent_g_band_df.join(peak_df, on="r:diaObjectId", how="left")
+    peak_df = fifty_per_cent_g_band_df.join(
+        peak_df.select("r:diaObjectId", "peak_mjd"), on="r:diaObjectId", how="left"
+    )
 
-    # Filtr to retain only the points for the objects that are before the peak flux in g band.
-    rise_df = df.filter(pl.col("r:midpointMjdTai") < pl.col("peak_mjd"))
+    difference_df = peak_df.with_columns(
+        (pl.col("r:psfFlux") - pl.col("50_per_cent_peak_g_flux"))
+        .abs()
+        .alias("delta_flux")
+    ).sort(["r:diaObjectId", "r:midpointMjdTai"])
 
-    difference_df = rise_df.with_columns(pl.col("r:psfFlux") - pl.col("50_per_cent_peak_g_flux"))
+    difference_df = difference_df.with_columns(
+        pl.col("r:psfFlux").shift(1).over("r:diaObjectId").alias("previous_flux")
+    )
+
+    difference_df = difference_df.with_columns(
+        pl.col("r:psfFlux").shift(-1).over("r:diaObjectId").alias("next_flux")
+    )
+
+    # Filter to retain only the points for the objects that are before the peak flux in g band.
+    rise_df = difference_df.filter(pl.col("r:midpointMjdTai") < pl.col("peak_mjd"))
+
+    fifty_per_cent_point_df = rise_df.with_columns(
+        pl.col("delta_flux").min().over("r:diaObjectId").alias("min_abs_delta_flux")
+    )
+
+    filtered_df = fifty_per_cent_point_df.filter(
+        (pl.col("previous_flux") < pl.col("r:psfFlux"))
+        & (pl.col("next_flux") > pl.col("r:psfFlux"))
+    )
+
+    # Here we find where the delta flux is the smallest value over each diaObjectId, however it only finds 14 rows?
+    print(filtered_df.filter((pl.col("delta_flux") == pl.col("min_abs_delta_flux")).over("r:diaObjectId")))
+    pl.Config.set_tbl_rows(-1)
+    print (filtered_df.filter(pl.col("r:diaObjectId").is_unique()))
+
 
 if __name__ == "__main__":
     PROJECT_DIR = (
