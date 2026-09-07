@@ -27,9 +27,35 @@ def fifty_percent_flux_calculation(
         pl.col("r:psfFlux").max().over("r:diaObjectId").alias("peak_g_band_flux")
     )
 
-    g_band_df = g_band_df.with_columns((pl.col("peak_g_band_flux") * 0.5).alias("50_per_cent_peak_g_flux"))
+    g_band_df = g_band_df.with_columns(
+        (pl.col("peak_g_band_flux") * 0.5).alias("50_per_cent_peak_g_flux")
+    )
 
-    print (g_band_df)
+    return g_band_df
+
+
+def find_fifty_per_cent_time(
+    fifty_per_cent_g_band_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Here we find the midpointMjdTai that aligns closest with the quantity of the 50 % flux column.
+
+    Args:
+        fifty_per_cent_g_band_df (pl.DataFrame): The polars dataframe that has all the data from the fifty per cent g band flux calcualtion.
+    Returns:
+        pl.DataFrame: Returns the dataframe that was passed to this function with a new column identifying the epoch that is closest to the 50 per cent peak flux calculation.
+    """
+    # Finding the peak row so we can track the MJD for that peak.
+    peak_df = fifty_per_cent_g_band_df.filter(
+        pl.col("r:psfFlux") == pl.col("peak_g_band_flux")
+    ).with_columns(pl.col("r:midpointMjdTai").alias("peak_mjd"))
+
+    # Join the df that contains the peak info and the df with all the objects in it.
+    df = fifty_per_cent_g_band_df.join(peak_df, on="r:diaObjectId", how="left")
+
+    # Filtr to retain only the points for the objects that are before the peak flux in g band.
+    rise_df = df.filter(pl.col("r:midpointMjdTai") < pl.col("peak_mjd"))
+
+    difference_df = rise_df.with_columns(pl.col("r:psfFlux") - pl.col("50_per_cent_peak_g_flux"))
 
 if __name__ == "__main__":
     PROJECT_DIR = (
@@ -53,6 +79,8 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    fifty_percent_flux_calculation(
+    result = fifty_percent_flux_calculation(
         objects_path=OBJECT_DIR, light_curve_data_path=LIGHT_CURVE_DATA_DIR
     )
+
+    find_fifty_per_cent_time(result)
