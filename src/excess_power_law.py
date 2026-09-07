@@ -17,12 +17,19 @@ def fifty_percent_flux_calculation(
     Returns:
         pl.DataFrame: Returns a dataframe with an new column that is the mjd time where the observed flux is 50 per cent of the peak in the g band.
     """
-
+    # Reading and loading the light curve data and finding the light curve data that matches the objects that we have loaded in.
     light_curve_data = loading_light_curve_data_and_objects(
         objects_path=objects_path, light_curve_data_path=light_curve_data_path
     )
-    print(light_curve_data)
 
+    # Getting only the g band detections and finding the peak g band flux for each object.
+    g_band_df = light_curve_data.filter(pl.col("r:band") == "g").with_columns(
+        pl.col("r:psfFlux").max().over("r:diaObjectId").alias("peak_g_band_flux")
+    )
+
+    g_band_df = g_band_df.with_columns((pl.col("peak_g_band_flux") * 0.5).alias("50_per_cent_peak_g_flux"))
+
+    print (g_band_df)
 
 if __name__ == "__main__":
     PROJECT_DIR = (

@@ -24,7 +24,7 @@ TAGS = [
 STARTDATE = "2025-10-24"
 STOPDATE = "2026-07-16"
 # To limit the number of alerts we query for so that we can get full alert volume from the tags and not be limited.
-N_ALERTS = 100000
+N_ALERTS = 500000
 
 def fetch_tag_with_fallback(tag: str, startdate: str, stopdate: str) -> list:
     """
