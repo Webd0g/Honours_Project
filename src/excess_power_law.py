@@ -1,5 +1,7 @@
 from pathlib import Path
+from scipy.optimize import least_squares
 
+import numpy as np
 import polars as pl
 
 from early_excess_salt_detection import loading_light_curve_data_and_objects
@@ -176,13 +178,156 @@ def keep_observations_upto_t50(
 
     t50_df = reference_df
 
-    light_curve_data = light_curve_data.join(
-        t50_df, on="r:diaObjectId", how="inner"
-    ).filter(
-        pl.col("r:midpointMjdTai") <= pl.col("t50_mjd"),
-    ).select(["r:diaObjectId", "r:band", "r:midpointMjdTai", "r:psfFlux", "r:psfFluxErr", "t50_mjd"])
+    filtered_light_curve_data = (
+        light_curve_data.join(t50_df, on="r:diaObjectId", how="inner")
+        .filter(
+            pl.col("r:midpointMjdTai") <= pl.col("t50_mjd"),
+        )
+        .select(
+            [
+                "r:diaObjectId",
+                "r:band",
+                "r:midpointMjdTai",
+                "r:psfFlux",
+                "r:psfFluxErr",
+                "t50_mjd",
+            ]
+        )
+    )
 
-    print(light_curve_data.select("r:diaObjectId").n_unique())
+    return filtered_light_curve_data
+
+
+def power_law_evaluator():
+    """_summary_
+
+    Args:
+        filtered_light_curve_data (pl.DataFrame): _description_
+
+    Returns:
+        pl.DataFrame: _description_
+    """
+
+    A_g = 2
+
+    alpha_g = 2
+
+    t_fl = 100
+
+    amplitudes = {
+        "g": A_g,
+        # "r": A_r,
+        # "i": A_i,
+        # "z": A_z,
+    }
+
+    alphas = {
+        "g": alpha_g,
+        # "r": alpha_r,
+        # "i": alpha_i,
+        # "z": alpha_z,
+    }
+
+    times = np.linspace(95, 110, 50)
+
+    after_first_light = times >= t_fl
+
+    g_band_flux = np.zeros_like(times)
+
+    g_band_flux[after_first_light] = (
+        amplitudes["g"] * (times[after_first_light] - t_fl) ** alphas["g"]
+    )
+
+    print(g_band_flux)
+
+
+def power_law_model(
+    times,
+    t_fl,
+    A_prime,
+    alpha,
+):
+    model_flux = np.zeros_like(
+        times,
+        dtype=float,
+    )
+
+    A = A_prime * 10 ** (-alpha)
+
+    after_first_light = times >= t_fl
+
+    model_flux[after_first_light] = A * (times[after_first_light] - t_fl) ** alpha
+
+    return model_flux
+
+
+def log_prior(theta, t_fd):
+    t_fl, A_prime, alpha = theta
+
+    if not (-100 < t_fl < t_fd):
+        return -np.inf
+
+    if A_prime <= 0:
+        return -np.inf
+
+    if not (1 < alpha < 1e8):
+        return -np.inf
+
+    return -np.log(A_prime) - alpha * np.log(10)
+
+
+def log_likelihood(theta, times, flux, flux_err):
+    t_fl, A_prime, alpha = theta
+
+    model_flux = power_law_model(
+        times,
+        t_fl,
+        A_prime,
+        alpha,
+    )
+
+    residual = flux - model_flux
+
+    return -0.5 * np.sum((residual / flux_err) ** 2 + np.log(2 * np.pi * flux_err**2))
+
+def log_probability(theta, times, flux, flux_err, t_fd):
+    lp = log_prior(theta, t_fd)
+
+    if not np.isfinite(lp):
+        return -np.inf
+
+    return lp + log_likelihood(
+        theta,
+        times,
+        flux,
+        flux_err,
+    )
+
+
+def residuals(
+    params,
+    times,
+    flux,
+    flux_err,
+):
+    (
+        t_fl,
+        A,
+        alpha,
+    ) = params
+
+    model_flux = power_law_model(
+        times=times,
+        t_fl=t_fl,
+        A=A,
+        alpha=alpha,
+    )
+
+    return (flux - model_flux) / flux_err
+
+
+def powerlaw_fitting():
+    """_summary_"""
 
 
 if __name__ == "__main__":
@@ -203,6 +348,14 @@ if __name__ == "__main__":
         / "pass.csv"
     )
 
+    TEST_OBJECT_DIR = (
+        DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "testing_results"
+        / "test_object.csv"
+    )
+
     LIGHT_CURVE_DATA_DIR = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
@@ -212,14 +365,27 @@ if __name__ == "__main__":
         "i",
     ]
 
-    result = iterate_over_bands(
-        objects_dir=OBJECT_DIR,
-        light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
-        bands=BANDS,
-    )
+    # result = iterate_over_bands(
+    #     objects_dir=OBJECT_DIR,
+    #     light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
+    #     bands=BANDS,
+    # )
 
-    keep_observations_upto_t50(
-        objects=OBJECT_DIR,
-        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-        reference_df=result,
+    # keep_observations_upto_t50(
+    #     objects=OBJECT_DIR,
+    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+    #     reference_df=result,
+    # )
+
+    print(
+        power_law_model(
+            times=np.linspace(
+                95,
+                110,
+                50,
+            ),
+            t_fl=100,
+            A_prime=2,
+            alpha=2,
+        )
     )
