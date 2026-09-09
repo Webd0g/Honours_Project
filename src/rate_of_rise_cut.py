@@ -454,15 +454,15 @@ if __name__ == "__main__":
     #     output_path_failed=II_FAIL_OUTPUT_PATH,
     # )
 
-    batch_plotter(
-        object_path=II_FAIL_OUTPUT_PATH,
-        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-        output_path=II_FAIL_PLOT_OUTPUT,
-    )
-
-    # bar_chart_pass_fractions(
-    #     passing_ia_objects=IA_PASS_OUTPUT_PATH,
-    #     failing_ia_objects=IA_FAIL_OUTPUT_PATH,
-    #     passing_ii_objects=II_PASS_OUTPUT_PATH,
-    #     failing_ii_objects=II_FAIL_OUTPUT_PATH,
+    # batch_plotter(
+    #     object_path=II_FAIL_OUTPUT_PATH,
+    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+    #     output_path=II_FAIL_PLOT_OUTPUT,
     # )
+
+    bar_chart_pass_fractions(
+        passing_ia_objects=IA_PASS_OUTPUT_PATH,
+        failing_ia_objects=IA_FAIL_OUTPUT_PATH,
+        passing_ii_objects=II_PASS_OUTPUT_PATH,
+        failing_ii_objects=II_FAIL_OUTPUT_PATH,
+    )
