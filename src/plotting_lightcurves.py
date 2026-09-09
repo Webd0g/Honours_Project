@@ -1,13 +1,13 @@
 import io
 from pathlib import Path
 
-from astropy.time import Time
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import requests as re
+from astropy.time import Time
 
-from rate_of_rise_cut import add_night_and_SNR_columns
+from light_curve_utils import add_night_and_SNR_columns
 
 SLOPES_OUTPUT_PATH = (
     Path.home()

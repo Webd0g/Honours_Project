@@ -16,6 +16,8 @@ import pandas as pd
 import polars as pl
 
 from light_curve_plotter import collect_light_curve_data
+from light_curve_utils import add_night_and_SNR_columns
+from plotting_lightcurves import batch_plotter
 
 # Directories for the objects that passed the first filtering done through the tags, second directory is for the output of the rate of rise cut.
 TEST_DIR = (
@@ -125,27 +127,6 @@ def chunked_light_curve_data(candidates: list, chunk_size: int = 500) -> pd.Data
         )
 
     return pd.concat(candidate_results, ignore_index=True)
-
-
-def add_night_and_SNR_columns(band_df: pl.DataFrame) -> pl.DataFrame:
-    """
-    Takes the dataframe of all the bands data and filters it further to
-    one point per night of observation, with that point being the
-    point with the highest SNR.
-
-    This is so that when the slope fitting happens it doesn't fit to
-    points that have been clustered and ensures that the points
-    that are being fit to are actually changing in time.
-    """
-
-    band_df = band_df.with_columns(
-        (pl.col("r:midpointMjdTai").cast(int)).alias("night")
-    )
-    band_df = band_df.with_columns(
-        (pl.col("r:psfFlux") / pl.col("r:psfFluxErr")).alias("SNR")
-    )
-
-    return band_df
 
 
 def slope_calculation(
@@ -284,31 +265,54 @@ def applying_the_rate_of_rise(
 
     return passed, failed
 
+def bar_chart_pass_fractions()
 
 if __name__ == "__main__":
-    CANDIDATES = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sn_ia_test_results"
-        / "confirmed_ia.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
-    LIGHT_CURVE_DATA_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
+
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
-    applying_the_rate_of_rise(
-        CANDIDATES,
-        LIGHT_CURVE_DATA_PATH,
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/rate_of_rise_results/pass.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/rate_of_rise_results/fail.csv",
+
+    IA_OBJECT_PATH = (
+        DATA_DIR / "salt_fitting" / "confirmed_ia_tests" / "confirmed_ia.csv"
+    )
+
+    II_OBJECT_PATH = (
+        DATA_DIR / "salt_fitting" / "core_collapse_results" / "confirmed_CC_SN_tns.csv"
+    )
+
+    II_PASS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "rate_of_rise_results" / "pass.csv"
+    )
+
+    II_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "rate_of_rise_results" / "fail.csv"
+    )
+
+    II_PASS_PLOT_OUTPUT = (
+        IMAGE_DIR / "sn_ii_light_curves" / "rate_of_rise_results" / "pass"
+    )
+
+    II_FAIL_PLOT_OUTPUT = (
+        IMAGE_DIR / "sn_ii_light_curves" / "rate_of_rise_results" / "fail"
+    )
+
+    # applying_the_rate_of_rise(
+    #     object_csv_path=II_OBJECT_PATH,
+    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+    #     output_path_passed=II_PASS_OUTPUT_PATH,
+    #     output_path_failed=II_FAIL_OUTPUT_PATH,
+    # )
+
+    batch_plotter(
+        object_path=II_FAIL_OUTPUT_PATH,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        output_path=II_FAIL_PLOT_OUTPUT,
     )

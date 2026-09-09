@@ -1,18 +1,86 @@
-# Batch plotter for the labelled in_tns objects. This was done so that I can understand what the light curves of a SN Ia looks like. Builds a validation dataset.
-import pandas as pd
-from pathlib import Path
-from light_curve_plotter import lightcurve_plotting
-from light_curve_plotter import collect_light_curve_data
+#!/usr/bin/env python3
 
-# need lightcurve data first retrived from the strings of diaobject ID from the csv files. 
-def batch_plotter(object_ids, chunk_size=500, output_path=Path.home() / "/home/riley/Documents/University/Honours/Honours_Project/images/SN_Ia_lightcurves/passed_rate_of_rise_cuts_results"):
-    for diaObjectId in range(0, len(object_ids), chunk_size):
-        chunk = ",".join(object_ids[diaObjectId:diaObjectId + chunk_size])
-        light_curve_info = collect_light_curve_data(chunk)
-        if light_curve_info is None or light_curve_info.empty:
-            print(f"No light curve data found for chunk starting at index {diaObjectId}.")
+from pathlib import Path
+
+import polars as pl
+
+from light_curve_plotter import lightcurve_plotting
+
+
+def batch_plotter(object_path: Path, light_curve_data_path: Path, output_path: Path):
+    """_summary_
+
+    Args:
+        object_ids (_type_): _description_
+        output_path (Path): _description_
+        chunk_size (int, optional): _description_. Defaults to 500.
+    """
+    object_ids = pl.read_csv(
+        object_path,
+        schema_overrides={"r:diaObjectId": pl.String},
+        columns=["r:diaObjectId"],
+    )["r:diaObjectId"].to_list()
+
+    light_curve_data = pl.read_parquet(light_curve_data_path).with_columns(
+        pl.col("r:diaObjectId").cast(pl.String)
+    )
+    light_curve_data_filtered = light_curve_data.filter(
+        pl.col("r:diaObjectId").is_in(object_ids)
+    )
+
+    groups = {
+        key[0]: group_df
+        for key, group_df in light_curve_data_filtered.group_by(
+            "r:diaObjectId", maintain_order=True
+        )
+    }
+
+    for object_id in object_ids:
+        group_df = groups.get(object_id).filter(pl.col("r:psfFlux") > 0)
+
+        if group_df is None:
+            print(f"Object {object_id} does not have any light curve data.")
             continue
-        for object_id, group_df in light_curve_info.groupby("r:diaObjectId"):
-            object_id = str(object_id)
-            # lightcurve_plotting takes a df, diaObjectId and a source file string as arguments
-            lightcurve_plotting(group_df, object_id, object_id, output_path / f"{object_id}")
+
+        lightcurve_plotting(group_df, object_id, output_path)
+
+
+if __name__ == "__main__":
+    CANDIDATES_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "salt_fitting"
+        / "with_z_results"
+        / "colour_stretch_results"
+        / "pass.csv"
+    )
+
+    LIGHT_CURVE_DATA_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "data"
+        / "light_curve_data"
+        / "combined_light_curve_data.parquet"
+    )
+
+    OUTPUT_PATH = (
+        Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "salt_plots"
+        / "with_z_plots"
+        / "colour_stretch_cuts"
+        / "pass"
+    )
+
+    batch_plotter(CANDIDATES_PATH, LIGHT_CURVE_DATA_PATH, OUTPUT_PATH)
