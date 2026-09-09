@@ -373,7 +373,7 @@ def bar_chart_pass_fractions(
     plt.bar_label(
         bars,
         labels=[
-            f"{n_pass}/{n_total} ({((n_pass / n_total) * 100):.2f})"
+            f"{n_pass}/{n_total} ({((n_pass / n_total) * 100):.2f} %)"
             for n_pass, n_total in zip(
                 summary["n_pass"],
                 summary["n_total"],
