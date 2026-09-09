@@ -11,6 +11,7 @@ pre-peak rise was in a band other than g or r (e.g. i-band for higher redshift S
 
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import polars as pl
@@ -265,7 +266,137 @@ def applying_the_rate_of_rise(
 
     return passed, failed
 
-def bar_chart_pass_fractions()
+
+def bar_chart_pass_fractions(
+    passing_ia_objects: Path,
+    failing_ia_objects: Path,
+    passing_ii_objects: Path,
+    failing_ii_objects: Path,
+    output_path: Path | None = None,
+) -> None:
+    """Creates a bar chart that represents the passing fractions for whatever objects you would like.
+
+    Args:
+        objects (Path): Path to the CSV file of the objects with the pass/fail info with it
+        output_path (Path | None, optional): The path where the plot will be outputted. Defaults to None.
+    """
+
+    passing_ias = pl.read_csv(
+        passing_ia_objects,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+        },
+    ).with_columns(
+        pl.lit("SN Ia").alias("spec_class"),
+        pl.lit(True).alias("rise_slope_pass"),
+    )
+
+    failing_ias = pl.read_csv(
+        failing_ia_objects,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+        },
+    ).with_columns(
+        pl.lit("SN Ia").alias("spec_class"),
+        pl.lit(False).alias("rise_slope_pass"),
+    )
+
+    passing_iis = pl.read_csv(
+        passing_ii_objects,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+        },
+    ).with_columns(
+        pl.lit("SN II").alias("spec_class"),
+        pl.lit(True).alias("rise_slope_pass"),
+    )
+
+    failing_iis = pl.read_csv(
+        failing_ii_objects,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+        },
+    ).with_columns(
+        pl.lit("SN II").alias("spec_class"),
+        pl.lit(False).alias("rise_slope_pass"),
+    )
+
+    combined = pl.concat(
+        [
+            passing_ias,
+            failing_ias,
+            passing_iis,
+            failing_iis,
+        ]
+    )
+
+    summary = (
+        combined.group_by(pl.col("spec_class"))
+        .agg(
+            pl.len().alias("n_total"),
+            pl.col("rise_slope_pass").sum().alias("n_pass"),
+        )
+        .with_columns(
+            (pl.col("n_pass") / pl.col("n_total")).alias("pass_fraction"),
+        )
+    )
+
+    plt.subplots(figsize=(6, 4))
+
+    colours = {
+        "SN Ia": "#0072B2",
+        "SN II": "#D55E00",
+    }
+
+    hatches = {
+        "SN Ia":"//",
+        "SN II":"xx",
+    }
+
+    edgecolours = {
+        "SN Ia": "#05507B",
+        "SN II": "#743504",
+    }
+
+    bars = plt.bar(
+        (
+            summary["spec_class"][0],
+            summary["spec_class"][1],
+        ),
+        summary["pass_fraction"],
+        color=[colours[spec_class] for spec_class in summary["spec_class"]],
+        alpha=0.8,
+        edgecolor=[edgecolours[spec_class] for spec_class in summary["spec_class"]],
+        hatch=[hatches[spec_class] for spec_class in summary["spec_class"]],
+    )
+
+    plt.bar_label(
+        bars,
+        labels=[
+            f"{n_pass}/{n_total} ({((n_pass / n_total) * 100):.2f})"
+            for n_pass, n_total in zip(
+                summary["n_pass"],
+                summary["n_total"],
+            )
+        ],
+        padding=3,
+    )
+
+    plt.grid(
+        axis="y",
+        linestyle="-",
+        color="grey",
+        alpha=1,
+    )
+
+    plt.ylim(0, 1)
+    plt.ylabel("Pass fraction")
+    plt.xlabel("")
+    plt.tight_layout()
+    plt.show()
+    if output_path is not None:
+        plt.savefig(output_path)
+
 
 if __name__ == "__main__":
     PROJECT_DIR = (
@@ -278,14 +409,6 @@ if __name__ == "__main__":
 
     LIGHT_CURVE_DATA_DIR = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
-    )
-
-    IA_OBJECT_PATH = (
-        DATA_DIR / "salt_fitting" / "confirmed_ia_tests" / "confirmed_ia.csv"
-    )
-
-    II_OBJECT_PATH = (
-        DATA_DIR / "salt_fitting" / "core_collapse_results" / "confirmed_CC_SN_tns.csv"
     )
 
     II_PASS_OUTPUT_PATH = (
@@ -304,6 +427,14 @@ if __name__ == "__main__":
         IMAGE_DIR / "sn_ii_light_curves" / "rate_of_rise_results" / "fail"
     )
 
+    IA_PASS_OUPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "pass.csv"
+    )
+
+    IA_FAIL_OUPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "fail.csv"
+    )
+
     # applying_the_rate_of_rise(
     #     object_csv_path=II_OBJECT_PATH,
     #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
@@ -311,8 +442,14 @@ if __name__ == "__main__":
     #     output_path_failed=II_FAIL_OUTPUT_PATH,
     # )
 
-    batch_plotter(
-        object_path=II_FAIL_OUTPUT_PATH,
-        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-        output_path=II_FAIL_PLOT_OUTPUT,
+    # batch_plotter(
+    #     object_path=II_FAIL_OUTPUT_PATH,
+    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+    #     output_path=II_FAIL_PLOT_OUTPUT,
+    # )
+    bar_chart_pass_fractions(
+        passing_ia_objects=IA_PASS_OUPUT_PATH,
+        failing_ia_objects=IA_FAIL_OUPUT_PATH,
+        passing_ii_objects=II_PASS_OUTPUT_PATH,
+        failing_ii_objects=II_FAIL_OUTPUT_PATH,
     )
