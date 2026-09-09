@@ -349,8 +349,8 @@ def bar_chart_pass_fractions(
     }
 
     hatches = {
-        "SN Ia":"//",
-        "SN II":"xx",
+        "SN Ia": "//",
+        "SN II": "xx",
     }
 
     edgecolours = {
@@ -411,6 +411,26 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
+    IA_OBJECT_DIR = DATA_DIR / "sn_ia_test_results" / "confirmed_ia.csv"
+
+    IA_PASS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "pass.csv"
+    )
+
+    IA_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "fail.csv"
+    )
+
+    IA_PASS_PLOT_OUTPUT = (
+        IMAGE_DIR / "sn_ia_light_curves" / "rate_of_rise_results" / "pass"
+    )
+
+    IA_FAIL_PLOT_OUTPUT = (
+        IMAGE_DIR / "sn_ia_light_curves" / "rate_of_rise_results" / "fail"
+    )
+
+    II_OBJECT_DIR = DATA_DIR / "sn_ii_test_results" / "confirmed_CC_SN_tns.csv"
+
     II_PASS_OUTPUT_PATH = (
         DATA_DIR / "sn_ii_test_results" / "rate_of_rise_results" / "pass.csv"
     )
@@ -427,29 +447,22 @@ if __name__ == "__main__":
         IMAGE_DIR / "sn_ii_light_curves" / "rate_of_rise_results" / "fail"
     )
 
-    IA_PASS_OUPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "pass.csv"
-    )
-
-    IA_FAIL_OUPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "fail.csv"
-    )
-
     # applying_the_rate_of_rise(
-    #     object_csv_path=II_OBJECT_PATH,
+    #     object_csv_path=II_OBJECT_DIR,
     #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
     #     output_path_passed=II_PASS_OUTPUT_PATH,
     #     output_path_failed=II_FAIL_OUTPUT_PATH,
     # )
 
-    # batch_plotter(
-    #     object_path=II_FAIL_OUTPUT_PATH,
-    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-    #     output_path=II_FAIL_PLOT_OUTPUT,
-    # )
-    bar_chart_pass_fractions(
-        passing_ia_objects=IA_PASS_OUPUT_PATH,
-        failing_ia_objects=IA_FAIL_OUPUT_PATH,
-        passing_ii_objects=II_PASS_OUTPUT_PATH,
-        failing_ii_objects=II_FAIL_OUTPUT_PATH,
+    batch_plotter(
+        object_path=II_FAIL_OUTPUT_PATH,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        output_path=II_FAIL_PLOT_OUTPUT,
     )
+
+    # bar_chart_pass_fractions(
+    #     passing_ia_objects=IA_PASS_OUTPUT_PATH,
+    #     failing_ia_objects=IA_FAIL_OUTPUT_PATH,
+    #     passing_ii_objects=II_PASS_OUTPUT_PATH,
+    #     failing_ii_objects=II_FAIL_OUTPUT_PATH,
+    # )
