@@ -1,46 +1,72 @@
 """Here we make the cut based on teh consistent timing between the peak flux points for the objects.
-The cut is made in Bazin et al., 2009 and after checking for significant flux variation in the object, the r and i band peaks
+The cut is made in Bazin et al., 10009 and after checking for significant flux variation in the object, the r and i band peaks
 should be reletivly close to one another."""
 
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import polars as pl
+import seaborn as sns
+
+from generic_light_curve_batch_plotter import batch_plotter
 
 
 def loading_objects_and_light_data(
     object_path: Path, light_curve_data_path: Path, output_path: Path
 ) -> pl.DataFrame:
-    """Here we load the object list from the rate_of_rise fit script"""
+    """Loads the objects and the light curve data for the objects, then finds the peak rows in the i and r bands and finds the difference between the two in mjd and checks if they are less then 50 days apart or more than 50 days apart
+
+    Args:
+        object_path (Path): Path to the CSV of objects to test.
+        light_curve_data_path (Path): Path to where the light curve data for all objects is stored as a parquet file.
+        output_path (Path): Output path.
+
+    Returns:
+        pl.DataFrame: Returns a polars dataframe with the new delta peak column and passes or not column.
+    """
 
     objects = pl.read_csv(
         object_path,
-        schema_overrides={"r:diaObjectId": pl.String},
-        columns=["r:diaObjectId"],
-    )["r:diaObjectId"].to_list()
+        columns=[
+            "r:diaObjectId",
+            "category",
+        ],
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "category": pl.String,
+        },
+    )
+    pl.Config.set_tbl_rows(-1)
 
     light_curve_data = pl.read_parquet(light_curve_data_path).with_columns(
-        pl.col("r:diaObjectId").cast(pl.String)
+        pl.col("r:diaObjectId").cast(pl.String),
     )
 
-    light_curve_data = light_curve_data.filter(pl.col("r:diaObjectId").is_in(objects))
+    light_curve_data = light_curve_data.join(
+        objects,
+        on="r:diaObjectId",
+        how="inner",
+    )
 
     groups = {
-        key[0]: group_df
+        key[0]: group_df.sort("r:midpointMjdTai")
         for key, group_df in light_curve_data.group_by(
-            "r:diaObjectId", maintain_order=True
+            "r:diaObjectId",
+            maintain_order=True,
         )
     }
 
     results = {
         "r:diaObjectId": [],
+        "category": [],
         "i_peak_mjd": [],
         "r_peak_mjd": [],
         "delta_peak_mjd": [],
         "passes_peak_cut": [],
     }
 
-    for object_id in objects:
-        group_df = groups.get(object_id)
+    for object_id, group_df in groups.items():
+        category = group_df["category"].item(0)
 
         if group_df is None:
             continue
@@ -60,6 +86,7 @@ def loading_objects_and_light_data(
 
         if i_peak_rows.height == 0 or r_peak_rows.height == 0:
             results["r:diaObjectId"].append(object_id)
+            results["category"].append(category)
             results["i_peak_mjd"].append("null")
             results["r_peak_mjd"].append("null")
             results["delta_peak_mjd"].append("null")
@@ -72,6 +99,7 @@ def loading_objects_and_light_data(
         delta_peak_mjd = abs(r_peak_mjd - i_peak_mjd)
 
         results["r:diaObjectId"].append(object_id)
+        results["category"].append(category)
         results["i_peak_mjd"].append(i_peak_mjd)
         results["r_peak_mjd"].append(r_peak_mjd)
         results["delta_peak_mjd"].append(delta_peak_mjd)
@@ -98,11 +126,11 @@ def timing_pass_check(
     timing_cuts_values = pl.read_csv(timing_cuts_values_path)
 
     timing_cuts_values_pass = timing_cuts_values.filter(
-        pl.col("passes_peak_cut") == "true"
+        pl.col("passes_peak_cut"),
     )
 
     timing_cuts_values_fail = timing_cuts_values.filter(
-        pl.col("passes_peak_cut") == "false"
+        ~pl.col("passes_peak_cut"),
     )
 
     timing_cuts_values_pass.write_csv(output_path_pass)
@@ -110,73 +138,129 @@ def timing_pass_check(
     timing_cuts_values_fail.write_csv(output_path_fail)
 
 
+def strip_plot(data_path: Path, output_path: Path | None = None) -> None:
+    """Produces a strip plot that shows the distribution of the differences in times between the two peaks for the objects.
+
+    Args:
+        data_path (Path): Path to the data CSV.
+        output_path (Path | None, optional): Path to where the plot will be outputted. Defaults to None.
+    """
+
+    data = pl.read_csv(
+        data_path,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "category": pl.String,
+        },
+        columns=[
+            "r:diaObjectId",
+            "category",
+            "delta_peak_mjd",
+        ],
+    )
+
+    data = data.with_columns(
+        pl.col("delta_peak_mjd").cast(
+            pl.Float64,
+            strict=False,
+        ),
+    )
+
+    sns.set_theme(
+        style="whitegrid",
+    )
+
+    delta_peak_mjd = data["delta_peak_mjd"]
+
+    objects = data["category"]
+
+    sns.stripplot(
+        y=objects,
+        x=delta_peak_mjd,
+        data=data,
+        hue="category",
+        jitter=0.15,
+    )
+
+    plt.axvline(
+        50,
+        linestyle="--",
+        label=r"$\Delta t_{\rm peak}=50$d",
+    )
+    plt.legend()
+    plt.ylabel("")
+    plt.xlabel(r"$\Delta t_{\mathrm{peak}}$ (days)")
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.show()
+
+
 if __name__ == "__main__":
-    TEST_DATA = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "test_data"
-        / "20_test_objects.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    LIGHT_CURVE_DATA = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
-    )
+    DATA_DIR = PROJECT_DIR / "data"
 
-    OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    HUNDRED_OBJECT_TEST_PATH = (
+        DATA_DIR
         / "timing_cuts_results"
-        / "timing_cuts_values.csv"
+        / "100_object_test"
+        / "100_object_test_list.csv"
     )
 
-    OUTPUT_PATH_PASS = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
+    HUNDRED_OBJECT_TEST_PASS_PATH = (
+        DATA_DIR
         / "timing_cuts_results"
-        / "timing_cuts_passed.csv"
+        / "100_object_test"
+        / "100_object_test_pass.csv"
     )
 
-    OUTPUT_PATH_FAIL = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
+    HUNDRED_OBJECT_TEST_FAIL_PATH = (
+        DATA_DIR
         / "timing_cuts_results"
-        / "timing_cuts_failed.csv"
+        / "100_object_test"
+        / "100_object_test_fail.csv"
     )
 
-    CANDIDATES = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sn_ia_test_results"
-        / "confirmed_ia.csv"
+    HUNDRED_OBJECT_TEST_VALUES_PATH = (
+        DATA_DIR
+        / "timing_cuts_results"
+        / "100_object_test"
+        / "100_object_test_values.csv"
     )
 
-    loading_objects_and_light_data(CANDIDATES, LIGHT_CURVE_DATA, "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/timing_cuts_results/values.csv")
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    )
 
-    timing_pass_check("/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/timing_cuts_results/values.csv", "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/timing_cuts_results/pass.csv", "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/timing_cuts_results/fail.csv")
+    STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "peak_timing_plots" / "100_object_test"
+
+    PASS_PLOT_OUTPUT_PATH = STRIP_PLOT_OUTPUT_PATH / "pass"
+
+    FAIL_PLOT_OUTPUT_PATH = STRIP_PLOT_OUTPUT_PATH / "fail"
+
+    # loading_objects_and_light_data(
+    #     object_path=HUNDRED_OBJECT_TEST_PATH,
+    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+    #     output_path=HUNDRED_OBJECT_TEST_VALUES_PATH,
+    # )
+
+    # timing_pass_check(
+    #     timing_cuts_values_path=HUNDRED_OBJECT_TEST_VALUES_PATH,
+    #     output_path_pass=HUNDRED_OBJECT_TEST_PASS_PATH,
+    #     output_path_fail=HUNDRED_OBJECT_TEST_FAIL_PATH,
+    # )
+
+    # strip_plot(
+    #     data_path=HUNDRED_OBJECT_TEST_VALUES_PATH,
+    #     output_path=STRIP_PLOT_OUTPUT_PATH / "100_object_test_strip_plot.png",
+    # )
+
+    batch_plotter(
+        object_path=HUNDRED_OBJECT_TEST_PASS_PATH,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        output_path=PASS_PLOT_OUTPUT_PATH,
+    )
