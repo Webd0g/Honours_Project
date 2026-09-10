@@ -1,5 +1,4 @@
 from pathlib import Path
-from scipy.optimize import least_squares
 
 import numpy as np
 import polars as pl
@@ -160,15 +159,15 @@ def keep_observations_upto_t50(
     light_curve_data_path: Path,
     reference_df: pl.DataFrame,
 ) -> pl.DataFrame:
-    """_summary_
+    """Filtering step to keep only observations up to the 50 per cent point before fitting to that point.
 
     Args:
-        objects (Path): _description_
-        light_curve_data (Path): _description_
-        reference_df (pl.DataFrame): _description_
+        objects (Path): Path to the objects of SN Ia that will be filtered.
+        light_curve_data (Path): Path to the light curve data for all the objects.
+        reference_df (pl.DataFrame): This is the dataframe resulting from the fifty_percent_flux_calculation, find_fifty_per_cent_time and iterate_over_bands functions.
 
     Returns:
-        pl.DataFrame: _description_
+        pl.DataFrame: Returns a polars dataframe that contains only the points up to the 50 per cent time in either the g or i bands.
     """
 
     light_curve_data = loading_light_curve_data_and_objects(
@@ -199,14 +198,7 @@ def keep_observations_upto_t50(
 
 
 def power_law_evaluator():
-    """_summary_
-
-    Args:
-        filtered_light_curve_data (pl.DataFrame): _description_
-
-    Returns:
-        pl.DataFrame: _description_
-    """
+    """Just a function that was used to test the behaviour of the power law to see that the outputted flux increases with time with exponential behaviour."""
 
     A_g = 2
 
@@ -242,11 +234,22 @@ def power_law_evaluator():
 
 
 def power_law_model(
-    times,
-    t_fl,
-    A_prime,
-    alpha,
-):
+    times: pl.Float64,
+    t_fl: pl.Float64,
+    A_prime: pl.Float64,
+    alpha: pl.Float64,
+) -> pl.DataFrame:
+    """Computes the power law eqution output as a dataframe given the input of the parameters.
+
+    Args:
+        times (pl.Float64): The array of times leading up to the 50 per cent point that was computed earlier.
+        t_fl (pl.Float64): Time of first light value which is expressed with respect to the time of first detection and not as a mjd date. Thus this quantity should be in the rest-frame time.
+        A_prime (pl.Float64): The amplitude coeficent of the power law.
+        alpha (pl.Float64): The exponent component of the power law.
+
+    Returns:
+        pl.DataFrame: Returns a dataframe per object of the flux quantities resulting from the MCMC fitting of this equation to the inputted dataframe of flux points. 
+    """
     model_flux = np.zeros_like(
         times,
         dtype=float,
@@ -260,74 +263,6 @@ def power_law_model(
 
     return model_flux
 
-
-def log_prior(theta, t_fd):
-    t_fl, A_prime, alpha = theta
-
-    if not (-100 < t_fl < t_fd):
-        return -np.inf
-
-    if A_prime <= 0:
-        return -np.inf
-
-    if not (1 < alpha < 1e8):
-        return -np.inf
-
-    return -np.log(A_prime) - alpha * np.log(10)
-
-
-def log_likelihood(theta, times, flux, flux_err):
-    t_fl, A_prime, alpha = theta
-
-    model_flux = power_law_model(
-        times,
-        t_fl,
-        A_prime,
-        alpha,
-    )
-
-    residual = flux - model_flux
-
-    return -0.5 * np.sum((residual / flux_err) ** 2 + np.log(2 * np.pi * flux_err**2))
-
-def log_probability(theta, times, flux, flux_err, t_fd):
-    lp = log_prior(theta, t_fd)
-
-    if not np.isfinite(lp):
-        return -np.inf
-
-    return lp + log_likelihood(
-        theta,
-        times,
-        flux,
-        flux_err,
-    )
-
-
-def residuals(
-    params,
-    times,
-    flux,
-    flux_err,
-):
-    (
-        t_fl,
-        A,
-        alpha,
-    ) = params
-
-    model_flux = power_law_model(
-        times=times,
-        t_fl=t_fl,
-        A=A,
-        alpha=alpha,
-    )
-
-    return (flux - model_flux) / flux_err
-
-
-def powerlaw_fitting():
-    """_summary_"""
 
 
 if __name__ == "__main__":
