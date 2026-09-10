@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import emcee
+import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
@@ -39,7 +41,6 @@ def fifty_percent_flux_calculation(
 
 def find_fifty_per_cent_time(
     band_df: pl.DataFrame,
-    band: str,
 ) -> pl.DataFrame:
     """Here we find the midpointMjdTai that aligns closest with the quantity of the 50 % flux column.
 
@@ -122,7 +123,6 @@ def iterate_over_bands(
 
         filtered_result = find_fifty_per_cent_time(
             band_df=result,
-            band=band,
         )
         if band == "g":
             g_result = filtered_result
@@ -234,22 +234,23 @@ def power_law_evaluator():
 
 
 def power_law_model(
-    times: pl.Float64,
-    t_fl: pl.Float64,
-    A_prime: pl.Float64,
-    alpha: pl.Float64,
-) -> pl.DataFrame:
-    """Computes the power law eqution output as a dataframe given the input of the parameters.
+    times: np.ndarray,
+    t_fl: float,
+    A_prime: float,
+    alpha: float,
+) -> np.ndarray:
+    """Computes the power law eqution output as an array of fluxes given the input of the parameters.
 
     Args:
-        times (pl.Float64): The array of times leading up to the 50 per cent point that was computed earlier.
-        t_fl (pl.Float64): Time of first light value which is expressed with respect to the time of first detection and not as a mjd date. Thus this quantity should be in the rest-frame time.
-        A_prime (pl.Float64): The amplitude coeficent of the power law.
-        alpha (pl.Float64): The exponent component of the power law.
+        times (np.ndarray): The array of times leading up to the 50 per cent point that was computed earlier.
+        t_fl (float): Time of first light value which is expressed with respect to the time of salt fitted t0. Thus this quantity should be in the rest-frame time.
+        A_prime (float): The amplitude coeefficent of the power law.
+        alpha (float): The exponent component of the power law.
 
     Returns:
-        pl.DataFrame: Returns a dataframe per object of the flux quantities resulting from the MCMC fitting of this equation to the inputted dataframe of flux points. 
+        np.ndarray: Returns an array of the flux quantities resulting from the MCMC fitting of this equation to the inputted dataframe of flux points.
     """
+
     model_flux = np.zeros_like(
         times,
         dtype=float,
@@ -264,6 +265,153 @@ def power_law_model(
     return model_flux
 
 
+def rest_frame_conversion(
+    object_salt_data: Path,
+    pre_t50_objects_data: pl.DataFrame,
+) -> pl.DataFrame:
+    """Converts the mjd times from observer frame to rest-frame time observations.
+
+    Args:
+        object_salt_data (Path): Path to the SALT data for the objects so that we can derive the time of first light properly.
+
+    Returns:
+        pl.DataFrame: Returns a Polars dataframe that we can then use for the computation of the 50 per cent flux and so on functions.
+    """
+
+    salt_object_data = pl.read_csv(
+        object_salt_data,
+        columns=[
+            "r:diaObjectId",
+            "t0",
+            "z_used",
+            "t_fd",
+        ],
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "t0": pl.Float64,
+            "z_used": pl.Float64,
+            "t_fd": pl.Float64,
+        },
+    )
+
+    salt_object_data = pre_t50_objects_data.join(
+        salt_object_data,
+        on="r:diaObjectId",
+        how="inner",
+    )
+
+    rest_frame_time = salt_object_data.with_columns(
+        ((pl.col("r:midpointMjdTai") - pl.col("t0")) / (1 + pl.col("z_used"))).alias(
+            "rest_frame_time"
+        ),
+    ).with_columns(
+        ((pl.col("t_fd") - pl.col("t0")) / (1 + pl.col("z_used"))).alias("t_fd_rest"),
+    )
+
+    return rest_frame_time
+
+
+def log_prior_function(
+    theta: np.ndarray,
+    t_fd_rest: float,
+) -> float:
+    """The priors of the fitting in log form to work in log probabilities when doing the MCMC fitting.
+
+    Args:
+        theta (np.ndarray): A numpy array for the parameters to check the fitted ranges in.
+        t_fd_rest (pl.Float64): The rest frame time of first detection for the object.
+
+    Returns:
+        pl.Float64: _description_
+    """
+
+    t_fl, A_prime, alpha = theta
+
+    if not (-100 < t_fl < t_fd_rest):
+        return -np.inf
+
+    if A_prime <= 0:
+        return -np.inf
+
+    if not (1 <= alpha <= (1 * 10**8)):
+        return -np.inf
+
+    return -np.log(A_prime) - alpha * np.log(10)
+
+
+def log_likelihood_function(
+    theta: np.ndarray,
+    times: np.ndarray,
+    flux: np.ndarray,
+    flux_error: np.ndarray,
+) -> float:
+    """The log likelihood function given the values of theta that have been guessed by the MCMC algorithm and the flux computed by the power law model to assess how good of a guess the algorithm has made.
+
+    Args:
+        theta (np.ndarray): An array of the guessed parameters from the algorithm of the three power law parameters.
+        times (np.ndarray): An array of the times to enter into the power law for the object to estimate the flux.
+        flux (np.ndarray): An array of real flux values that were observed.
+        flux_error (np.ndarray): The psf error of the flux measurements as an array.
+
+    Returns:
+        float: The likelihood of the estimated parameters for the power law flux model.
+    """
+
+    t_fl, A_prime, alpha = theta
+
+    model_flux = power_law_model(
+        times=times,
+        t_fl=t_fl,
+        A_prime=A_prime,
+        alpha=alpha,
+    )
+
+    residual = flux - model_flux
+
+    # Return the output of the log likelihood equation.
+    return -0.5 * np.sum(
+        (residual / flux_error) ** 2 + np.log(2 * np.pi * flux_error**2)
+    )
+
+
+def log_probability_function(
+    theta: np.ndarray,
+    times: np.ndarray,
+    flux: np.ndarray,
+    flux_error: np.ndarray,
+    t_fd_rest: float,
+) -> float:
+    """The probability that these parameters of the fit with respect to the real fluxes and flux errors are determined.
+
+    Args:
+        theta (np.ndarray): The array that contains that paremeters that are used to perform the power law fit.
+        t_fd_rest (float): The time of first detection in the rest frame for the object.
+        times (np.ndarray): The array of times for each dectection for the object.
+        flux (np.ndarray): The array of the measured fluxes for the object.
+        flux_error (np.ndarray): The psfFlux measured error in the flux measurements.
+
+    Returns:
+        float: The calculated overall probability of the fitted parameters
+    """
+
+    lp = log_prior_function(
+        theta=theta,
+        t_fd_rest=t_fd_rest,
+    )
+    if not np.isfinite(lp):
+        return -np.inf
+
+    return lp + log_likelihood_function(
+        theta=theta,
+        times=times,
+        flux=flux,
+        flux_error=flux_error,
+    )
+
+
+# def mcmc_fitting(n_walkers: int, n_dimensions: int, log_prob: float, arguments: tuple, ):
+
+#     sampler = emcee.EnsembleSampler(nwalkers=)
 
 if __name__ == "__main__":
     PROJECT_DIR = (
@@ -273,6 +421,10 @@ if __name__ == "__main__":
     DATA_DIR = PROJECT_DIR / "data"
 
     IMAGE_DIR = PROJECT_DIR / "images"
+
+    SALT_OBJECT_DATA_PATH = (
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
+    )
 
     OBJECT_DIR = (
         DATA_DIR
@@ -300,27 +452,112 @@ if __name__ == "__main__":
         "i",
     ]
 
-    # result = iterate_over_bands(
-    #     objects_dir=OBJECT_DIR,
-    #     light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
-    #     bands=BANDS,
-    # )
-
-    # keep_observations_upto_t50(
-    #     objects=OBJECT_DIR,
-    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-    #     reference_df=result,
-    # )
-
-    print(
-        power_law_model(
-            times=np.linspace(
-                95,
-                110,
-                50,
-            ),
-            t_fl=100,
-            A_prime=2,
-            alpha=2,
-        )
+    test_result = iterate_over_bands(
+        objects_dir=TEST_OBJECT_DIR,
+        light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
+        bands=BANDS,
     )
+
+    test_result = keep_observations_upto_t50(
+        objects=TEST_OBJECT_DIR,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        reference_df=test_result,
+    )
+
+    test_result = rest_frame_conversion(
+        object_salt_data=TEST_OBJECT_DIR,
+        pre_t50_objects_data=test_result,
+    )
+
+    test_result = test_result.filter(pl.col("r:band") == "g")
+
+    times = test_result["rest_frame_time"].to_numpy()
+    flux = test_result["r:psfFlux"].to_numpy()
+    flux_error = test_result["r:psfFluxErr"].to_numpy()
+
+    t_fd_rest = test_result["t_fd_rest"].first()
+
+    # Initial guess for theta for this test object.
+    theta = np.array([-18, 2.0, 4.0])
+
+    scatter = np.array([0.1, 0.05, 0.05])
+
+    pos = theta + scatter * np.random.randn(100, 3)
+
+    nwalkers, ndim = pos.shape
+    sampler = emcee.EnsembleSampler(
+        nwalkers=nwalkers,
+        ndim=ndim,
+        log_prob_fn=log_probability_function,
+        args=(
+            times,
+            flux,
+            flux_error,
+            t_fd_rest,
+        ),
+    )
+    sampler.run_mcmc(
+        initial_state=pos,
+        nsteps=2000    ,
+        progress=True,
+    )
+
+    # fig, axes = plt.subplots(3, figsize=(10, 7), sharex=True)
+    # samples = sampler.get_chain()
+    # labels = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
+    # for i in range(ndim):
+    #     ax = axes[i]
+    #     ax.plot(samples[:, :, i], "k", alpha=0.3)
+    #     ax.set_xlim(0, len(samples))
+    #     ax.set_ylabel(labels[i])
+    #     ax.yaxis.set_label_coords(-0.1, 0.5)
+
+    # axes[-1].set_xlabel("step number")
+
+    # tau = sampler.get_autocorr_time()
+    # print(tau)
+
+    flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
+
+    t_fl_med = np.median(flat_samples[:, 0])
+    A_prime_med = np.median(flat_samples[:, 1])
+    alpha_med = np.median(flat_samples[:, 2])
+
+    t_grid = np.linspace(times.min(), times.max(), 300)
+
+    model_flux = power_law_model(
+        times=t_grid,
+        t_fl=t_fl_med,
+        A_prime=A_prime_med,
+        alpha=alpha_med,
+    )
+
+    plt.figure(figsize=(8, 5))
+
+    plt.errorbar(
+        times,
+        flux,
+        yerr=flux_error,
+        fmt="o",
+        capsize=3,
+        label="Observed data",
+    )
+
+    plt.plot(
+        t_grid,
+        model_flux,
+        label="Median power-law fit",
+    )
+
+    plt.axvline(
+        t_fl_med,
+        linestyle="--",
+        label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med:.2f}$",
+    )
+
+    plt.xlabel("Rest-frame time (days)")
+    plt.ylabel("Flux")
+    plt.title("Single-object power-law fit")
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
