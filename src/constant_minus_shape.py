@@ -266,12 +266,92 @@ def compute_delta_chi(
     return delta_chi_df
 
 
-def delta_chi_against_chi_SN_plot(
+def photometric_delta_chi_against_chi_SN_plot(
+    objects: Path,
+    band: str,
+    output_path: Path | None = None,
+) -> None:
+
+    delta_chi_df = (
+        pl.read_csv(objects)
+        .filter((pl.col("bazin_reduced_chi2") > 0) & (pl.col("delta_reduced_chi2") > 0))
+        .select("r:diaObjectId", "bazin_reduced_chi2", "delta_reduced_chi2", "category")
+    )
+
+    sn_like_df = delta_chi_df.filter(pl.col("category") == "SN-like")
+
+    non_sn_like_df = delta_chi_df.filter(pl.col("category") == "Non-SN-like")
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    ax.scatter(
+        sn_like_df["bazin_reduced_chi2"],
+        sn_like_df["delta_reduced_chi2"],
+        color="#0072B2",
+        alpha=0.9,
+        label="SN-like",
+        zorder=3,
+        s=30,
+    )
+
+    ax.scatter(
+        non_sn_like_df["bazin_reduced_chi2"],
+        non_sn_like_df["delta_reduced_chi2"],
+        color="#D55E00",
+        alpha=0.9,
+        label="Non-SN-like",
+        zorder=3,
+        s=30,
+    )
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+
+    xlim = ax.get_xlim()
+    ylim = ax.get_ylim()
+
+    lower = min(xlim[0], ylim[0])
+    upper = max(xlim[1], ylim[1])
+
+    ax.plot(
+        [lower, upper],
+        [lower, upper],
+        linestyle="--",
+        color="black",
+        label="Selection boundary",
+    )
+
+    ax.set_xlim(lower, upper)
+    ax.set_ylim(lower, upper)
+
+    ax.set_xlabel(rf"Bazin reduced $\chi^2$ ({band} band)")
+    ax.set_ylabel(rf"$\Delta\chi^2_\nu$ ({band} band)")
+
+    ax.legend()
+
+    if output_path is not None:
+        output_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+    fig.tight_layout()
+
+    if output_path is not None:
+        fig.savefig(
+            output_path / f"{band}_band_constant_minus_bazin_100_objects.png",
+            bbox_inches="tight",
+        )
+
+    plt.show()
+
+
+def spectro_delta_chi_against_chi_SN_plot(
     path_to_ii_delta_chi_results: Path,
     path_to_ia_delta_chi_results: Path,
     path_to_photometric_delta_chi_results: Path,
-    output_path: Path,
     band: str,
+    output_path: Path | None = None,
 ) -> None:
 
     ii_delta_chi_df = (
@@ -330,16 +410,16 @@ def delta_chi_against_chi_SN_plot(
     ax.scatter(
         photometric["bazin_reduced_chi2"],
         photometric["delta_reduced_chi2"],
-        color="black",
+        color="#999999",
         alpha=0.3,
         label="Photometric",
-        s= 10
+        s=10,
     )
 
     ax.scatter(
         ia["bazin_reduced_chi2"],
         ia["delta_reduced_chi2"],
-        color="green",
+        color="#0072B2",
         alpha=0.9,
         label="Spectroscopic SN Ia",
         zorder=3,
@@ -350,7 +430,7 @@ def delta_chi_against_chi_SN_plot(
     ax.scatter(
         cc["bazin_reduced_chi2"],
         cc["delta_reduced_chi2"],
-        color="red",
+        color="#D55E00",
         alpha=0.9,
         label="Spectroscopic CC",
         zorder=3,
@@ -375,8 +455,8 @@ def delta_chi_against_chi_SN_plot(
         label="Selection boundary",
     )
 
-    ax.set_xlim(xlim)
-    ax.set_ylim(ylim)
+    ax.set_xlim(lower, upper)
+    ax.set_ylim(lower, upper)
 
     ax.set_xlabel(rf"Bazin reduced $\chi^2$ ({band} band)")
     ax.set_ylabel(rf"$\Delta\chi^2_\nu$ ({band} band)")
@@ -384,17 +464,19 @@ def delta_chi_against_chi_SN_plot(
 
     ax.legend()
 
-    output_path.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
+    if output_path is not None:
+        output_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
 
     fig.tight_layout()
 
-    fig.savefig(
-        output_path / f"{band}_band_constant_minus_bazin.png",
-        bbox_inches="tight",
-    )
+    if output_path is not None:
+        fig.savefig(
+            output_path / f"{band}_band_constant_minus_bazin.png",
+            bbox_inches="tight",
+        )
 
     plt.show()
 
@@ -436,296 +518,52 @@ def save_pass_fail_objects(
 
 
 if __name__ == "__main__":
-    TEST_DATA = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "test_data"
-        / "100_constant_minus_shape_test_objects.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
+
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
 
     LIGHT_CURVE_DATA = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    TEST_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
+    TWENTY_OBJECT_TEST = (
+        DATA_DIR
         / "constant_minus_shape_results"
-        / "100_object_test.csv"
+        / "20_object_test"
+        / "20_object_test.csv"
     )
 
-    BAZIN_FITS_DATA_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "bazin_fits_results"
-        / "bazin_fits_i_band_results.csv"
+    TWENTY_OBJECT_TEST_PLOT_OUTPUT_PATH = (
+        IMAGE_DIR / "constant_minus_shape_plots" / "delta_chi_plots" / "20_object_test"
     )
 
-    CANDIDATES = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "timing_cuts_results"
-        / "timing_cuts_passed.csv"
-    )
+    # compute_delta_chi(
+    #     object_path=PATH_TO_II_SPECTRO_RESULTS,
+    #     light_curve_data_path=LIGHT_CURVE_DATA,
+    #     band="i",
+    #     bazin_fit_data_path=PATH_TO_II_SPECTRO_RESULTS,
+    #     output_path=Path.home()
+    #     / "Documents"
+    #     / "University"
+    #     / "Honours"
+    #     / "Honours_Project"
+    #     / "data"
+    #     / "sn_ii_test_results"
+    #     / "constant_minus_shape_results"
+    #     / "values.csv",
+    # )
 
-    G_BAND_VALUES_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "g_band"
-        / "constant_minus_shape_values.csv"
-    )
+    # photometric_delta_chi_against_chi_SN_plot(
+    #     objects=TWENTY_OBJECT_TEST,
+    #     band="i",
+    #     output_path=TWENTY_OBJECT_TEST_PLOT_OUTPUT_PATH,
+    # )
 
-    G_BAND_PASS_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "g_band"
-        / "pass.csv"
-    )
-
-    G_BAND_FAIL_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "g_band"
-        / "fail.csv"
-    )
-
-    G_BAND_PLOT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "constant_minus_shape_plots"
-        / "g_band"
-        / "g_band_constant_minus_shape.png"
-    )
-
-    R_BAND_VALUES_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "r_band"
-        / "constant_minus_shape_values.csv"
-    )
-
-    R_BAND_PASS_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "r_band"
-        / "pass.csv"
-    )
-
-    R_BAND_FAIL_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "r_band"
-        / "fail.csv"
-    )
-
-    R_BAND_PLOT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "constant_minus_shape_plots"
-        / "r_band"
-        / "r_band_constant_minus_shape.png"
-    )
-
-    I_BAND_VALUES_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "i_band"
-        / "constant_minus_shape_values.csv"
-    )
-
-    I_BAND_PASS_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "i_band"
-        / "pass.csv"
-    )
-
-    I_BAND_FAIL_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "i_band"
-        / "fail.csv"
-    )
-
-    I_BAND_PLOT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "constant_minus_shape_plots"
-        / "i_band"
-        / "i_band_constant_minus_shape.png"
-    )
-
-    Z_BAND_VALUES_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "z_band"
-        / "constant_minus_shape_values.csv"
-    )
-
-    Z_BAND_PASS_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "z_band"
-        / "pass.csv"
-    )
-
-    Z_BAND_FAIL_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "z_band"
-        / "fail.csv"
-    )
-
-    Z_BAND_PLOT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "constant_minus_shape_plots"
-        / "z_band"
-        / "z_band_constant_minus_shape.png"
-    )
-
-    PATH_TO_IA_SPECTRO_RESULTS = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "bazin_fits_results"
-        / "spectroscopic_tests"
-        / "ia_tests"
-        / "bazin_fits_i_band_results.csv"
-    )
-
-    PATH_TO_II_SPECTRO_RESULTS = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "bazin_fits_results"
-        / "spectroscopic_tests"
-        / "ii_tests"
-        / "bazin_fits_i_band_results.csv"
-    )
-
-    compute_delta_chi(
-        object_path=PATH_TO_II_SPECTRO_RESULTS,
-        light_curve_data_path=LIGHT_CURVE_DATA,
-        band="i",
-        bazin_fit_data_path=PATH_TO_II_SPECTRO_RESULTS,
-        output_path=Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sn_ii_test_results"
-        / "constant_minus_shape_results"
-        / "values.csv",
-    )
-
-    delta_chi_against_chi_SN_plot(
+    spectro_delta_chi_against_chi_SN_plot(
         path_to_ii_delta_chi_results=Path.home()
         / "Documents"
         / "University"
@@ -766,8 +604,8 @@ if __name__ == "__main__":
         band="i",
     )
 
-    save_pass_fail_objects(
-        path_to_delta_chi_results="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/values.csv",
-        output_path_pass="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/pass.csv",
-        output_path_fail="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/fail.csv",
-    )
+    # save_pass_fail_objects(
+    #     path_to_delta_chi_results="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/values.csv",
+    #     output_path_pass="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/pass.csv",
+    #     output_path_fail="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/fail.csv",
+    # )

@@ -390,7 +390,7 @@ def plot_bazin_fit_batch(
 
 
 if __name__ == "__main__":
-    bands = [
+    BANDS = [
         "u",
         "g",
         "r",
@@ -399,27 +399,24 @@ if __name__ == "__main__":
         "y",
     ]
 
-    TIMING_CUT_PASSED = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "core_collapse_results"
-        / "confirmed_CC_SN_tns.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+    )
+
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    SN_IA_TIMING_CUTS_RESULTS = (
+        DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "pass.csv"
+    )
+
+    SN_II_TIMING_CUTS_RESULTS = (
+        DATA_DIR / "sn_ii_test_results" / "timing_cuts_results" / "pass.csv"
     )
 
     LIGHT_CURVE_DATA = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
     BAZIN_OUTPUT_PATH = (
@@ -434,15 +431,14 @@ if __name__ == "__main__":
         / "ii_tests"
     )
 
-    for band in bands:
-        bazin_batch_fits(
-            csv_path=TIMING_CUT_PASSED,
-            light_curve_data_path=LIGHT_CURVE_DATA,
-            band=band,
-            algorithm="mcmc",
-            mcmc_niter=2000,
-            output_path=BAZIN_OUTPUT_PATH / f"bazin_fits_{band}_band_results.csv",
-        )
+    # bazin_batch_fits(
+    #     csv_path=TIMING_CUT_PASSED,
+    #     light_curve_data_path=LIGHT_CURVE_DATA,
+    #     band="i",
+    #     algorithm="mcmc",
+    #     mcmc_niter=2000,
+    #     output_path=BAZIN_OUTPUT_PATH / f"bazin_fits_{"i"}_band_results.csv",
+    # )
         # plot_bazin_fit_batch(
         #     Path.home()
         #     / "Documents"

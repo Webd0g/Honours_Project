@@ -411,47 +411,11 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    IA_OBJECT_DIR = DATA_DIR / "sn_ia_test_results" / "confirmed_ia.csv"
-
-    IA_PASS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "pass.csv"
-    )
-
-    IA_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "fail.csv"
-    )
-
-    IA_PASS_PLOT_OUTPUT = (
-        IMAGE_DIR / "sn_ia_light_curves" / "rate_of_rise_results" / "pass"
-    )
-
-    IA_FAIL_PLOT_OUTPUT = (
-        IMAGE_DIR / "sn_ia_light_curves" / "rate_of_rise_results" / "fail"
-    )
-
-    II_OBJECT_DIR = DATA_DIR / "sn_ii_test_results" / "confirmed_CC_SN_tns.csv"
-
-    II_PASS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "rate_of_rise_results" / "pass.csv"
-    )
-
-    II_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "rate_of_rise_results" / "fail.csv"
-    )
-
-    II_PASS_PLOT_OUTPUT = (
-        IMAGE_DIR / "sn_ii_light_curves" / "rate_of_rise_results" / "pass"
-    )
-
-    II_FAIL_PLOT_OUTPUT = (
-        IMAGE_DIR / "sn_ii_light_curves" / "rate_of_rise_results" / "fail"
-    )
-
     # applying_the_rate_of_rise(
-    #     object_csv_path=II_OBJECT_DIR,
+    #     object_csv_path=HUNDRED_TEST_OBJECT_PATH,
     #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-    #     output_path_passed=II_PASS_OUTPUT_PATH,
-    #     output_path_failed=II_FAIL_OUTPUT_PATH,
+    #     output_path_passed=HUNDRED_TEST_PASS_OUTPUT_PATH,
+    #     output_path_failed=HUNDRED_TEST_FAIL_OUTPUT_PATH,
     # )
 
     # batch_plotter(
@@ -460,9 +424,9 @@ if __name__ == "__main__":
     #     output_path=II_FAIL_PLOT_OUTPUT,
     # )
 
-    bar_chart_pass_fractions(
-        passing_ia_objects=IA_PASS_OUTPUT_PATH,
-        failing_ia_objects=IA_FAIL_OUTPUT_PATH,
-        passing_ii_objects=II_PASS_OUTPUT_PATH,
-        failing_ii_objects=II_FAIL_OUTPUT_PATH,
-    )
+    # bar_chart_pass_fractions(
+    #     passing_ia_objects=IA_PASS_OUTPUT_PATH,
+    #     failing_ia_objects=IA_FAIL_OUTPUT_PATH,
+    #     passing_ii_objects=II_PASS_OUTPUT_PATH,
+    #     failing_ii_objects=II_FAIL_OUTPUT_PATH,
+    # )

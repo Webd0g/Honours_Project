@@ -165,6 +165,7 @@ def strip_plot(
     delta_peak_mjd = data["delta_peak_mjd"]
 
     objects = data["category"]
+    print(objects)
 
     colours = {
         " SN-like": "#0072B2",
@@ -177,6 +178,10 @@ def strip_plot(
         data=data,
         hue="category",
         palette=colours,
+        order=[
+            " SN-like",
+            " Non-SN-like",
+        ],
         jitter=0.15,
     )
 
@@ -327,7 +332,7 @@ def spectro_strip_plot(
         hue="spec_class",
         jitter=0.2,
         palette=colours,
-        s=8,
+        order=["SN Ia", "SN II"],
     )
 
     plt.axvline(
@@ -353,6 +358,13 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
+    TWENTY_OBJECT_TEST_VALUES_PATH = (
+        DATA_DIR
+        / "peak_timing_cuts_results"
+        / "20_object_test"
+        / "20_object_test_values.csv"
+    )
+
     HUNDRED_OBJECT_TEST_VALUES_PATH = (
         DATA_DIR
         / "peak_timing_cuts_results"
@@ -360,7 +372,7 @@ if __name__ == "__main__":
         / "100_object_test_values.csv"
     )
 
-    STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "peak_timing_plots" / "100_object_test"
+    STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "peak_timing_plots" / "20_object_test"
 
     SN_IA_OBJECT_DIR = (
         DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "pass.csv"
@@ -422,17 +434,17 @@ if __name__ == "__main__":
     #     output_path_fail=SN_II_FAIL_PATH,
     # )
 
-    strip_plot(
-        data_path=HUNDRED_OBJECT_TEST_VALUES_PATH,
-        output_path=STRIP_PLOT_OUTPUT_PATH / "100_object_test_strip_plot.png",
-    )
-
-    # spectro_strip_plot(
-    #     passing_ia_objects=SN_IA_PASS_PATH,
-    #     failing_ia_objects=SN_IA_FAIL_PATH,
-    #     passing_ii_objects=SN_II_PASS_PATH,
-    #     failing_ii_objects=SN_II_FAIL_PATH,
+    # strip_plot(
+    #     data_path=TWENTY_OBJECT_TEST_VALUES_PATH,
+    #     output_path=STRIP_PLOT_OUTPUT_PATH / "20_object_test_strip_plot.png",
     # )
+
+    spectro_strip_plot(
+        passing_ia_objects=SN_IA_PASS_PATH,
+        failing_ia_objects=SN_IA_FAIL_PATH,
+        passing_ii_objects=SN_II_PASS_PATH,
+        failing_ii_objects=SN_II_FAIL_PATH,
+    )
 
     # batch_plotter(
     #     object_path=HUNDRED_OBJECT_TEST_PASS_PATH,
