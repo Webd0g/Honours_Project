@@ -75,8 +75,8 @@ def numb_pre_peak_post_peak(
         )
 
         sampling_df = group_df.filter(
-            pl.col("r:psfFlux").is_finite()
-            & pl.col("r:midpointMjdTai").is_finite())
+            pl.col("r:psfFlux").is_finite() & pl.col("r:midpointMjdTai").is_finite()
+        )
 
         peak_rows = group_df.sort("r:psfFlux", descending=True).unique(
             subset=["r:band"], keep="first"
@@ -342,84 +342,18 @@ def sampling_cut(
 
 
 if __name__ == "__main__":
-    TEST_CANDIDATES = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "test_data"
-        / "sampling_tests"
-        / "100_object_sampling_test.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    CANDIDATES = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "constant_minus_shape_results"
-        / "i_band"
-        / "pass.csv"
-    )
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    SN_IA_SAMPLE_PATH = DATA_DIR / ""
 
     LIGHT_CURVE_DATA = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "light_curve_data"
-        / "combined_light_curve_data.parquet"
-    )
-
-    OBJECT_TEST_OUTPUT = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sampling_results"
-        / "100_object_test"
-        / "100_object_test_results.csv"
-    )
-
-    COUNT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sampling_results"
-        / "sampling_values.csv"
-    )
-
-    PASSING_SAMPLING_CUT_OUTPUT = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sampling_results"
-        / "sampling_pass.csv"
-    )
-
-    FAILING_SAMPLING_CUT_OUTPUT = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sampling_results"
-        / "sampling_fail.csv"
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
     # numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
