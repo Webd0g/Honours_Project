@@ -408,6 +408,16 @@ def log_probability_function(
         flux_error=flux_error,
     )
 
+def fitting_power_law(rest_frame_objects: pl.DataFrame, fit_df_output_path: Path | None = None,) -> pl.DataFrame:
+    """_summary_
+
+    Args:
+        rest_frame_objects (pl.DataFrame): _description_
+        fit_df_output_path (Path | None, optional): _description_. Defaults to None.
+
+    Returns:
+        pl.DataFrame: _description_
+    """
 
 # def mcmc_fitting(n_walkers: int, n_dimensions: int, log_prob: float, arguments: tuple, ):
 
