@@ -268,6 +268,7 @@ def power_law_model(
 def rest_frame_conversion(
     object_salt_data: Path,
     pre_t50_objects_data: pl.DataFrame,
+    output_path: Path | None = None,
 ) -> pl.DataFrame:
     """Converts the mjd times from observer frame to rest-frame time observations.
 
@@ -307,6 +308,9 @@ def rest_frame_conversion(
     ).with_columns(
         ((pl.col("t_fd") - pl.col("t0")) / (1 + pl.col("z_used"))).alias("t_fd_rest"),
     )
+
+    if output_path is not None:
+        rest_frame_time.write_csv(output_path)
 
     return rest_frame_time
 
@@ -412,6 +416,7 @@ def log_probability_function(
 def fitting_power_law(
     rest_frame_objects: pl.DataFrame,
     band: str,
+    n_steps: int,
     fit_df_output_path: Path | None = None,
 ) -> pl.DataFrame:
     """Fitting the power law and iterating and minimising is done in this function, using the dataframe from the rest-frame conversion and the prior functions.
@@ -423,48 +428,141 @@ def fitting_power_law(
     Returns:
         pl.DataFrame: The dataframe of the fit parameters for the power law.
     """
-    # Filtering the dataframe to just the individual band.
-    rest_frame_objects_df = rest_frame_objects.filter(pl.col("r:band") == band)
 
-    # Making Numpy arrays of the columns for the iteration and fitting.
-    times = rest_frame_objects_df["rest_frame_time"].to_numpy()
-    flux = rest_frame_objects_df["r:psfFlux"].to_numpy()
-    flux_error = rest_frame_objects_df["r:psfFluxErr"].to_numpy()
+    results = {
+        "r:diaObjectId": [],
+        "t_fl": [],
+        "t_fl_err_low": [],
+        "t_fl_err_high": [],
+        "A_prime": [],
+        "A_prime_err_low": [],
+        "A_prime_err_high": [],
+        "alpha": [],
+        "alpha_err_low": [],
+        "alpha_err_high": [],
+        "t_fd": [],
+        "t_fd_rest": [],
+        "z_used": [],
+        "n_points": [],
+        "t50_mjd": [],
+        "sampler_nwalkers": [],
+        "sampler_nsteps": [],
+        # "acceptance_fraction": [],
+        # "tau_t_fl": [],
+        # "tau_A_prime": [],
+        # "tau_alpha": [],
+        # "converged": [],
+    }
 
-    # Finding the first detection for the object
-    t_fd_rest = test_result["t_fd_rest"].first()
+    for object_id, object_df in rest_frame_objects.group_by("r:diaObjectId"):
+        # Filtering the dataframe to just the individual band.
+        rest_frame_objects_df = object_df.filter(pl.col("r:band") == band)
 
-    # Initial guess for theta for this test object.
-    theta = np.array([-18, 2.0, 4.0])
+        # Making Numpy arrays of the columns for the iteration and fitting.
+        times = rest_frame_objects_df["rest_frame_time"].to_numpy()
+        flux = rest_frame_objects_df["r:psfFlux"].to_numpy()
+        flux_error = rest_frame_objects_df["r:psfFluxErr"].to_numpy()
 
-    # Rough scatter approximation for the fitting vector theta.
-    scatter = np.array([0.1, 0.05, 0.05])
+        # Finding the first detection for the object
+        t_fd_rest = test_result["t_fd_rest"].first()
 
-    # Beginning position for the MCMC fitting process.
-    pos = theta + scatter * np.random.randn(100, 3)
+        # Initial guess for theta for this test object.
+        theta = np.array([-18, 2.0, 4.0])
 
-    # Initialising the ensemble sample from the emcee library
-    nwalkers, ndim = pos.shape
-    sampler = emcee.EnsembleSampler(
-        nwalkers=nwalkers,
-        ndim=ndim,
-        log_prob_fn=log_probability_function,
-        args=(
-            times,
-            flux,
-            flux_error,
-            t_fd_rest,
-        ),
-    )
+        # Rough scatter approximation for the fitting vector theta.
+        scatter = np.array([0.1, 0.05, 0.05])
 
-    # Running the MCMC fitting algorithm.
-    results = sampler.run_mcmc(
-        initial_state=pos,
-        nsteps=2000,
-        progress=True,
-    )
+        # Beginning position for the MCMC fitting process.
+        pos = theta + scatter * np.random.randn(100, 3)
+
+        # Initialising the ensemble sample from the emcee library
+        nwalkers, ndim = pos.shape
+        sampler = emcee.EnsembleSampler(
+            nwalkers=nwalkers,
+            ndim=ndim,
+            log_prob_fn=log_probability_function,
+            args=(
+                times,
+                flux,
+                flux_error,
+                t_fd_rest,
+            ),
+        )
+
+        # Running the MCMC fitting algorithm.
+        sampler.run_mcmc(
+            initial_state=pos,
+            nsteps=n_steps,
+            progress=True,
+        )
+
+        flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
+
+        q16, t_fl, q84 = np.percentile(flat_samples[:, 0], [16, 50, 84])
+
+        results["t_fl"].append(float(t_fl))
+        results["t_fl_err_low"].append(float(t_fl - q16))
+        results["t_fl_err_high"].append(float(q84 - t_fl))
+
+        q16, A_prime, q84 = np.percentile(flat_samples[:, 1], [16, 50, 84])
+
+        results["A_prime"].append(float(A_prime))
+        results["A_prime_err_low"].append(float(A_prime - q16))
+        results["A_prime_err_high"].append(float(q84 - A_prime))
+
+        q16, alpha, q84 = np.percentile(flat_samples[:, 2], [16, 50, 84])
+
+        results["alpha"].append(float(alpha))
+        results["alpha_err_low"].append(float(alpha - q16))
+        results["alpha_err_high"].append(float(q84 - alpha))
+
+        results["r:diaObjectId"].append(object_id[0])
+        results["t_fd"].append(rest_frame_objects_df["t_fd"].item(0))
+        results["t_fd_rest"].append(rest_frame_objects_df["t_fd_rest"].item(0))
+        results["z_used"].append(rest_frame_objects_df["z_used"].item(0))
+        results["n_points"].append(len(times))
+        results["sampler_nsteps"].append(n_steps)
+        results["sampler_nwalkers"].append(nwalkers)
+        results["t50_mjd"].append(rest_frame_objects_df["t50_mjd"].item(0))
+
+    results = pl.DataFrame(results)
 
     return results
+
+
+def excluding_excess_window(
+    rest_frame_conversion_df: pl.DataFrame,
+    band: str,
+    output_path: Path | None = None,
+) -> pl.DataFrame:
+    """Remove any points in the excess window from the dataframe that will be used for the power law fitting process.
+
+    Args:
+        rest_frame_conversion_df (pl.DataFrame): dataframe of the points from the rest-frame conversion function.
+        output_path (Path | None, optional): Optional CSV output path of the dataframe from this fucntion. Defaults to None.
+
+    Returns:
+        pl.DataFrame: The dataframe with the data points that are in the excess window removed before the fitting.
+    """
+
+    # Defining the excess window (for use we take the t_fd and add 3 days remove any points that have a time in that range.)
+    rest_frame_objects_df = rest_frame_conversion_df.filter(
+        ~(
+            (pl.col("r:band") == band)
+            & pl.col("rest_frame_time").is_between(
+                pl.col("t_fd_rest"),
+                pl.col("t_fd_rest") + 5,
+                closed="both",
+            )
+        )
+    )
+
+    if output_path is not None:
+        rest_frame_objects_df.write_csv(
+            output_path,
+        )
+
+    return rest_frame_objects_df
 
 
 if __name__ == "__main__":
@@ -497,6 +595,14 @@ if __name__ == "__main__":
         / "test_object.csv"
     )
 
+    TEST_OUTPUT_PATH = (
+        DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "testing_results"
+        / "test_object_output_path.csv"
+    )
+
     LIGHT_CURVE_DATA_DIR = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
@@ -523,12 +629,17 @@ if __name__ == "__main__":
         pre_t50_objects_data=test_result,
     )
 
-    test_result = fitting_power_law(
-        rest_frame_objects=test_result,
-        band="g"
+    excluding_excess_window(
+        rest_frame_conversion_df=test_result,
+        band="g",
     )
 
-    print(test_result)
+    # test_result = fitting_power_law(
+    #     rest_frame_objects=test_result,
+    #     band="g",
+    #     n_steps=2000,
+    # )
+    # print(test_result)
 
     # test_result = test_result.filter(pl.col("r:band") == "g")
 
