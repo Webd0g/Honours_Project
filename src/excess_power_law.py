@@ -408,20 +408,64 @@ def log_probability_function(
         flux_error=flux_error,
     )
 
-def fitting_power_law(rest_frame_objects: pl.DataFrame, fit_df_output_path: Path | None = None,) -> pl.DataFrame:
-    """_summary_
+
+def fitting_power_law(
+    rest_frame_objects: pl.DataFrame,
+    band: str,
+    fit_df_output_path: Path | None = None,
+) -> pl.DataFrame:
+    """Fitting the power law and iterating and minimising is done in this function, using the dataframe from the rest-frame conversion and the prior functions.
 
     Args:
-        rest_frame_objects (pl.DataFrame): _description_
-        fit_df_output_path (Path | None, optional): _description_. Defaults to None.
+        rest_frame_objects (pl.DataFrame): The dataframe with the lightcurve data up to the fifty per cent point and the times of the observations converted to the rest-frame times.
+        fit_df_output_path (Path | None, optional): The output path for the dataframe of the fit parameters that the mimnimisation arrived on a sa CSV. Defaults to None.
 
     Returns:
-        pl.DataFrame: _description_
+        pl.DataFrame: The dataframe of the fit parameters for the power law.
     """
+    # Filtering the dataframe to just the individual band.
+    rest_frame_objects_df = rest_frame_objects.filter(pl.col("r:band") == band)
 
-# def mcmc_fitting(n_walkers: int, n_dimensions: int, log_prob: float, arguments: tuple, ):
+    # Making Numpy arrays of the columns for the iteration and fitting.
+    times = rest_frame_objects_df["rest_frame_time"].to_numpy()
+    flux = rest_frame_objects_df["r:psfFlux"].to_numpy()
+    flux_error = rest_frame_objects_df["r:psfFluxErr"].to_numpy()
 
-#     sampler = emcee.EnsembleSampler(nwalkers=)
+    # Finding the first detection for the object
+    t_fd_rest = test_result["t_fd_rest"].first()
+
+    # Initial guess for theta for this test object.
+    theta = np.array([-18, 2.0, 4.0])
+
+    # Rough scatter approximation for the fitting vector theta.
+    scatter = np.array([0.1, 0.05, 0.05])
+
+    # Beginning position for the MCMC fitting process.
+    pos = theta + scatter * np.random.randn(100, 3)
+
+    # Initialising the ensemble sample from the emcee library
+    nwalkers, ndim = pos.shape
+    sampler = emcee.EnsembleSampler(
+        nwalkers=nwalkers,
+        ndim=ndim,
+        log_prob_fn=log_probability_function,
+        args=(
+            times,
+            flux,
+            flux_error,
+            t_fd_rest,
+        ),
+    )
+
+    # Running the MCMC fitting algorithm.
+    results = sampler.run_mcmc(
+        initial_state=pos,
+        nsteps=2000,
+        progress=True,
+    )
+
+    return results
+
 
 if __name__ == "__main__":
     PROJECT_DIR = (
@@ -479,38 +523,45 @@ if __name__ == "__main__":
         pre_t50_objects_data=test_result,
     )
 
-    test_result = test_result.filter(pl.col("r:band") == "g")
-
-    times = test_result["rest_frame_time"].to_numpy()
-    flux = test_result["r:psfFlux"].to_numpy()
-    flux_error = test_result["r:psfFluxErr"].to_numpy()
-
-    t_fd_rest = test_result["t_fd_rest"].first()
-
-    # Initial guess for theta for this test object.
-    theta = np.array([-18, 2.0, 4.0])
-
-    scatter = np.array([0.1, 0.05, 0.05])
-
-    pos = theta + scatter * np.random.randn(100, 3)
-
-    nwalkers, ndim = pos.shape
-    sampler = emcee.EnsembleSampler(
-        nwalkers=nwalkers,
-        ndim=ndim,
-        log_prob_fn=log_probability_function,
-        args=(
-            times,
-            flux,
-            flux_error,
-            t_fd_rest,
-        ),
+    test_result = fitting_power_law(
+        rest_frame_objects=test_result,
+        band="g"
     )
-    sampler.run_mcmc(
-        initial_state=pos,
-        nsteps=2000    ,
-        progress=True,
-    )
+
+    print(test_result)
+
+    # test_result = test_result.filter(pl.col("r:band") == "g")
+
+    # times = test_result["rest_frame_time"].to_numpy()
+    # flux = test_result["r:psfFlux"].to_numpy()
+    # flux_error = test_result["r:psfFluxErr"].to_numpy()
+
+    # t_fd_rest = test_result["t_fd_rest"].first()
+
+    # # Initial guess for theta for this test object.
+    # theta = np.array([-18, 2.0, 4.0])
+
+    # scatter = np.array([0.1, 0.05, 0.05])
+
+    # pos = theta + scatter * np.random.randn(100, 3)
+
+    # nwalkers, ndim = pos.shape
+    # sampler = emcee.EnsembleSampler(
+    #     nwalkers=nwalkers,
+    #     ndim=ndim,
+    #     log_prob_fn=log_probability_function,
+    #     args=(
+    #         times,
+    #         flux,
+    #         flux_error,
+    #         t_fd_rest,
+    #     ),
+    # )
+    # sampler.run_mcmc(
+    #     initial_state=pos,
+    #     nsteps=2000,
+    #     progress=True,
+    # )
 
     # fig, axes = plt.subplots(3, figsize=(10, 7), sharex=True)
     # samples = sampler.get_chain()
@@ -527,47 +578,47 @@ if __name__ == "__main__":
     # tau = sampler.get_autocorr_time()
     # print(tau)
 
-    flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
+    # flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
 
-    t_fl_med = np.median(flat_samples[:, 0])
-    A_prime_med = np.median(flat_samples[:, 1])
-    alpha_med = np.median(flat_samples[:, 2])
+    # t_fl_med = np.median(flat_samples[:, 0])
+    # A_prime_med = np.median(flat_samples[:, 1])
+    # alpha_med = np.median(flat_samples[:, 2])
 
-    t_grid = np.linspace(times.min(), times.max(), 300)
+    # t_grid = np.linspace(times.min(), times.max(), 300)
 
-    model_flux = power_law_model(
-        times=t_grid,
-        t_fl=t_fl_med,
-        A_prime=A_prime_med,
-        alpha=alpha_med,
-    )
+    # model_flux = power_law_model(
+    #     times=t_grid,
+    #     t_fl=t_fl_med,
+    #     A_prime=A_prime_med,
+    #     alpha=alpha_med,
+    # )
 
-    plt.figure(figsize=(8, 5))
+    # plt.figure(figsize=(8, 5))
 
-    plt.errorbar(
-        times,
-        flux,
-        yerr=flux_error,
-        fmt="o",
-        capsize=3,
-        label="Observed data",
-    )
+    # plt.errorbar(
+    #     times,
+    #     flux,
+    #     yerr=flux_error,
+    #     fmt="o",
+    #     capsize=3,
+    #     label="Observed data",
+    # )
 
-    plt.plot(
-        t_grid,
-        model_flux,
-        label="Median power-law fit",
-    )
+    # plt.plot(
+    #     t_grid,
+    #     model_flux,
+    #     label="Median power-law fit",
+    # )
 
-    plt.axvline(
-        t_fl_med,
-        linestyle="--",
-        label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med:.2f}$",
-    )
+    # plt.axvline(
+    #     t_fl_med,
+    #     linestyle="--",
+    #     label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med:.2f}$",
+    # )
 
-    plt.xlabel("Rest-frame time (days)")
-    plt.ylabel("Flux")
-    plt.title("Single-object power-law fit")
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+    # plt.xlabel("Rest-frame time (days)")
+    # plt.ylabel("Flux")
+    # plt.title("Single-object power-law fit")
+    # plt.legend()
+    # plt.tight_layout()
+    # plt.show()
