@@ -158,7 +158,8 @@ def batch_plotter(object_path: Path, light_curve_data_path: Path, output_path: P
     }
 
     for object_id in object_ids:
-        group_df = groups.get(object_id).filter(pl.col("r:psfFlux") > 0)
+        group_df = groups.get(object_id)
+        # group_df = groups.get(object_id).filter(pl.col("r:psfFlux") > 0)
 
         if group_df is None:
             print(f"Object {object_id} does not have any light curve data.")
@@ -169,10 +170,10 @@ def batch_plotter(object_path: Path, light_curve_data_path: Path, output_path: P
 
 if __name__ == "__main__":
     API_URL = "https://api.lsst.fink-portal.org/api/v1/fp"
-    OBJECTS = ["170235219334922248"]
     COLUMNS = (
         "r:diaObjectId,r:diaSourceId,r:midpointMjdTai,r:band,r:psfFlux,r:psfFluxErr"
     )
+
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
@@ -181,30 +182,41 @@ if __name__ == "__main__":
 
     IMAGES_DIR = PROJECT_DIR / "images"
 
-    TEST_OBJECT_PATH = (
+    OBJECT_PATH = (
         DATA_DIR
-        / "eex_results"
-        / "simple_power_law"
-        / "testing_results"
-        / "test_object.csv"
+        / "salt_fitting"
+        / "ia_search"
+        / "with_z_results"
+        / "colour_stretch_results"
+        / "pass.csv"
     )
 
-    OUTPUT_PATH_TEST = (
+    OBJECTS = pl.read_csv(
+        source=OBJECT_PATH,
+        columns=["r:diaObjectId"],
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+        },
+    )["r:diaObjectId"].to_list()
+
+    OUTPUT_PATH = (
         DATA_DIR
         / "light_curve_data"
         / "forced_photometry_data"
-        / "force_photometry_test.parquet"
+        / "photometric_ia_forced_photometry.parquet"
     )
+
+    PLOTS_OUTPUT_PATH = IMAGES_DIR / "forced_photometry_plots"
 
     # pull_data_from_fink(
     #     objects=OBJECTS,
     #     api_url=API_URL,
     #     columns=COLUMNS,
-    #     output_path=OUTPUT_PATH_TEST,
+    #     output_path=OUTPUT_PATH,
     # )
 
     batch_plotter(
-        object_path=TEST_OBJECT_PATH,
-        light_curve_data_path=OUTPUT_PATH_TEST,
+        object_path=OBJECT_PATH,
+        light_curve_data_path=OUTPUT_PATH,
         output_path=IMAGES_DIR,
     )
