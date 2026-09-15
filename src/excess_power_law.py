@@ -326,6 +326,7 @@ def rest_frame_conversion(
 
 def log_prior_function(
     theta: np.ndarray,
+    band_data: dict,
     t_fd_rest: float,
 ) -> float:
     """The priors of the fitting in log form to work in log probabilities when doing the MCMC fitting.
@@ -343,24 +344,23 @@ def log_prior_function(
     if not (-100 < t_fl < t_fd_rest):
         return -np.inf
 
-    if A_prime_g <= 0 or A_prime_r <= 0 or A_prime_i <= 0:
-        return -np.inf
+    log_prior = 0.0
 
-    if (
-        not (1 <= alpha_g <= (1 * 10**8))
-        or not (1 <= alpha_r <= (1 * 10**8))
-        or not (1 <= alpha_i <= (1 * 10**8))
-    ):
-        return -np.inf
+    fit_bands = list(band_data.keys())
 
-    return (
-        -np.log(A_prime_g)
-        - alpha_g * np.log(10)
-        - np.log(A_prime_r)
-        - alpha_r * np.log(10)
-        - np.log(A_prime_i)
-        - alpha_i * np.log(10)
-    )
+    for index, band in enumerate(fit_bands):
+        A_prime = theta[1 + 2 * index]
+        alpha = theta[2 + 2 * index]
+
+        if A_prime <= 0:
+            return -np.inf
+
+        if not 1 <= alpha <= 1e8:
+            return -np.inf
+
+        log_prior += -np.log(A_prime) - alpha * np.log(10)
+
+    return log_prior
 
 
 def log_likelihood_function(
@@ -387,82 +387,26 @@ def log_likelihood_function(
 
     for index, band in enumerate(fit_bands):
         A_prime = theta[1 + 2 * index]
-        alpha = theta[2+2 * index]
+        alpha = theta[2 + 2 * index]
 
         times = band_data[band]["times"]
         flux = band_data[band]["flux"]
         flux_error = band_data[band]["flux_error"]
 
         model_flux = power_law_model(
-        times=times,
-        t_fl=t_fl,
-        A_prime=A_prime,
-        alpha=alpha,
-    )
+            times=times,
+            t_fl=t_fl,
+            A_prime=A_prime,
+            alpha=alpha,
+        )
 
-    g_times = band_data["g"]["times"]
-    g_flux = band_data["g"]["flux"]
-    g_flux_error = band_data["g"]["flux_error"]
+        residual = flux - model_flux
 
-    r_times = band_data["r"]["times"]
-    r_flux = band_data["r"]["flux"]
-    r_flux_error = band_data["r"]["flux_error"]
+        log_likelihood += -0.5 * np.sum(
+            (residual / flux_error) ** 2 + np.log(2 * np.pi * flux_error**2)
+        )
 
-    i_times = band_data["i"]["times"]
-    i_flux = band_data["i"]["flux"]
-    i_flux_error = band_data["i"]["flux_error"]
-
-    (
-        t_fl,
-        A_prime_g,
-        alpha_g,
-        A_prime_r,
-        alpha_r,
-        A_prime_i,
-        alpha_i,
-    ) = theta
-
-    g_model_flux = power_law_model(
-        times=g_times,
-        t_fl=t_fl,
-        A_prime=A_prime_g,
-        alpha=alpha_g,
-    )
-
-    r_model_flux = power_law_model(
-        times=r_times,
-        t_fl=t_fl,
-        A_prime=A_prime_r,
-        alpha=alpha_r,
-    )
-
-    i_model_flux = power_law_model(
-        times=i_times,
-        t_fl=t_fl,
-        A_prime=A_prime_i,
-        alpha=alpha_i,
-    )
-
-    g_residual = g_flux - g_model_flux
-
-    r_residual = r_flux - r_model_flux
-
-    i_residual = i_flux - i_model_flux
-
-    g_log_likelihood = -0.5 * np.sum(
-        (g_residual / g_flux_error) ** 2 + np.log(2 * np.pi * g_flux_error**2)
-    )
-
-    r_log_likelihood = -0.5 * np.sum(
-        (r_residual / r_flux_error) ** 2 + np.log(2 * np.pi * r_flux_error**2)
-    )
-
-    i_log_likelihood = -0.5 * np.sum(
-        (i_residual / i_flux_error) ** 2 + np.log(2 * np.pi * i_flux_error**2)
-    )
-
-    # Return the output of the log likelihood equation.
-    return g_log_likelihood + r_log_likelihood + i_log_likelihood
+    return log_likelihood
 
 
 def log_probability_function(
@@ -485,6 +429,7 @@ def log_probability_function(
 
     lp = log_prior_function(
         theta=theta,
+        band_data=band_data,
         t_fd_rest=t_fd_rest,
     )
     if not np.isfinite(lp):
@@ -516,12 +461,24 @@ def fitting_power_law(
         "t_fl": [],
         "t_fl_err_low": [],
         "t_fl_err_high": [],
-        "A_prime": [],
-        "A_prime_err_low": [],
-        "A_prime_err_high": [],
-        "alpha": [],
-        "alpha_err_low": [],
-        "alpha_err_high": [],
+        "A_prime_g": [],
+        "A_prime_g_err_low": [],
+        "A_prime_g_err_high": [],
+        "alpha_g": [],
+        "alpha_g_err_low": [],
+        "alpha_g_err_high": [],
+        "A_prime_r": [],
+        "A_prime_r_err_low": [],
+        "A_prime_r_err_high": [],
+        "alpha_r": [],
+        "alpha_r_err_low": [],
+        "alpha_r_err_high": [],
+        "A_prime_i": [],
+        "A_prime_i_err_low": [],
+        "A_prime_i_err_high": [],
+        "alpha_i": [],
+        "alpha_i_err_low": [],
+        "alpha_i_err_high": [],
         "t_fd": [],
         "t_fd_rest": [],
         "z_used": [],
@@ -612,6 +569,9 @@ def fitting_power_law(
             ),
         )
 
+        print("fit_bands:", list(band_data.keys()))
+        print("theta initial:", theta)
+
         # Running the MCMC fitting algorithm.
         sampler.run_mcmc(
             initial_state=pos,
@@ -621,31 +581,33 @@ def fitting_power_law(
 
         flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
 
-        print(flat_samples)
-
         q16, t_fl, q84 = np.percentile(flat_samples[:, 0], [16, 50, 84])
 
         results["t_fl"].append(float(t_fl))
         results["t_fl_err_low"].append(float(t_fl - q16))
         results["t_fl_err_high"].append(float(q84 - t_fl))
 
-        q16, A_prime, q84 = np.percentile(flat_samples[:, 1], [16, 50, 84])
+        for index, band in enumerate(fit_bands):
+            A_prime_index = 1 + 2 * index
+            alpha_index = 2 + 2 * index
 
-        results["A_prime"].append(float(A_prime))
-        results["A_prime_err_low"].append(float(A_prime - q16))
-        results["A_prime_err_high"].append(float(q84 - A_prime))
+            q16, A_prime, q84 = np.percentile(flat_samples[:, A_prime_index], [16, 50, 84])
 
-        q16, alpha, q84 = np.percentile(flat_samples[:, 2], [16, 50, 84])
+            results[f"A_prime_{band}"].append(float(A_prime))
+            results[f"A_prime_{band}_err_low"].append(float(A_prime - q16))
+            results[f"A_prime_{band}_err_high"].append(float(q84 - A_prime))
 
-        results["alpha"].append(float(alpha))
-        results["alpha_err_low"].append(float(alpha - q16))
-        results["alpha_err_high"].append(float(q84 - alpha))
+            q16, alpha, q84 = np.percentile(flat_samples[:, alpha_index], [16, 50, 84])
+
+            results[f"alpha_{band}"].append(float(alpha))
+            results[f"alpha_{band}_err_low"].append(float(alpha - q16))
+            results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
 
         results["r:diaObjectId"].append(object_id[0])
         results["t_fd"].append(rest_frame_objects_df["t_fd"].item(0))
         results["t_fd_rest"].append(rest_frame_objects_df["t_fd_rest"].item(0))
         results["z_used"].append(rest_frame_objects_df["z_used"].item(0))
-        results["n_points"].append(len(band_data[current_band]["times"]))
+        results["n_points"].append(sum(len(band_data[band]["times"])) for band in fit_bands)
         results["sampler_nsteps"].append(n_steps)
         results["sampler_nwalkers"].append(nwalkers)
         results["t50_mjd"].append(rest_frame_objects_df["t50_mjd"].item(0))
@@ -747,7 +709,6 @@ def walkers_chain_plot(
 def fit_sample_parameters_plot(
     sampling_results: pl.DataFrame,
     rest_frame_objects_df: pl.DataFrame,
-    band: str,
     output_path: Path | None = None,
 ) -> None:
     """Plots the median sampled values from the sampling of parameters for the power law against the real data of the light curves of the objects.
@@ -758,74 +719,121 @@ def fit_sample_parameters_plot(
     """
 
     for object_id, object_df in sampling_results[0].group_by("r:diaObjectId"):
-        diaObjectId = object_df["r:diaObjectId"]
+        diaObjectId = object_df["r:diaObjectId"].item()
 
-        # Filter for the light curve data of this object in the desired band too.
-        object_data_filter_df = rest_frame_objects_df.filter(
-            (pl.col("r:diaObjectId") == diaObjectId) & (pl.col("r:band") == band),
-        )
+        band_data = {}
 
-        # Grabbing the data needed to produce the real light curve of the object.
-        times = object_data_filter_df["rest_frame_time"].to_numpy()
-        flux = object_data_filter_df["r:psfFlux"].to_numpy()
-        flux_error = object_data_filter_df["r:psfFluxErr"].to_numpy()
+        for current_band in [
+            "g",
+            "r",
+            "i",
+        ]:
+            # Filter for the light curve data of this object in the desired band too.
+            band_df = rest_frame_objects_df.filter(
+                (pl.col("r:band") == current_band)
+                & (pl.col("r:diaObjectId") == diaObjectId),
+            )
+            print(band_df)
+
+            if band_df.height > 0:
+                band_data[current_band] = {
+                    # Making Numpy arrays of the columns for the iteration and fitting.
+                    "times": band_df["rest_frame_time"].to_numpy(),
+                    "flux": band_df["r:psfFlux"].to_numpy(),
+                    "flux_error": band_df["r:psfFluxErr"].to_numpy(),
+                }
+
+        fit_bands = list(band_data.keys())
 
         # Grabbing the time of first detection for the object
-        t_fd_rest = object_df["t_fd_rest"].to_numpy()
+        model_parameters = {}
 
-        # Extract median parameters from the sampling results dataframe
-        t_fl_med = object_df["t_fl"].to_numpy()
-        A_prime_med = object_df["A_prime"].to_numpy()
-        alpha_med = object_df["alpha"].to_numpy()
+        for band in fit_bands:
+            model_parameters[band] = {
+                "A_prime": object_df[f"A_prime_{band}"].item(),
+                "alpha": object_df[f"alpha_{band}"].item(),
+            }
 
-        t_grid = np.linspace(times.min(), times.max(), 300)
+        t_fl_med = object_df["t_fl"].item()
+        t_fd_rest = object_df["t_fd_rest"].item()
 
-        model_flux = power_law_model(
-            times=t_grid,
-            t_fl=t_fl_med,
-            A_prime=A_prime_med,
-            alpha=alpha_med,
-        )
+        model_grids = {}
+
+        for band in fit_bands:
+            times = band_data[band]["times"]
+
+            model_grids[band] = np.linspace(
+                np.min(times),
+                np.max(times),
+                300,
+            )
+
+        model_flux = {}
+
+        for band in fit_bands:
+            model_flux[band] = power_law_model(
+                times=model_grids[band],
+                t_fl=t_fl_med,
+                A_prime=model_parameters[band]["A_prime"],
+                alpha=model_parameters[band]["alpha"],
+            )
+
+        for band in fit_bands:
+            print(f"\n{band}")
+            print("t_fl:", t_fl_med)
+            print("A_prime:", model_parameters[band]["A_prime"])
+            print("alpha:", model_parameters[band]["alpha"])
+
+            model_at_data = power_law_model(
+                times=band_data[band]["times"],
+                t_fl=t_fl_med,
+                A_prime=model_parameters[band]["A_prime"],
+                alpha=model_parameters[band]["alpha"],
+            )
+
+            print("observed flux:", band_data[band]["flux"][:5])
+            print("model flux:   ", model_at_data[:5])
 
         plt.figure(figsize=(8, 5))
 
-        plt.errorbar(
-            times,
-            flux,
-            yerr=flux_error,
-            fmt="o",
-            capsize=3,
-            label="Observed data",
-        )
+        for band in fit_bands:
+            plt.errorbar(
+                band_data[band]["times"],
+                band_data[band]["flux"],
+                yerr=band_data[band]["flux_error"],
+                fmt="o",
+                capsize=3,
+                label="Observed data",
+            )
 
-        plt.plot(
-            t_grid,
-            model_flux,
-            label="Median power-law fit",
-        )
+            plt.plot(
+                model_grids[band],
+                model_flux[band],
+                label="Median power-law fit",
+            )
 
         plt.axvline(
             x=t_fd_rest,
             linestyle="--",
-            label=rf"$t_{{fd}}={t_fd_rest.item():.2f}$ d",
+            label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
         )
 
         plt.axvline(
-            x=t_fd_rest.item() + 3,
+            x=t_fd_rest + 3,
             linestyle="--",
-            label=rf"$t_{{fd}} + 3d ={t_fd_rest.item() + 3:.2f}$ d",
+            label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d",
         )
 
         plt.axvline(
             t_fl_med,
             linestyle="--",
-            label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med.item():.2f}$ d",
+            label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med:.2f}$ d",
             color="#D55E00",
         )
 
         plt.xlabel("Rest-frame time (days)")
         plt.ylabel("Flux (nJy)")
-        plt.title(f"{diaObjectId[0]}")
+        plt.title(f"{diaObjectId}")
         plt.legend()
         plt.tight_layout()
         plt.show()
@@ -881,12 +889,11 @@ if __name__ == "__main__":
 
     LABELS = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
 
-    for band in BANDS:
-        test_result = iterate_over_bands(
-            objects_dir=TEST_OBJECT_DIR,
-            light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
-            bands=BANDS,
-        )
+    test_result = iterate_over_bands(
+        objects_dir=TEST_OBJECT_DIR,
+        light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
+        bands=BANDS,
+    )
 
     test_result = keep_observations_upto_t50(
         objects=TEST_OBJECT_DIR,
@@ -899,10 +906,11 @@ if __name__ == "__main__":
         pre_t50_objects_data=test_result,
     )
 
-    # excluding_excess_window(
-    #     rest_frame_conversion_df=test_result,
-    #     band="g",
-    # )
+    for band in BANDS:
+        rest_frame_test_result = excluding_excess_window(
+            rest_frame_conversion_df=rest_frame_test_result,
+            band=band,
+        )
 
     test_result = fitting_power_law(
         rest_frame_objects=rest_frame_test_result,
@@ -915,8 +923,7 @@ if __name__ == "__main__":
     #     discard=500,
     # )
 
-    # fit_sample_parameters_plot(
-    #     sampling_results=test_result,
-    #     rest_frame_objects_df=rest_frame_test_result,
-    #     band=band,
-    # )
+    fit_sample_parameters_plot(
+        sampling_results=test_result,
+        rest_frame_objects_df=rest_frame_test_result,
+    )
