@@ -4,6 +4,7 @@ import emcee
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+from IPython.display import Math, display
 
 from early_excess_salt_detection import loading_light_curve_data_and_objects
 
@@ -126,16 +127,24 @@ def iterate_over_bands(
         )
         if band == "g":
             g_result = filtered_result
+        elif band == "r":
+            r_result = filtered_result
         elif band == "i":
             i_result = filtered_result
 
-    i_only = i_result.join(
+    r_only = r_result.join(
         g_result.select("r:diaObjectId"),
         on="r:diaObjectId",
         how="anti",
     )
 
-    final_reference_points = pl.concat([g_result, i_only])
+    i_only = i_result.join(
+        r_result.select("r:diaObjectId"),
+        on="r:diaObjectId",
+        how="anti",
+    )
+
+    final_reference_points = pl.concat([g_result, r_only, i_only])
 
     return final_reference_points.rename({"r:midpointMjdTai": "t50_mjd"}).select(
         [
@@ -329,25 +338,34 @@ def log_prior_function(
         pl.Float64: _description_
     """
 
-    t_fl, A_prime, alpha = theta
+    t_fl = theta[0]
 
     if not (-100 < t_fl < t_fd_rest):
         return -np.inf
 
-    if A_prime <= 0:
+    if A_prime_g <= 0 or A_prime_r <= 0 or A_prime_i <= 0:
         return -np.inf
 
-    if not (1 <= alpha <= (1 * 10**8)):
+    if (
+        not (1 <= alpha_g <= (1 * 10**8))
+        or not (1 <= alpha_r <= (1 * 10**8))
+        or not (1 <= alpha_i <= (1 * 10**8))
+    ):
         return -np.inf
 
-    return -np.log(A_prime) - alpha * np.log(10)
+    return (
+        -np.log(A_prime_g)
+        - alpha_g * np.log(10)
+        - np.log(A_prime_r)
+        - alpha_r * np.log(10)
+        - np.log(A_prime_i)
+        - alpha_i * np.log(10)
+    )
 
 
 def log_likelihood_function(
     theta: np.ndarray,
-    times: np.ndarray,
-    flux: np.ndarray,
-    flux_error: np.ndarray,
+    band_data: dict,
 ) -> float:
     """The log likelihood function given the values of theta that have been guessed by the MCMC algorithm and the flux computed by the power law model to assess how good of a guess the algorithm has made.
 
@@ -361,28 +379,95 @@ def log_likelihood_function(
         float: The likelihood of the estimated parameters for the power law flux model.
     """
 
-    t_fl, A_prime, alpha = theta
+    fit_bands = list(band_data.keys())
 
-    model_flux = power_law_model(
+    log_likelihood = 0.0
+
+    t_fl = theta[0]
+
+    for index, band in enumerate(fit_bands):
+        A_prime = theta[1 + 2 * index]
+        alpha = theta[2+2 * index]
+
+        times = band_data[band]["times"]
+        flux = band_data[band]["flux"]
+        flux_error = band_data[band]["flux_error"]
+
+        model_flux = power_law_model(
         times=times,
         t_fl=t_fl,
         A_prime=A_prime,
         alpha=alpha,
     )
 
-    residual = flux - model_flux
+    g_times = band_data["g"]["times"]
+    g_flux = band_data["g"]["flux"]
+    g_flux_error = band_data["g"]["flux_error"]
+
+    r_times = band_data["r"]["times"]
+    r_flux = band_data["r"]["flux"]
+    r_flux_error = band_data["r"]["flux_error"]
+
+    i_times = band_data["i"]["times"]
+    i_flux = band_data["i"]["flux"]
+    i_flux_error = band_data["i"]["flux_error"]
+
+    (
+        t_fl,
+        A_prime_g,
+        alpha_g,
+        A_prime_r,
+        alpha_r,
+        A_prime_i,
+        alpha_i,
+    ) = theta
+
+    g_model_flux = power_law_model(
+        times=g_times,
+        t_fl=t_fl,
+        A_prime=A_prime_g,
+        alpha=alpha_g,
+    )
+
+    r_model_flux = power_law_model(
+        times=r_times,
+        t_fl=t_fl,
+        A_prime=A_prime_r,
+        alpha=alpha_r,
+    )
+
+    i_model_flux = power_law_model(
+        times=i_times,
+        t_fl=t_fl,
+        A_prime=A_prime_i,
+        alpha=alpha_i,
+    )
+
+    g_residual = g_flux - g_model_flux
+
+    r_residual = r_flux - r_model_flux
+
+    i_residual = i_flux - i_model_flux
+
+    g_log_likelihood = -0.5 * np.sum(
+        (g_residual / g_flux_error) ** 2 + np.log(2 * np.pi * g_flux_error**2)
+    )
+
+    r_log_likelihood = -0.5 * np.sum(
+        (r_residual / r_flux_error) ** 2 + np.log(2 * np.pi * r_flux_error**2)
+    )
+
+    i_log_likelihood = -0.5 * np.sum(
+        (i_residual / i_flux_error) ** 2 + np.log(2 * np.pi * i_flux_error**2)
+    )
 
     # Return the output of the log likelihood equation.
-    return -0.5 * np.sum(
-        (residual / flux_error) ** 2 + np.log(2 * np.pi * flux_error**2)
-    )
+    return g_log_likelihood + r_log_likelihood + i_log_likelihood
 
 
 def log_probability_function(
     theta: np.ndarray,
-    times: np.ndarray,
-    flux: np.ndarray,
-    flux_error: np.ndarray,
+    band_data: dict,
     t_fd_rest: float,
 ) -> float:
     """The probability that these parameters of the fit with respect to the real fluxes and flux errors are determined.
@@ -407,15 +492,12 @@ def log_probability_function(
 
     return lp + log_likelihood_function(
         theta=theta,
-        times=times,
-        flux=flux,
-        flux_error=flux_error,
+        band_data=band_data,
     )
 
 
 def fitting_power_law(
     rest_frame_objects: pl.DataFrame,
-    band: str,
     n_steps: int,
     fit_df_output_path: Path | None = None,
 ) -> pl.DataFrame:
@@ -456,24 +538,67 @@ def fitting_power_law(
 
     for object_id, object_df in rest_frame_objects.group_by("r:diaObjectId"):
         # Filtering the dataframe to just the individual band.
-        rest_frame_objects_df = object_df.filter(pl.col("r:band") == band)
+        rest_frame_objects_df = object_df
 
-        # Making Numpy arrays of the columns for the iteration and fitting.
-        times = rest_frame_objects_df["rest_frame_time"].to_numpy()
-        flux = rest_frame_objects_df["r:psfFlux"].to_numpy()
-        flux_error = rest_frame_objects_df["r:psfFluxErr"].to_numpy()
+        band_data = {}
+
+        for current_band in [
+            "g",
+            "r",
+            "i",
+        ]:
+            band_df = object_df.filter(pl.col("r:band") == current_band)
+
+            if band_df.height > 0:
+                band_data[current_band] = {
+                    # Making Numpy arrays of the columns for the iteration and fitting.
+                    "times": band_df["rest_frame_time"].to_numpy(),
+                    "flux": band_df["r:psfFlux"].to_numpy(),
+                    "flux_error": band_df["r:psfFluxErr"].to_numpy(),
+                }
 
         # Finding the first detection for the object
-        t_fd_rest = test_result["t_fd_rest"].first()
+        t_fd_rest = rest_frame_objects_df["t_fd_rest"].first()
+
+        # Bands present in the object that will be used for the fit.
+        fit_bands = list(band_data.keys())
 
         # Initial guess for theta for this test object.
-        theta = np.array([-18, 2.0, 4.0])
+        theta = [
+            -18,
+        ]
+
+        # Adding extra priors if more bands are present.
+        for band in fit_bands:
+            theta.extend(
+                [
+                    2.0,
+                    4.0,
+                ]
+            )
+
+        # Converting the list to a numpy array.
+        theta = np.array(theta)
 
         # Rough scatter approximation for the fitting vector theta.
-        scatter = np.array([0.1, 0.05, 0.05])
+        scatter = [
+            0.1,
+        ]
+
+        # Adding extra scatter to extra extra prior for the detected bands
+        for band in fit_bands:
+            scatter.extend(
+                [
+                    0.5,
+                    0.5,
+                ]
+            )
+
+        # Converting scatter list to numpy array.
+        scatter = np.array(scatter)
 
         # Beginning position for the MCMC fitting process.
-        pos = theta + scatter * np.random.randn(100, 3)
+        pos = theta + scatter * np.random.randn(100, len(theta))
 
         # Initialising the ensemble sample from the emcee library
         nwalkers, ndim = pos.shape
@@ -482,9 +607,7 @@ def fitting_power_law(
             ndim=ndim,
             log_prob_fn=log_probability_function,
             args=(
-                times,
-                flux,
-                flux_error,
+                band_data,
                 t_fd_rest,
             ),
         )
@@ -497,6 +620,8 @@ def fitting_power_law(
         )
 
         flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
+
+        print(flat_samples)
 
         q16, t_fl, q84 = np.percentile(flat_samples[:, 0], [16, 50, 84])
 
@@ -520,14 +645,14 @@ def fitting_power_law(
         results["t_fd"].append(rest_frame_objects_df["t_fd"].item(0))
         results["t_fd_rest"].append(rest_frame_objects_df["t_fd_rest"].item(0))
         results["z_used"].append(rest_frame_objects_df["z_used"].item(0))
-        results["n_points"].append(len(times))
+        results["n_points"].append(len(band_data[current_band]["times"]))
         results["sampler_nsteps"].append(n_steps)
         results["sampler_nwalkers"].append(nwalkers)
         results["t50_mjd"].append(rest_frame_objects_df["t50_mjd"].item(0))
 
     results = pl.DataFrame(results)
 
-    return results
+    return results, sampler
 
 
 def excluding_excess_window(
@@ -563,6 +688,147 @@ def excluding_excess_window(
         )
 
     return rest_frame_objects_df
+
+
+def walkers_chain_plot(
+    sampler_results: emcee.EnsembleSampler,
+    labels: list[str],
+    discard: int = 0,
+    output_path: Path | None = None,
+) -> None:
+    """Plot the walkers behaviour as a function of the chain length to see how they converge and if there is any degeneracies between the parameters.
+
+    Args:
+        sampler_results (emcee.EnsembleSampler): The results from the sampling process which is the second index of the result from the fitting power law function.
+        labels (list[str]): List of labels that are used for the labels of the y axis for the plot.
+        discard (int, optional): The number of steps to discard before doing the plotting. Defaults to 0.
+        output_path (Path | None, optional): Output path to where the plot can be saved if desired. Defaults to None.
+    """
+
+    samples = sampler_results.get_chain(
+        discard=discard,
+    )
+
+    (
+        nsteps,
+        nwalkers,
+        ndim,
+    ) = samples.shape
+
+    fig, axes = plt.subplots(
+        ndim,
+        1,
+        figsize=(10, 2 * ndim),
+        sharex=True,
+    )
+
+    if ndim == 1:
+        axes = [axes]
+
+    for i in range(ndim):
+        ax = axes[i]
+        ax.plot(samples[:, :, i], "k", alpha=0.3)
+        ax.set_xlim(
+            0,
+            nsteps,
+        )
+        if labels:
+            ax.set_ylabel(labels[i])
+
+    axes[-1].set_xlabel("Step Number")
+    plt.tight_layout()
+    if output_path is not None:
+        plt.savefig(
+            output_path,
+        )
+    plt.show()
+
+
+def fit_sample_parameters_plot(
+    sampling_results: pl.DataFrame,
+    rest_frame_objects_df: pl.DataFrame,
+    band: str,
+    output_path: Path | None = None,
+) -> None:
+    """Plots the median sampled values from the sampling of parameters for the power law against the real data of the light curves of the objects.
+
+    Args:
+        sampling_results (pl.DataFrame): The results of the chain from the sampling of the power law, this should be the resulting dataframe output from the power law fitting function.
+        output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
+    """
+
+    for object_id, object_df in sampling_results[0].group_by("r:diaObjectId"):
+        diaObjectId = object_df["r:diaObjectId"]
+
+        # Filter for the light curve data of this object in the desired band too.
+        object_data_filter_df = rest_frame_objects_df.filter(
+            (pl.col("r:diaObjectId") == diaObjectId) & (pl.col("r:band") == band),
+        )
+
+        # Grabbing the data needed to produce the real light curve of the object.
+        times = object_data_filter_df["rest_frame_time"].to_numpy()
+        flux = object_data_filter_df["r:psfFlux"].to_numpy()
+        flux_error = object_data_filter_df["r:psfFluxErr"].to_numpy()
+
+        # Grabbing the time of first detection for the object
+        t_fd_rest = object_df["t_fd_rest"].to_numpy()
+
+        # Extract median parameters from the sampling results dataframe
+        t_fl_med = object_df["t_fl"].to_numpy()
+        A_prime_med = object_df["A_prime"].to_numpy()
+        alpha_med = object_df["alpha"].to_numpy()
+
+        t_grid = np.linspace(times.min(), times.max(), 300)
+
+        model_flux = power_law_model(
+            times=t_grid,
+            t_fl=t_fl_med,
+            A_prime=A_prime_med,
+            alpha=alpha_med,
+        )
+
+        plt.figure(figsize=(8, 5))
+
+        plt.errorbar(
+            times,
+            flux,
+            yerr=flux_error,
+            fmt="o",
+            capsize=3,
+            label="Observed data",
+        )
+
+        plt.plot(
+            t_grid,
+            model_flux,
+            label="Median power-law fit",
+        )
+
+        plt.axvline(
+            x=t_fd_rest,
+            linestyle="--",
+            label=rf"$t_{{fd}}={t_fd_rest.item():.2f}$ d",
+        )
+
+        plt.axvline(
+            x=t_fd_rest.item() + 3,
+            linestyle="--",
+            label=rf"$t_{{fd}} + 3d ={t_fd_rest.item() + 3:.2f}$ d",
+        )
+
+        plt.axvline(
+            t_fl_med,
+            linestyle="--",
+            label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med.item():.2f}$ d",
+            color="#D55E00",
+        )
+
+        plt.xlabel("Rest-frame time (days)")
+        plt.ylabel("Flux (nJy)")
+        plt.title(f"{diaObjectId[0]}")
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
 
 if __name__ == "__main__":
@@ -609,14 +875,18 @@ if __name__ == "__main__":
 
     BANDS = [
         "g",
+        "r",
         "i",
     ]
 
-    test_result = iterate_over_bands(
-        objects_dir=TEST_OBJECT_DIR,
-        light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
-        bands=BANDS,
-    )
+    LABELS = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
+
+    for band in BANDS:
+        test_result = iterate_over_bands(
+            objects_dir=TEST_OBJECT_DIR,
+            light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
+            bands=BANDS,
+        )
 
     test_result = keep_observations_upto_t50(
         objects=TEST_OBJECT_DIR,
@@ -624,112 +894,29 @@ if __name__ == "__main__":
         reference_df=test_result,
     )
 
-    test_result = rest_frame_conversion(
+    rest_frame_test_result = rest_frame_conversion(
         object_salt_data=TEST_OBJECT_DIR,
         pre_t50_objects_data=test_result,
     )
 
-    excluding_excess_window(
-        rest_frame_conversion_df=test_result,
-        band="g",
+    # excluding_excess_window(
+    #     rest_frame_conversion_df=test_result,
+    #     band="g",
+    # )
+
+    test_result = fitting_power_law(
+        rest_frame_objects=rest_frame_test_result,
+        n_steps=2000,
     )
 
-    # test_result = fitting_power_law(
-    #     rest_frame_objects=test_result,
-    #     band="g",
-    #     n_steps=2000,
-    # )
-    # print(test_result)
-
-    # test_result = test_result.filter(pl.col("r:band") == "g")
-
-    # times = test_result["rest_frame_time"].to_numpy()
-    # flux = test_result["r:psfFlux"].to_numpy()
-    # flux_error = test_result["r:psfFluxErr"].to_numpy()
-
-    # t_fd_rest = test_result["t_fd_rest"].first()
-
-    # # Initial guess for theta for this test object.
-    # theta = np.array([-18, 2.0, 4.0])
-
-    # scatter = np.array([0.1, 0.05, 0.05])
-
-    # pos = theta + scatter * np.random.randn(100, 3)
-
-    # nwalkers, ndim = pos.shape
-    # sampler = emcee.EnsembleSampler(
-    #     nwalkers=nwalkers,
-    #     ndim=ndim,
-    #     log_prob_fn=log_probability_function,
-    #     args=(
-    #         times,
-    #         flux,
-    #         flux_error,
-    #         t_fd_rest,
-    #     ),
-    # )
-    # sampler.run_mcmc(
-    #     initial_state=pos,
-    #     nsteps=2000,
-    #     progress=True,
+    # walkers_chain_plot(
+    #     sampler_results=test_result[1],
+    #     labels=LABELS,
+    #     discard=500,
     # )
 
-    # fig, axes = plt.subplots(3, figsize=(10, 7), sharex=True)
-    # samples = sampler.get_chain()
-    # labels = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
-    # for i in range(ndim):
-    #     ax = axes[i]
-    #     ax.plot(samples[:, :, i], "k", alpha=0.3)
-    #     ax.set_xlim(0, len(samples))
-    #     ax.set_ylabel(labels[i])
-    #     ax.yaxis.set_label_coords(-0.1, 0.5)
-
-    # axes[-1].set_xlabel("step number")
-
-    # tau = sampler.get_autocorr_time()
-    # print(tau)
-
-    # flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
-
-    # t_fl_med = np.median(flat_samples[:, 0])
-    # A_prime_med = np.median(flat_samples[:, 1])
-    # alpha_med = np.median(flat_samples[:, 2])
-
-    # t_grid = np.linspace(times.min(), times.max(), 300)
-
-    # model_flux = power_law_model(
-    #     times=t_grid,
-    #     t_fl=t_fl_med,
-    #     A_prime=A_prime_med,
-    #     alpha=alpha_med,
+    # fit_sample_parameters_plot(
+    #     sampling_results=test_result,
+    #     rest_frame_objects_df=rest_frame_test_result,
+    #     band=band,
     # )
-
-    # plt.figure(figsize=(8, 5))
-
-    # plt.errorbar(
-    #     times,
-    #     flux,
-    #     yerr=flux_error,
-    #     fmt="o",
-    #     capsize=3,
-    #     label="Observed data",
-    # )
-
-    # plt.plot(
-    #     t_grid,
-    #     model_flux,
-    #     label="Median power-law fit",
-    # )
-
-    # plt.axvline(
-    #     t_fl_med,
-    #     linestyle="--",
-    #     label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med:.2f}$",
-    # )
-
-    # plt.xlabel("Rest-frame time (days)")
-    # plt.ylabel("Flux")
-    # plt.title("Single-object power-law fit")
-    # plt.legend()
-    # plt.tight_layout()
-    # plt.show()
