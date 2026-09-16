@@ -338,19 +338,6 @@ def plot_salt_phase_diagnostic(
                     linestyle="--",
                     alpha=0.5,
                 )
-        phase_text = (
-            f"Peak phase: {row['pass_peak_phase']}\n"
-            f"Shape phase: {row['pass_shape_phase']}\n"
-            f"Colour: {row['pass_colour']}\n"
-            f"Overall: {row['pass_salt_quality']}"
-        )
-
-        fig.text(
-            0.82,
-            0.5,
-            phase_text,
-            va="center",
-        )
 
         fig.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
         plt.close(fig)
@@ -772,10 +759,43 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    OBJECTS_PATH = (
-        DATA_DIR / "eex_results" / "salt_method" / "phase_cuts_results" / "pass.csv"
+    SN_II_SALT_FITS_PATH = (
+        DATA_DIR
+        / "salt_fitting"
+        / "core_collapse_results"
+        / "salt_fits_values_filtered.csv"
+    )
+
+    SN_II_SALT_PASS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "phase_results" / "pass.csv"
+    )
+
+    SN_II_SALT_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "phase_results" / "fail.csv"
+    )
+
+    SN_II_SALT_VALUES_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "phase_results" / "values.csv"
     )
 
     LIGHT_CURVE_DATA_PATH = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    )
+
+    SN_II_SALT_PHASE_PLOT_OUTPUT_PATH = (
+        IMAGE_DIR / "sn_ii_light_curves" / "salt_plots" / "phase_cut"
+    )
+
+    bazin_salt_phase_cut(
+        salt_fits_path=SN_II_SALT_FITS_PATH,
+        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+        pass_output_path=SN_II_SALT_PASS_OUTPUT_PATH,
+        fail_output_path=SN_II_SALT_FAIL_OUTPUT_PATH,
+        values_output_path=SN_II_SALT_VALUES_OUTPUT_PATH,
+    )
+
+    plot_salt_phase_diagnostic(
+        phase_results_path=SN_II_SALT_VALUES_OUTPUT_PATH,
+        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+        output_dir=SN_II_SALT_PHASE_PLOT_OUTPUT_PATH,
     )
