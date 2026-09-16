@@ -120,7 +120,7 @@ def data_ingestion(startdate: str, stopdate: str) -> None:
             print(f"No new candidates for tag: {tag}")
             continue
 
-        combined_df.write_csv(output_path)
+        # combined_df.write_csv(output_path)
         print(f"The number of new candidates found is {len(df_new)}")
         print(f"The total number of candidates in the catalogue is {len(combined_df)}")
 

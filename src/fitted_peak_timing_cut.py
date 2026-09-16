@@ -280,7 +280,6 @@ def spectro_strip_plots(
         jitter=0.2,
         dodge=False,
         palette=colours,
-        size=10,
     )
     plt.axvline(
         x=50,
@@ -293,7 +292,7 @@ def spectro_strip_plots(
     plt.xlabel(r"$\Delta t_{fit peak}$ (days)")
     plt.tight_layout()
     if output_path is not None:
-        plt.savefig(output_path)
+        plt.savefig(output_path / "spectro_fitted_peak_delta_times.png")
     plt.show()
 
 

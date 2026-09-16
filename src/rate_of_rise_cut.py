@@ -18,7 +18,6 @@ import polars as pl
 
 from light_curve_plotter import collect_light_curve_data
 from light_curve_utils import add_night_and_SNR_columns
-from plotting_lightcurves import batch_plotter
 
 # Directories for the objects that passed the first filtering done through the tags, second directory is for the output of the rate of rise cut.
 TEST_DIR = (
