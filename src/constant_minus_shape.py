@@ -460,7 +460,6 @@ def spectro_delta_chi_against_chi_SN_plot(
 
     ax.set_xlabel(rf"$\chi^2_{{shape}}$ ({band} band)")
     ax.set_ylabel(rf"$\chi^2_{{constant}} - \chi^2_{{shape}}$ ({band} band)")
-    ax.set_title(f"Constant vs Bazin fit comparison in {band} band")
 
     ax.legend()
 
