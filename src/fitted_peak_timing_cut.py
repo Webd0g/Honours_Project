@@ -215,9 +215,7 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SN_IA_OBJECTS = (
-        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
-    )
+    SN_IA_OBJECTS = DATA_DIR / "sn_ia_test_results" / "sampling_results" / "pass.csv"
 
     SN_IA_I_BAND_BAZIN_FITS_RESULTS = (
         DATA_DIR
@@ -247,9 +245,7 @@ if __name__ == "__main__":
         / "bazin_fits_r_band_results.csv"
     )
 
-    SN_II_OBJECTS = (
-        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "pass.csv"
-    )
+    SN_II_OBJECTS = DATA_DIR / "sn_ii_test_results" / "sampling_results" / "pass.csv"
 
     SN_IA_PASS_OUTPUT_PATH = (
         DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "pass.csv"

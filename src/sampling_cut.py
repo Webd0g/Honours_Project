@@ -8,7 +8,9 @@ import polars as pl
 
 
 def numb_pre_peak_post_peak(
-    objects_path: Path, light_curve_data_path: Path, output_path: Path
+    objects_path: Path,
+    light_curve_data_path: Path,
+    output_path: Path | None = None,
 ) -> pl.DataFrame:
     """This function finds the number of data points that pre-peak
     and post-peak within 30 days before the peak and 60 days after the peak point.
@@ -212,7 +214,8 @@ def numb_pre_peak_post_peak(
         results["y post"].append(y_post_peak)
 
     results_df = pl.DataFrame(results)
-    results_df.write_csv(output_path)
+    if output_path is not None:
+        results_df.write_csv(output_path)
     return results_df
 
 
@@ -274,7 +277,7 @@ def pass_fractions(counts_path: Path) -> None:
 def sampling_cut(
     candidate_path: Path,
     light_curve_data_path: Path,
-    count_output_path: Path,
+    values_output_path: Path,
     pass_output_path: Path,
     fail_output_path: Path,
 ) -> pl.DataFrame:
@@ -283,12 +286,14 @@ def sampling_cut(
     Args:
         candidate_path (Path): The path to where the objects are to test the sampling cut on.
         light_curve_data_path (Path): THe path to the light curve information for each of the objects.
-        count_output_path (Path): The output path for the count values.
+        values_output_path (Path): The output path for the count values.
         pass_output_path (Path): The path to the directory to save the passing objects CSV file.
         fail_output_path (Path): The path to the directory to save the failing objects CSV file.
     """
     sampling_counts_df = numb_pre_peak_post_peak(
-        candidate_path, light_curve_data_path, count_output_path
+        objects_path=candidate_path,
+        light_curve_data_path=light_curve_data_path,
+        output_path=values_output_path,
     )
 
     sampling_counts_df = sampling_counts_df.with_columns(
@@ -350,38 +355,38 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SN_IA_SAMPLE_PATH = DATA_DIR / ""
+    SN_IA_SAMPLE_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
+    )
+
+    SN_II_SAMPLE_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "pass.csv"
+    )
+
+    SN_IA_PASS_PATH = DATA_DIR / "sn_ia_test_results" / "sampling_results" / "pass.csv"
+
+    SN_IA_FAIL_PATH = DATA_DIR / "sn_ia_test_results" / "sampling_results" / "fail.csv"
+
+    SN_IA_VALUES_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "sampling_results" / "values.csv"
+    )
+
+    SN_II_PASS_PATH = DATA_DIR / "sn_ii_test_results" / "sampling_results" / "pass.csv"
+
+    SN_II_FAIL_PATH = DATA_DIR / "sn_ii_test_results" / "sampling_results" / "fail.csv"
+
+    SN_II_VALUES_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "sampling_results" / "values.csv"
+    )
 
     LIGHT_CURVE_DATA = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    # numb_pre_peak_post_peak(TEST_CANDIDATES, LIGHT_CURVE_DATA, OBJECT_TEST_OUTPUT)
-
-    # sampling_statistics(OBJECT_TEST_OUTPUT)
-
-    # pass_fractions(OBJECT_TEST_OUTPUT)
-
-    sampling_cut_df = sampling_cut(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/confirmed_ia.csv",
-        LIGHT_CURVE_DATA,
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/sampling_results/values.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/sampling_results/pass.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/sampling_results/fail.csv",
+    sampling_cut(
+        candidate_path=SN_II_SAMPLE_PATH,
+        light_curve_data_path=LIGHT_CURVE_DATA,
+        values_output_path=SN_II_VALUES_PATH,
+        pass_output_path=SN_II_PASS_PATH,
+        fail_output_path=SN_II_FAIL_PATH,
     )
-
-#     sampling_cut_df = sampling_cut_df.with_columns(
-#     pl.sum_horizontal(
-#         pl.col("pass_g_i"),
-#         pl.col("pass_r_z"),
-#         pl.col("pass_i_z"),
-#     ).alias("number_colour_pairs")
-# )
-
-#     print(
-#         sampling_cut_df
-#         .filter(pl.col("sampling_pass"))
-#         .group_by("number_colour_pairs")
-#         .len()
-#         .sort("number_colour_pairs")
-# )

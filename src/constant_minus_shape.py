@@ -565,7 +565,7 @@ if __name__ == "__main__":
     )
 
     SN_II_CHI2_CUT_PASS_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
+        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "pass.csv"
     )
 
     SN_II_CHI2_CUT_FAIL_PATH = (
