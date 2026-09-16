@@ -1,10 +1,14 @@
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import polars as pl
+import seaborn as sns
 
 
 def fitted_peak_times(
-    objects_path: Path, i_band_bazin_fits_path: Path, r_band_bazin_fits_path: Path
+    objects_path: Path,
+    i_band_bazin_fits_path: Path,
+    r_band_bazin_fits_path: Path,
 ) -> pl.DataFrame:
     """Finds the peak times from the bazin fit parameters and
     returns them as a column in a df.
@@ -122,7 +126,10 @@ def peak_timing_cut(
     return fitted_peak_times_df
 
 
-def x_match(test_csv_path: Path, fitted_peak_times_df: pl.DataFrame) -> None:
+def x_match(
+    test_csv_path: Path,
+    fitted_peak_times_df: pl.DataFrame,
+) -> None:
     """X-match between the known sn and contaminants in the testing sample CSV.
 
     Args:
@@ -206,6 +213,90 @@ def x_match(test_csv_path: Path, fitted_peak_times_df: pl.DataFrame) -> None:
     )
 
 
+def spectro_strip_plots(
+    sn_ii_spectro_fitted_peak_timing_results: Path,
+    sn_ia_spectro_fitted_peak_timing_results: Path,
+    output_path: Path | None = None,
+) -> None:
+    """Makes a strip plot of the results for the spectroscopic classes of SN that we have and what their delta fitted peak times were in the i and r bands.
+
+    Args:
+        spectro_fitted_peak_timing_results (Path): Path object to the results for the spectro objects after they have passed through the fitted peak timing function.
+        output_path (Path): The Path object where the plot will be outputted to.
+    """
+
+    # Set the params of the strip plot
+    sns.set_theme(
+        style="whitegrid",
+    )
+
+    # Load in the results from the fitted peak timing csv file
+    sn_ia_spectro_results = pl.read_csv(
+        source=sn_ia_spectro_fitted_peak_timing_results,
+        columns=[
+            "r:diaObjectId",
+            "peak_time_difference",
+        ],
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "peak_time_difference": pl.Float64,
+        },
+    ).with_columns(
+        pl.lit("SN Ia").alias("spec_class"),
+    )
+    sn_ii_spectro_results = pl.read_csv(
+        source=sn_ii_spectro_fitted_peak_timing_results,
+        columns=[
+            "r:diaObjectId",
+            "peak_time_difference",
+        ],
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "peak_time_difference": pl.Float64,
+        },
+    ).with_columns(
+        pl.lit("SN II").alias("spec_class"),
+    )
+
+    spectro_results = pl.concat(
+        [
+            sn_ia_spectro_results,
+            sn_ii_spectro_results,
+        ],
+    )
+
+    colours = {
+        "SN Ia": "#0072B2",
+        "SN II": "#D55E00",
+    }
+
+    sns.stripplot(
+        data=spectro_results,
+        x="peak_time_difference",
+        y="spec_class",
+        hue="spec_class",
+        order=["SN Ia", "SN II"],
+        hue_order=["SN Ia", "SN II"],
+        jitter=0.2,
+        dodge=False,
+        palette=colours,
+        size=10,
+    )
+    plt.axvline(
+        x=50,
+        ls="--",
+        label=r"$\Delta t_{{fit peak}}$ = 50 d",
+    )
+
+    plt.legend()
+    plt.ylabel("")
+    plt.xlabel(r"$\Delta t_{fit peak}$ (days)")
+    plt.tight_layout()
+    if output_path is not None:
+        plt.savefig(output_path)
+    plt.show()
+
+
 if __name__ == "__main__":
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
@@ -271,12 +362,10 @@ if __name__ == "__main__":
         DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "values.csv"
     )
 
-    peak_timing_cut(
-        objects_path=SN_II_OBJECTS,
-        i_band_bazin_fits_path=SN_II_I_BAND_BAZIN_FITS_RESULTS,
-        r_band_bazin_fits_path=SN_II_R_BAND_BAZIN_FITS_RESULTS,
-        peak_time_difference_threshold=50,
-        peak_time_difference_output_path=SN_II_VALUES_OUTPUT_PATH,
-        pass_output_path=SN_II_PASS_OUTPUT_PATH,
-        fail_output_path=SN_II_FAIL_OUTPUT_PATH,
+    SPECTRO_STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "fitted_peak_timing_plots" / "spectro"
+
+    spectro_strip_plots(
+        sn_ii_spectro_fitted_peak_timing_results=SN_IA_VALUES_OUTPUT_PATH,
+        sn_ia_spectro_fitted_peak_timing_results=SN_IA_VALUES_OUTPUT_PATH,
+        output_path=SPECTRO_STRIP_PLOT_OUTPUT_PATH,
     )
