@@ -530,23 +530,68 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    TWENTY_OBJECT_TEST = (
+    SN_IA_TIMING_CUTS_RESULTS = (
+        DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "pass.csv"
+    )
+
+    SN_II_TIMING_CUTS_RESULTS = (
+        DATA_DIR / "sn_ii_test_results" / "timing_cuts_results" / "pass.csv"
+    )
+
+    SN_IA_I_BAND_BAZIN_FITS_RESULTS = (
         DATA_DIR
-        / "constant_minus_shape_results"
-        / "20_object_test"
-        / "20_object_test.csv"
+        / "sn_ia_test_results"
+        / "bazin_fits_results"
+        / "bazin_fits_i_band_results.csv"
     )
 
-    TWENTY_OBJECT_TEST_PLOT_OUTPUT_PATH = (
-        IMAGE_DIR / "constant_minus_shape_plots" / "delta_chi_plots" / "20_object_test"
+    SN_II_I_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR
+        / "sn_ii_test_results"
+        / "bazin_fits_results"
+        / "bazin_fits_i_band_results.csv"
     )
 
-    # compute_delta_chi(
-    #     object_path=PATH_TO_II_SPECTRO_RESULTS,
-    #     light_curve_data_path=LIGHT_CURVE_DATA,
+    SN_IA_CHI2_CUT_PASS_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
+    )
+
+    SN_IA_CHI2_CUT_FAIL_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "fail.csv"
+    )
+
+    SN_IA_CHI2_CUT_VALUES_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "values.csv"
+    )
+
+    SN_II_CHI2_CUT_PASS_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
+    )
+
+    SN_II_CHI2_CUT_FAIL_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "fail.csv"
+    )
+
+    SN_II_CHI2_CUT_VALUES_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "values.csv"
+    )
+
+    compute_delta_chi(
+        object_path=SN_II_TIMING_CUTS_RESULTS,
+        light_curve_data_path=LIGHT_CURVE_DATA,
+        band="i",
+        bazin_fit_data_path=SN_II_I_BAND_BAZIN_FITS_RESULTS,
+        output_path=SN_II_CHI2_CUT_VALUES_PATH,
+    )
+
+    # photometric_delta_chi_against_chi_SN_plot(
+    #     objects=TWENTY_OBJECT_TEST,
     #     band="i",
-    #     bazin_fit_data_path=PATH_TO_II_SPECTRO_RESULTS,
-    #     output_path=Path.home()
+    #     output_path=TWENTY_OBJECT_TEST_PLOT_OUTPUT_PATH,
+    # )
+
+    # spectro_delta_chi_against_chi_SN_plot(
+    #     path_to_ii_delta_chi_results=Path.home()
     #     / "Documents"
     #     / "University"
     #     / "Honours"
@@ -555,57 +600,39 @@ if __name__ == "__main__":
     #     / "sn_ii_test_results"
     #     / "constant_minus_shape_results"
     #     / "values.csv",
-    # )
-
-    # photometric_delta_chi_against_chi_SN_plot(
-    #     objects=TWENTY_OBJECT_TEST,
+    #     path_to_ia_delta_chi_results=(
+    #         Path.home()
+    #         / "Documents"
+    #         / "University"
+    #         / "Honours"
+    #         / "Honours_Project"
+    #         / "data"
+    #         / "sn_ia_test_results"
+    #         / "constant_minus_shape_results"
+    #         / "values.csv"
+    #     ),
+    #     path_to_photometric_delta_chi_results=(
+    #         Path.home()
+    #         / "Documents"
+    #         / "University"
+    #         / "Honours"
+    #         / "Honours_Project"
+    #         / "data"
+    #         / "constant_minus_shape_results"
+    #         / "constant_minus_shape_values.csv"
+    #     ),
+    #     output_path=Path.home()
+    #     / "Documents"
+    #     / "University"
+    #     / "Honours"
+    #     / "Honours_Project"
+    #     / "images"
+    #     / "results_plots",
     #     band="i",
-    #     output_path=TWENTY_OBJECT_TEST_PLOT_OUTPUT_PATH,
     # )
 
-    spectro_delta_chi_against_chi_SN_plot(
-        path_to_ii_delta_chi_results=Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sn_ii_test_results"
-        / "constant_minus_shape_results"
-        / "values.csv",
-        path_to_ia_delta_chi_results=(
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "data"
-            / "sn_ia_test_results"
-            / "constant_minus_shape_results"
-            / "values.csv"
-        ),
-        path_to_photometric_delta_chi_results=(
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "data"
-            / "constant_minus_shape_results"
-            / "constant_minus_shape_values.csv"
-        ),
-        output_path=Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "results_plots",
-        band="i",
+    save_pass_fail_objects(
+        path_to_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
+        output_path_pass=SN_II_CHI2_CUT_PASS_PATH,
+        output_path_fail=SN_II_CHI2_CUT_FAIL_PATH,
     )
-
-    # save_pass_fail_objects(
-    #     path_to_delta_chi_results="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/values.csv",
-    #     output_path_pass="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/pass.csv",
-    #     output_path_fail="/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/constant_minus_shape_results/fail.csv",
-    # )

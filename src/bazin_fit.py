@@ -419,51 +419,37 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    BAZIN_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "bazin_fits_results"
-        / "spectroscopic_tests"
-        / "ii_tests"
+    SN_IA_BAZIN_FITS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "bazin_fits_results"
     )
 
-    # bazin_batch_fits(
-    #     csv_path=TIMING_CUT_PASSED,
-    #     light_curve_data_path=LIGHT_CURVE_DATA,
-    #     band="i",
-    #     algorithm="mcmc",
-    #     mcmc_niter=2000,
-    #     output_path=BAZIN_OUTPUT_PATH / f"bazin_fits_{"i"}_band_results.csv",
-    # )
-        # plot_bazin_fit_batch(
-        #     Path.home()
-        #     / "Documents"
-        #     / "University"
-        #     / "Honours"
-        #     / "Honours_Project"
-        #     / "data"
-        #     / "bazin_fits_results"
-        #     / f"bazin_fits_{band}_band_results.csv",
-        #     TIMING_CUT_PASSED,
-        #     Path.home()
-        #     / "Documents"
-        #     / "University"
-        #     / "Honours"
-        #     / "Honours_Project"
-        #     / "data"
-        #     / "light_curve_data"
-        #     / "combined_light_curve_data.parquet",
-        #     band,
-        #     Path.home()
-        #     / "Documents"
-        #     / "University"
-        #     / "Honours"
-        #     / "Honours_Project"
-        #     / "images"
-        #     / "bazin_fits_plots"
-        #     / f"{band}_band",
-        # )
+    SN_II_BAZIN_FITS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "bazin_fits_results"
+    )
+
+    SN_IA_BAZIN_FITS_PLOTS_OUTPUT_PATH = (
+        IMAGE_DIR / "sn_ia_light_curves" / "bazin_fits_plots"
+    )
+
+    SN_II_BAZIN_FITS_PLOTS_OUTPUT_PATH = (
+        IMAGE_DIR / "sn_ii_light_curves" / "bazin_fits_plots"
+    )
+
+    for band in BANDS:
+        bazin_batch_fits(
+            csv_path=SN_II_TIMING_CUTS_RESULTS,
+            light_curve_data_path=LIGHT_CURVE_DATA,
+            band=band,
+            algorithm="mcmc",
+            mcmc_niter=2000,
+            output_path=SN_II_BAZIN_FITS_OUTPUT_PATH
+            / f"bazin_fits_{band}_band_results.csv",
+        )
+        plot_bazin_fit_batch(
+            dict_path=SN_II_BAZIN_FITS_OUTPUT_PATH
+            / f"bazin_fits_{band}_band_results.csv",
+            csv_path=SN_II_TIMING_CUTS_RESULTS,
+            light_curve_data_path=LIGHT_CURVE_DATA,
+            band=band,
+            output_path=SN_II_BAZIN_FITS_PLOTS_OUTPUT_PATH / f"{band}_band",
+        )
