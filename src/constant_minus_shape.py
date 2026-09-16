@@ -324,8 +324,8 @@ def photometric_delta_chi_against_chi_SN_plot(
     ax.set_xlim(lower, upper)
     ax.set_ylim(lower, upper)
 
-    ax.set_xlabel(rf"Bazin reduced $\chi^2$ ({band} band)")
-    ax.set_ylabel(rf"$\Delta\chi^2_\nu$ ({band} band)")
+    ax.set_xlabel(rf"$\chi^2_{{shape}}$ ({band} band)")
+    ax.set_ylabel(rf"$\chi^2_{{constant}} - \chi^2_{{shape}}$ ({band} band)")
 
     ax.legend()
 
@@ -530,6 +530,56 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
+    TWENTY_OBJECT_DELTA_CHI2_RESULTS = (
+        DATA_DIR
+        / "constant_minus_shape_results"
+        / "20_object_test"
+        / "20_object_test.csv"
+    )
+
+    TWENTY_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH = (
+        IMAGE_DIR / "constant_minus_shape_plots" / "delta_chi_plots" / "20_object_test"
+    )
+
+    TWENTY_OBJECT_TIMING_CUTS_RESULTS = (
+        DATA_DIR
+        / "peak_timing_cuts_results"
+        / "20_object_test"
+        / "20_object_test_pass.csv"
+    )
+
+    TWENTY_OBJECT_I_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR
+        / "bazin_fits_results"
+        / "20_object_test"
+        / "bazin_fits_i_band_results.csv"
+    )
+
+    HUNDRED_OBJECT_TIMING_CUTS_RESULTS = (
+        DATA_DIR
+        / "peak_timing_cuts_results"
+        / "100_object_test"
+        / "100_object_test_pass.csv"
+    )
+
+    HUNDRED_OBJECT_I_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR
+        / "bazin_fits_results"
+        / "100_object_test"
+        / "bazin_fits_i_band_results.csv"
+    )
+
+    HUNDRED_OBJECT_DELTA_CHI2_RESULTS = (
+        DATA_DIR
+        / "constant_minus_shape_results"
+        / "100_object_test"
+        / "100_object_test.csv"
+    )
+
+    HUNDRED_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH = (
+        IMAGE_DIR / "constant_minus_shape_plots" / "delta_chi_plots" / "100_object_test"
+    )
+
     SN_IA_TIMING_CUTS_RESULTS = (
         DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "pass.csv"
     )
@@ -576,19 +626,19 @@ if __name__ == "__main__":
         DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "values.csv"
     )
 
-    compute_delta_chi(
-        object_path=SN_II_TIMING_CUTS_RESULTS,
-        light_curve_data_path=LIGHT_CURVE_DATA,
-        band="i",
-        bazin_fit_data_path=SN_II_I_BAND_BAZIN_FITS_RESULTS,
-        output_path=SN_II_CHI2_CUT_VALUES_PATH,
-    )
-
-    # photometric_delta_chi_against_chi_SN_plot(
-    #     objects=TWENTY_OBJECT_TEST,
+    # compute_delta_chi(
+    #     object_path=SN_II_TIMING_CUTS_RESULTS,
+    #     light_curve_data_path=LIGHT_CURVE_DATA,
     #     band="i",
-    #     output_path=TWENTY_OBJECT_TEST_PLOT_OUTPUT_PATH,
+    #     bazin_fit_data_path=SN_II_I_BAND_BAZIN_FITS_RESULTS,
+    #     output_path=SN_II_CHI2_CUT_VALUES_PATH,
     # )
+
+    photometric_delta_chi_against_chi_SN_plot(
+        objects=HUNDRED_OBJECT_DELTA_CHI2_RESULTS,
+        band="i",
+        output_path=HUNDRED_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH,
+    )
 
     # spectro_delta_chi_against_chi_SN_plot(
     #     path_to_ii_delta_chi_results=Path.home()
@@ -631,8 +681,8 @@ if __name__ == "__main__":
     #     band="i",
     # )
 
-    save_pass_fail_objects(
-        path_to_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
-        output_path_pass=SN_II_CHI2_CUT_PASS_PATH,
-        output_path_fail=SN_II_CHI2_CUT_FAIL_PATH,
-    )
+    # save_pass_fail_objects(
+    #     path_to_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
+    #     output_path_pass=SN_II_CHI2_CUT_PASS_PATH,
+    #     output_path_fail=SN_II_CHI2_CUT_FAIL_PATH,
+    # )
