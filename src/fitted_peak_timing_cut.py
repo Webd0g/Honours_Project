@@ -284,12 +284,12 @@ def spectro_strip_plots(
     plt.axvline(
         x=50,
         ls="--",
-        label=r"$\Delta t_{{fit peak}}$ = 50 d",
+        label=r"$|t^i_{max} - t^r_{max}|$ = 50 d",
     )
 
     plt.legend()
     plt.ylabel("")
-    plt.xlabel(r"$\Delta t_{fit peak}$ (days)")
+    plt.xlabel(r"$|t^i_{max} - t^r_{max}|$ (days)")
     plt.tight_layout()
     if output_path is not None:
         plt.savefig(output_path / "spectro_fitted_peak_delta_times.png")
