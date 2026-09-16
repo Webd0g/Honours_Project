@@ -458,8 +458,8 @@ def spectro_delta_chi_against_chi_SN_plot(
     ax.set_xlim(lower, upper)
     ax.set_ylim(lower, upper)
 
-    ax.set_xlabel(rf"Bazin reduced $\chi^2$ ({band} band)")
-    ax.set_ylabel(rf"$\Delta\chi^2_\nu$ ({band} band)")
+    ax.set_xlabel(rf"$\chi^2_{{shape}}$ ({band} band)")
+    ax.set_ylabel(rf"$\chi^2_{{constant}} - \chi^2_{{shape}}$ ({band} band)")
     ax.set_title(f"Constant vs Bazin fit comparison in {band} band")
 
     ax.legend()
@@ -634,52 +634,34 @@ if __name__ == "__main__":
     #     output_path=SN_II_CHI2_CUT_VALUES_PATH,
     # )
 
-    photometric_delta_chi_against_chi_SN_plot(
-        objects=HUNDRED_OBJECT_DELTA_CHI2_RESULTS,
-        band="i",
-        output_path=HUNDRED_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH,
-    )
-
-    # spectro_delta_chi_against_chi_SN_plot(
-    #     path_to_ii_delta_chi_results=Path.home()
-    #     / "Documents"
-    #     / "University"
-    #     / "Honours"
-    #     / "Honours_Project"
-    #     / "data"
-    #     / "sn_ii_test_results"
-    #     / "constant_minus_shape_results"
-    #     / "values.csv",
-    #     path_to_ia_delta_chi_results=(
-    #         Path.home()
-    #         / "Documents"
-    #         / "University"
-    #         / "Honours"
-    #         / "Honours_Project"
-    #         / "data"
-    #         / "sn_ia_test_results"
-    #         / "constant_minus_shape_results"
-    #         / "values.csv"
-    #     ),
-    #     path_to_photometric_delta_chi_results=(
-    #         Path.home()
-    #         / "Documents"
-    #         / "University"
-    #         / "Honours"
-    #         / "Honours_Project"
-    #         / "data"
-    #         / "constant_minus_shape_results"
-    #         / "constant_minus_shape_values.csv"
-    #     ),
-    #     output_path=Path.home()
-    #     / "Documents"
-    #     / "University"
-    #     / "Honours"
-    #     / "Honours_Project"
-    #     / "images"
-    #     / "results_plots",
+    # photometric_delta_chi_against_chi_SN_plot(
+    #     objects=HUNDRED_OBJECT_DELTA_CHI2_RESULTS,
     #     band="i",
+    #     output_path=HUNDRED_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH,
     # )
+
+    spectro_delta_chi_against_chi_SN_plot(
+        path_to_ii_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
+        path_to_ia_delta_chi_results=SN_IA_CHI2_CUT_VALUES_PATH,
+        path_to_photometric_delta_chi_results=(
+            Path.home()
+            / "Documents"
+            / "University"
+            / "Honours"
+            / "Honours_Project"
+            / "data"
+            / "constant_minus_shape_results"
+            / "constant_minus_shape_values.csv"
+        ),
+        output_path=Path.home()
+        / "Documents"
+        / "University"
+        / "Honours"
+        / "Honours_Project"
+        / "images"
+        / "results_plots",
+        band="i",
+    )
 
     # save_pass_fail_objects(
     #     path_to_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
