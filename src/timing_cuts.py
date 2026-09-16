@@ -8,8 +8,6 @@ import matplotlib.pyplot as plt
 import polars as pl
 import seaborn as sns
 
-from generic_light_curve_batch_plotter import batch_plotter
-
 
 def loading_objects_and_light_data(
     object_path: Path, light_curve_data_path: Path, output_path: Path

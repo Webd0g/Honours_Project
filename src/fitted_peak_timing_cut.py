@@ -94,14 +94,20 @@ def peak_timing_cut(
         peak_time_difference_threshold (int): Number of days the fitted peaks can be apart.
     """
 
-    fitted_peak_times_df = fitted_peak_times(
-        objects_path, i_band_bazin_fits_path, r_band_bazin_fits_path
-    ).with_columns(
-        pl.when(pl.col("valid_i_peak") & pl.col("valid_r_peak"))
-        .then(pl.col("peak_time_difference") <= peak_time_difference_threshold)
-        .otherwise(True)
-        .alias("passes_peak_timing")
-    ).with_columns((pl.col("valid_i_peak") & pl.col("valid_r_peak")).alias("fitted_peak_testable"))
+    fitted_peak_times_df = (
+        fitted_peak_times(objects_path, i_band_bazin_fits_path, r_band_bazin_fits_path)
+        .with_columns(
+            pl.when(pl.col("valid_i_peak") & pl.col("valid_r_peak"))
+            .then(pl.col("peak_time_difference") <= peak_time_difference_threshold)
+            .otherwise(True)
+            .alias("passes_peak_timing")
+        )
+        .with_columns(
+            (pl.col("valid_i_peak") & pl.col("valid_r_peak")).alias(
+                "fitted_peak_testable"
+            )
+        )
+    )
 
     fitted_peak_times_df.filter(pl.col("passes_peak_timing")).write_csv(
         pass_output_path
@@ -201,146 +207,80 @@ def x_match(test_csv_path: Path, fitted_peak_times_df: pl.DataFrame) -> None:
 
 
 if __name__ == "__main__":
-    TEST_OBJECTS_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "test_data"
-        / "bazin_fit_peak_time_tests"
-        / "100_object_test.csv"
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    OBJECT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "sampling_results"
-        / "sampling_pass.csv"
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    SN_IA_OBJECTS = (
+        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
     )
 
-    BAZIN_FITS_DATA_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
+    SN_IA_I_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR
+        / "sn_ia_test_results"
         / "bazin_fits_results"
+        / "bazin_fits_i_band_results.csv"
     )
 
-    TEST_PASS_DIRECTORY = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "fitted_peak_timing_results"
-        / "100_object_test"
-        / "pass.csv"
+    SN_IA_R_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR
+        / "sn_ia_test_results"
+        / "bazin_fits_results"
+        / "bazin_fits_r_band_results.csv"
     )
 
-    TEST_FAIL_DIRECTORY = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "fitted_peak_timing_results"
-        / "100_object_test"
-        / "fail.csv"
+    SN_II_I_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR
+        / "sn_ii_test_results"
+        / "bazin_fits_results"
+        / "bazin_fits_i_band_results.csv"
     )
 
-    FITTED_PEAK_TIMES_VALUES_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "fitted_peak_timing_results"
-        / "values.csv"
+    SN_II_R_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR
+        / "sn_ii_test_results"
+        / "bazin_fits_results"
+        / "bazin_fits_r_band_results.csv"
     )
 
-    PASS_DIRECTORY = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "fitted_peak_timing_results"
-        / "pass.csv"
+    SN_II_OBJECTS = (
+        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "pass.csv"
     )
 
-    FAIL_DIRECTORY = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "fitted_peak_timing_results"
-        / "fail.csv"
+    SN_IA_PASS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "pass.csv"
     )
 
-    # pl.Config.set_tbl_rows(-1)
-    # print(
-    #     fitted_peak_times(
-    #         TEST_OBJECTS_PATH,
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-    #     )
-    #     .head(50)
-    #     .describe()
-    # )
-
-    # print(
-    #     fitted_peak_times(
-    #         TEST_OBJECTS_PATH,
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-    #         BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-    #     )
-    #     .tail(50)
-    #     .describe()
-    # )
-
-    # fitted_peak_times_df = peak_timing_cut(
-    #     TEST_OBJECTS_PATH,
-    #     BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-    #     BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-    #     50,
-    #     TEST_PASS_DIRECTORY,
-    #     TEST_FAIL_DIRECTORY,
-    # )
-
-    # pl.Config.set_tbl_rows(-1)
-    fitted_peak_times_df = peak_timing_cut(
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/confirmed_ia.csv",
-        BAZIN_FITS_DATA_PATH / "bazin_fits_i_band_results.csv",
-        BAZIN_FITS_DATA_PATH / "bazin_fits_r_band_results.csv",
-        50,
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/fitted_peak_timing_results/values.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/fitted_peak_timing_results/pass.csv",
-        "/home/riley/Documents/University/Honours/Honours_Project/data/sn_ia_test_results/fitted_peak_timing_results/fail.csv",
+    SN_IA_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "fail.csv"
     )
 
-    # print(
-    #     fitted_peak_times_df.select(
-    #         (~pl.col("valid_i_peak")).sum().alias("invalid_i_peak"),
-    #         (~pl.col("valid_r_peak")).sum().alias("invalid_r_peak"),
-    #         (~pl.col("valid_i_peak") & ~pl.col("valid_r_peak"))
-    #         .sum()
-    #         .alias("invalid_both"),
-    #         pl.col("passes_peak_timing").is_null().sum().alias("untested"),
-    #     )
-    # )
+    SN_IA_VALUES_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "values.csv"
+    )
 
-    # x_match(TEST_OBJECTS_PATH, fitted_peak_times_df)
+    SN_II_PASS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "pass.csv"
+    )
+
+    SN_II_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "fail.csv"
+    )
+
+    SN_II_VALUES_OUTPUT_PATH = (
+        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "values.csv"
+    )
+
+    peak_timing_cut(
+        objects_path=SN_II_OBJECTS,
+        i_band_bazin_fits_path=SN_II_I_BAND_BAZIN_FITS_RESULTS,
+        r_band_bazin_fits_path=SN_II_R_BAND_BAZIN_FITS_RESULTS,
+        peak_time_difference_threshold=50,
+        peak_time_difference_output_path=SN_II_VALUES_OUTPUT_PATH,
+        pass_output_path=SN_II_PASS_OUTPUT_PATH,
+        fail_output_path=SN_II_FAIL_OUTPUT_PATH,
+    )
