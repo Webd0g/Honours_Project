@@ -4,7 +4,6 @@ import emcee
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
-from IPython.display import Math, display
 
 from early_excess_salt_detection import loading_light_curve_data_and_objects
 
@@ -149,6 +148,7 @@ def iterate_over_bands(
     return final_reference_points.rename({"r:midpointMjdTai": "t50_mjd"}).select(
         [
             "r:diaObjectId",
+            "r:diaSourceId",
             "r:band",
             "r:psfFlux",
             "r:psfFluxErr",
@@ -194,6 +194,7 @@ def keep_observations_upto_t50(
         .select(
             [
                 "r:diaObjectId",
+                "r:diaSourceId",
                 "r:band",
                 "r:midpointMjdTai",
                 "r:psfFlux",
@@ -482,7 +483,6 @@ def fitting_power_law(
         "t_fd": [],
         "t_fd_rest": [],
         "z_used": [],
-        "n_points": [],
         "t50_mjd": [],
         "sampler_nwalkers": [],
         "sampler_nsteps": [],
@@ -569,9 +569,6 @@ def fitting_power_law(
             ),
         )
 
-        print("fit_bands:", list(band_data.keys()))
-        print("theta initial:", theta)
-
         # Running the MCMC fitting algorithm.
         sampler.run_mcmc(
             initial_state=pos,
@@ -587,27 +584,42 @@ def fitting_power_law(
         results["t_fl_err_low"].append(float(t_fl - q16))
         results["t_fl_err_high"].append(float(q84 - t_fl))
 
-        for index, band in enumerate(fit_bands):
-            A_prime_index = 1 + 2 * index
-            alpha_index = 2 + 2 * index
+        for band in ["g", "r", "i"]:
+            if band in fit_bands:
+                index = fit_bands.index(band)
+                A_prime_index = 1 + 2 * index
+                alpha_index = 2 + 2 * index
 
-            q16, A_prime, q84 = np.percentile(flat_samples[:, A_prime_index], [16, 50, 84])
+                q16, A_prime, q84 = np.percentile(
+                    flat_samples[:, A_prime_index], [16, 50, 84]
+                )
 
-            results[f"A_prime_{band}"].append(float(A_prime))
-            results[f"A_prime_{band}_err_low"].append(float(A_prime - q16))
-            results[f"A_prime_{band}_err_high"].append(float(q84 - A_prime))
+                results[f"A_prime_{band}"].append(float(A_prime))
+                results[f"A_prime_{band}_err_low"].append(float(A_prime - q16))
+                results[f"A_prime_{band}_err_high"].append(float(q84 - A_prime))
 
-            q16, alpha, q84 = np.percentile(flat_samples[:, alpha_index], [16, 50, 84])
+                q16, alpha, q84 = np.percentile(
+                    flat_samples[:, alpha_index], [16, 50, 84]
+                )
 
-            results[f"alpha_{band}"].append(float(alpha))
-            results[f"alpha_{band}_err_low"].append(float(alpha - q16))
-            results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
+                results[f"alpha_{band}"].append(float(alpha))
+                results[f"alpha_{band}_err_low"].append(float(alpha - q16))
+                results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
+
+            else:
+                # Append None for missing bands to preserve exact column heights
+                results[f"A_prime_{band}"].append(None)
+                results[f"A_prime_{band}_err_low"].append(None)
+                results[f"A_prime_{band}_err_high"].append(None)
+
+                results[f"alpha_{band}"].append(None)
+                results[f"alpha_{band}_err_low"].append(None)
+                results[f"alpha_{band}_err_high"].append(None)
 
         results["r:diaObjectId"].append(object_id[0])
         results["t_fd"].append(rest_frame_objects_df["t_fd"].item(0))
         results["t_fd_rest"].append(rest_frame_objects_df["t_fd_rest"].item(0))
         results["z_used"].append(rest_frame_objects_df["z_used"].item(0))
-        results["n_points"].append(sum(len(band_data[band]["times"])) for band in fit_bands)
         results["sampler_nsteps"].append(n_steps)
         results["sampler_nwalkers"].append(nwalkers)
         results["t50_mjd"].append(rest_frame_objects_df["t50_mjd"].item(0))
@@ -638,7 +650,7 @@ def excluding_excess_window(
             (pl.col("r:band") == band)
             & pl.col("rest_frame_time").is_between(
                 pl.col("t_fd_rest"),
-                pl.col("t_fd_rest") + 5,
+                pl.col("t_fd_rest") + 3,
                 closed="both",
             )
         )
@@ -707,19 +719,22 @@ def walkers_chain_plot(
 
 
 def fit_sample_parameters_plot(
-    sampling_results: pl.DataFrame,
-    rest_frame_objects_df: pl.DataFrame,
+    pl_fit_params_df: pl.DataFrame,
+    rest_frame_no_eex: pl.DataFrame,
+    full_rest_data_df: pl.DataFrame,
     output_path: Path | None = None,
 ) -> None:
     """Plots the median sampled values from the sampling of parameters for the power law against the real data of the light curves of the objects.
 
     Args:
-        sampling_results (pl.DataFrame): The results of the chain from the sampling of the power law, this should be the resulting dataframe output from the power law fitting function.
+        pl_fit_params_df (pl.DataFrame): The results of the chain from the sampling of the power law, this should be the resulting dataframe output from the power law fitting function.
         output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
     """
 
-    for object_id, object_df in sampling_results[0].group_by("r:diaObjectId"):
+    for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
         diaObjectId = object_df["r:diaObjectId"].item()
+
+        rest_band_data = {}
 
         band_data = {}
 
@@ -729,11 +744,22 @@ def fit_sample_parameters_plot(
             "i",
         ]:
             # Filter for the light curve data of this object in the desired band too.
-            band_df = rest_frame_objects_df.filter(
+            rest_band_df = full_rest_data_df.filter(
                 (pl.col("r:band") == current_band)
                 & (pl.col("r:diaObjectId") == diaObjectId),
             )
-            print(band_df)
+
+            if rest_band_df.height > 0:
+                rest_band_data[current_band] = {
+                    "times": rest_band_df["rest_frame_time"].to_numpy(),
+                    "flux": rest_band_df["r:psfFlux"].to_numpy(),
+                    "flux_error": rest_band_df["r:psfFluxErr"].to_numpy(),
+                }
+
+            band_df = rest_frame_no_eex.filter(
+                (pl.col("r:band") == current_band)
+                & (pl.col("r:diaObjectId") == diaObjectId),
+            )
 
             if band_df.height > 0:
                 band_data[current_band] = {
@@ -778,65 +804,307 @@ def fit_sample_parameters_plot(
                 alpha=model_parameters[band]["alpha"],
             )
 
-        for band in fit_bands:
-            print(f"\n{band}")
-            print("t_fl:", t_fl_med)
-            print("A_prime:", model_parameters[band]["A_prime"])
-            print("alpha:", model_parameters[band]["alpha"])
+        (
+            _fig,
+            (axes_fit, axes_resid),
+        ) = plt.subplots(
+            nrows=2,
+            ncols=1,
+            sharex=True,
+            height_ratios=[3, 1],
+            figsize=(8, 5),
+        )
 
+        for band in fit_bands:
+            times = rest_band_data[band]["times"]
+            flux = rest_band_data[band]["flux"]
+            flux_error = rest_band_data[band]["flux_error"]
+
+            in_ranges = (times >= t_fd_rest) & (times <= t_fd_rest + 3)
+
+            plot_data = axes_fit.errorbar(
+                x=times[in_ranges],
+                y=flux[in_ranges],
+                yerr=flux_error[in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                mew=1,
+                alpha=0.3,
+            )
+
+            data_colour = plot_data.lines[0].get_color()
+
+            axes_fit.errorbar(
+                x=times[~in_ranges],
+                y=flux[~in_ranges],
+                yerr=flux_error[~in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                color=data_colour,
+                mew=1,
+                label=f"lsst{band}",
+            )
+
+            axes_fit.plot(
+                model_grids[band],
+                model_flux[band],
+                color=data_colour,
+            )
+
+            # Model evaluated at the actual observation times
             model_at_data = power_law_model(
-                times=band_data[band]["times"],
+                times=times,
                 t_fl=t_fl_med,
                 A_prime=model_parameters[band]["A_prime"],
                 alpha=model_parameters[band]["alpha"],
             )
 
-            print("observed flux:", band_data[band]["flux"][:5])
-            print("model flux:   ", model_at_data[:5])
+            residuals = (flux - model_at_data) / (flux_error)
 
-        plt.figure(figsize=(8, 5))
-
-        for band in fit_bands:
-            plt.errorbar(
-                band_data[band]["times"],
-                band_data[band]["flux"],
-                yerr=band_data[band]["flux_error"],
+            axes_resid.errorbar(
+                x=times[in_ranges],
+                y=residuals[in_ranges],
                 fmt="o",
                 capsize=3,
-                label="Observed data",
+                mec="white",
+                color=data_colour,
+                mew=1,
             )
 
-            plt.plot(
-                model_grids[band],
-                model_flux[band],
-                label="Median power-law fit",
+            axes_resid.errorbar(
+                x=times[~in_ranges],
+                y=residuals[~in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                alpha=0.3,
+                color=data_colour,
+                mew=1,
             )
 
-        plt.axvline(
+        axes_resid.axhline(
+            c="black",
+        )
+
+        axes_resid.axhspan(
+            -5,
+            5,
+            color="grey",
+            linestyle=":",
+            alpha=0.12,
+            label=r"$5 \sigma$ region",
+        )
+
+        axes_resid.axhspan(
+            -3,
+            3,
+            color="grey",
+            linestyle="--",
+            alpha=0.25,
+            label=r"$3 \sigma$ region",
+        )
+
+        axes_fit.axvline(
             x=t_fd_rest,
             linestyle="--",
             label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
+            color="#0072B2",
         )
 
-        plt.axvline(
+        axes_fit.axvline(
             x=t_fd_rest + 3,
-            linestyle="--",
+            linestyle=":",
             label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d",
+            color="#0072B2",
         )
 
-        plt.axvline(
+        axes_resid.axvline(
+            x=t_fd_rest,
+            linestyle="--",
+            label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_resid.axvline(
+            x=t_fd_rest + 3,
+            linestyle=":",
+            label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_fit.axvline(
             t_fl_med,
             linestyle="--",
             label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med:.2f}$ d",
             color="#D55E00",
         )
 
-        plt.xlabel("Rest-frame time (days)")
-        plt.ylabel("Flux (nJy)")
-        plt.title(f"{diaObjectId}")
-        plt.legend()
+        axes_fit.set_ylabel("Flux (nJy)")
+        axes_fit.set_title(f"{diaObjectId}")
+        axes_resid.set_xlabel(r"Rest-frame days since $B$-band peak")
+        axes_resid.set_ylabel("Pull")
+        axes_fit.legend(
+            loc="best",
+            frameon=False,
+        )
         plt.tight_layout()
+        if output_path is not None:
+            plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
         plt.show()
+        plt.close()
+
+
+def eex_detection(
+    pl_fit_params_df: pl.DataFrame,
+    full_rest_frame_lc_df: pl.DataFrame,
+    pass_output_path: Path | None = None,
+    fail_output_path: Path | None = None,
+    values_output_path: Path | None = None,
+) -> pl.DataFrame:
+    """Reconstruct the fluxes at the datapoint times from the power law fit parameters, calculate pulls and check for objects with pulls greater than 5 and save them as "passed".
+
+    Args:
+        pl_fit_params_df (pl.DataFrame): Dataframe that has the objects pl fit parameters resulting from the MCMC sampling.
+        full_rest_frame_lc_df (pl.DataFrame): Dataframe containing the light curve data in rest frame that will be fit to.
+        pass_output_path (Path | None, optional): Output path for all the passing objects from the excess check. Defaults to None.
+        fail_output_path (Path | None, optional): Output path for all the failing objects from the excess check. Defaults to None.
+        values_output_path (Path | None, optional): Output path for all the values resulting from the excess check. Defaults to None.
+
+    Returns:
+        pl.DataFrame: The values dataframe that is the same as the values CSV.
+    """
+
+    pull_records = []
+
+    for object_id, object_df in pl_fit_params_df[0].group_by(
+        "r:diaObjectId",
+        maintain_order=True,
+    ):
+        diaObjectId = object_df["r:diaObjectId"].item()
+
+        rest_band_data = {}
+
+        for current_band in [
+            "g",
+            "r",
+            "i",
+        ]:
+            # Filter for the light curve data of this object in the desired band too.
+            rest_band_df = full_rest_frame_lc_df.filter(
+                (pl.col("r:band") == current_band)
+                & (pl.col("r:diaObjectId") == diaObjectId),
+            )
+
+            if rest_band_df.height > 0:
+                rest_band_data[current_band] = {
+                    "diaSourceId": rest_band_df["r:diaSourceId"].to_numpy(),
+                    "times": rest_band_df["rest_frame_time"].to_numpy(),
+                    "flux": rest_band_df["r:psfFlux"].to_numpy(),
+                    "flux_error": rest_band_df["r:psfFluxErr"].to_numpy(),
+                }
+
+        avaliable_bands = list(rest_band_data.keys())
+
+        model_parameters = {}
+        fit_bands = []
+
+        for band in avaliable_bands:
+            a_prime = object_df[f"A_prime_{band}"].item()
+            alpha = object_df[f"alpha_{band}"].item()
+
+            if a_prime is not None and alpha is not None:
+                model_parameters[band] = {
+                    "A_prime": a_prime,
+                    "alpha": alpha,
+                }
+                fit_bands.append(band)
+
+        if not fit_bands:
+            continue
+
+        t_fl_med = object_df["t_fl"].item()
+
+        for band in fit_bands:
+            times = rest_band_data[band]["times"]
+            flux = rest_band_data[band]["flux"]
+            flux_error = rest_band_data[band]["flux_error"]
+
+            model_at_data = power_law_model(
+                times=times,
+                t_fl=t_fl_med,
+                A_prime=model_parameters[band]["A_prime"],
+                alpha=model_parameters[band]["alpha"],
+            )
+
+            pull = (flux - model_at_data) / (flux_error)
+
+            for source_id, t, p in zip(
+                (rest_band_data[band]["diaSourceId"]), times, pull
+            ):
+                pull_records.append(
+                    {
+                        "r:diaObjectId": diaObjectId,
+                        "r:diaSourceId": source_id,
+                        "r:band": band,
+                        "rest_frame_time": t,
+                        "pull": p,
+                    }
+                )
+
+    pull_df = pl.DataFrame(pull_records)
+    full_lc_with_pulls_df = full_rest_frame_lc_df.join(
+        pull_df,
+        on=[
+            "r:diaSourceId",
+        ],
+        how="left",
+    )
+
+    early_window = pl.col("rest_frame_time").is_between(
+        pl.col("t_fd_rest"),
+        pl.col("t_fd_rest") + 3,
+    )
+
+    eex_candidates = full_lc_with_pulls_df.filter(
+        early_window & (pl.col("pull") >= 5)
+    ).with_columns(pl.col("r:midpointMjdTai").floor().cast(pl.Int64).alias("night"))
+
+    eex_nights = eex_candidates.group_by("r:diaObjectId").agg(
+        pl.col("night").n_unique().alias("excess_nights")
+    )
+
+    full_lc_with_pulls_df = (
+        full_lc_with_pulls_df.join(
+            other=eex_nights,
+            on="r:diaObjectId",
+            how="left",
+        )
+        .with_columns(pl.col("excess_nights").fill_null(0))
+        .with_columns((pl.col("excess_nights") >= 2).alias("early_excess"))
+    )
+
+    passing_object_ids = (
+        full_lc_with_pulls_df.filter(pl.col("early_excess"))
+        .select("r:diaObjectId")
+        .unique()["r:diaObjectId"]
+    )
+
+    fit_params_with_eex = pl_fit_params_df[0].with_columns(
+        pl.col("r:diaObjectId").is_in(passing_object_ids).alias("early_excess")
+    )
+
+    if pass_output_path:
+        fit_params_with_eex.filter(pl.col("early_excess")).write_csv(pass_output_path)
+
+    if fail_output_path:
+        fit_params_with_eex.filter(~pl.col("early_excess")).write_csv(fail_output_path)
+
+    if values_output_path:
+        full_lc_with_pulls_df.write_csv(values_output_path)
+
+    return fit_params_with_eex
 
 
 if __name__ == "__main__":
@@ -853,13 +1121,22 @@ if __name__ == "__main__":
     )
 
     OBJECT_DIR = (
-        DATA_DIR
-        / "salt_fitting"
-        / "ia_search"
-        / "with_z_results"
-        / "colour_stretch_results"
-        / "pass.csv"
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
     )
+
+    OBJECT_PASS_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "pass.csv"
+    )
+
+    OBJECT_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "fail.csv"
+    )
+
+    OBJECT_VALUES_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "values.csv"
+    )
+
+    PLOTS_OUTPUT_PATH = IMAGE_DIR / "early_excess_plots" / "simple_power_law"
 
     TEST_OBJECT_DIR = (
         DATA_DIR
@@ -869,12 +1146,16 @@ if __name__ == "__main__":
         / "test_object.csv"
     )
 
-    TEST_OUTPUT_PATH = (
-        DATA_DIR
-        / "eex_results"
-        / "simple_power_law"
-        / "testing_results"
-        / "test_object_output_path.csv"
+    TEST_OBJECT_PASS_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "simple_power_law" / "testing_results" / "pass.csv"
+    )
+
+    TEST_OBJECT_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "simple_power_law" / "testing_results" / "fail.csv"
+    )
+
+    TEST_OBJECT_VALUES_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "simple_power_law" / "testing_results" / "values.csv"
     )
 
     LIGHT_CURVE_DATA_DIR = (
@@ -890,30 +1171,30 @@ if __name__ == "__main__":
     LABELS = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
 
     test_result = iterate_over_bands(
-        objects_dir=TEST_OBJECT_DIR,
+        objects_dir=OBJECT_DIR,
         light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
         bands=BANDS,
     )
 
     test_result = keep_observations_upto_t50(
-        objects=TEST_OBJECT_DIR,
+        objects=OBJECT_DIR,
         light_curve_data_path=LIGHT_CURVE_DATA_DIR,
         reference_df=test_result,
     )
 
-    rest_frame_test_result = rest_frame_conversion(
-        object_salt_data=TEST_OBJECT_DIR,
+    full_rest_data = rest_frame_conversion(
+        object_salt_data=OBJECT_DIR,
         pre_t50_objects_data=test_result,
     )
 
     for band in BANDS:
-        rest_frame_test_result = excluding_excess_window(
-            rest_frame_conversion_df=rest_frame_test_result,
+        rest_data_no_eex = excluding_excess_window(
+            rest_frame_conversion_df=full_rest_data,
             band=band,
         )
 
     test_result = fitting_power_law(
-        rest_frame_objects=rest_frame_test_result,
+        rest_frame_objects=rest_data_no_eex,
         n_steps=2000,
     )
 
@@ -923,7 +1204,17 @@ if __name__ == "__main__":
     #     discard=500,
     # )
 
+    eex_detection(
+        pl_fit_params_df=test_result,
+        full_rest_frame_lc_df=full_rest_data,
+        pass_output_path=OBJECT_PASS_OUTPUT_PATH,
+        fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
+        values_output_path=OBJECT_VALUES_OUTPUT_PATH,
+    )
+
     fit_sample_parameters_plot(
-        sampling_results=test_result,
-        rest_frame_objects_df=rest_frame_test_result,
+        pl_fit_params_df=test_result,
+        rest_frame_no_eex=rest_data_no_eex,
+        full_rest_data_df=full_rest_data,
+        output_path=PLOTS_OUTPUT_PATH,
     )
