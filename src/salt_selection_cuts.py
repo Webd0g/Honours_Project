@@ -759,23 +759,23 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SN_II_SALT_FITS_PATH = (
+    SN_II_SALT_PHASE_PATH = (
         DATA_DIR
-        / "salt_fitting"
-        / "core_collapse_results"
-        / "salt_fits_values_filtered.csv"
+        / "sn_ii_test_results"
+        / "phase_results"
+        / "pass.csv"
     )
 
     SN_II_SALT_PASS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "phase_results" / "pass.csv"
+        DATA_DIR / "sn_ii_test_results" / "salt_chi2_results" / "pass.csv"
     )
 
     SN_II_SALT_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "phase_results" / "fail.csv"
+        DATA_DIR / "sn_ii_test_results" / "salt_chi2_results" / "fail.csv"
     )
 
     SN_II_SALT_VALUES_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "phase_results" / "values.csv"
+        DATA_DIR / "sn_ii_test_results" / "salt_chi2_results" / "values.csv"
     )
 
     LIGHT_CURVE_DATA_PATH = (
@@ -786,16 +786,10 @@ if __name__ == "__main__":
         IMAGE_DIR / "sn_ii_light_curves" / "salt_plots" / "phase_cut"
     )
 
-    bazin_salt_phase_cut(
-        salt_fits_path=SN_II_SALT_FITS_PATH,
+    bazin_salt_chi2_cut(
+        phase_cuts_path=SN_II_SALT_PHASE_PATH,
         light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+        values_output_path=SN_II_SALT_VALUES_OUTPUT_PATH,
         pass_output_path=SN_II_SALT_PASS_OUTPUT_PATH,
         fail_output_path=SN_II_SALT_FAIL_OUTPUT_PATH,
-        values_output_path=SN_II_SALT_VALUES_OUTPUT_PATH,
-    )
-
-    plot_salt_phase_diagnostic(
-        phase_results_path=SN_II_SALT_VALUES_OUTPUT_PATH,
-        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-        output_dir=SN_II_SALT_PHASE_PLOT_OUTPUT_PATH,
     )
