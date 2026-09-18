@@ -470,7 +470,7 @@ def bazin_salt_chi2_cut(
         model = sncosmo.Model(source="salt3")
 
         model.set(
-            z=row["z_used"],
+            z=row["fitted_z"],
             t0=row["t0"],
             x0=row["x0"],
             x1=row["x1"],
@@ -759,37 +759,34 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SN_II_SALT_PHASE_PATH = (
-        DATA_DIR
-        / "sn_ii_test_results"
-        / "phase_results"
-        / "pass.csv"
+    SN_IA_SALT_PHASE_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "phase_results" / "pass.csv"
     )
 
-    SN_II_SALT_PASS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "salt_chi2_results" / "pass.csv"
+    SN_IA_SALT_PASS_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "salt_chi2_results" / "pass.csv"
     )
 
-    SN_II_SALT_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "salt_chi2_results" / "fail.csv"
+    SN_IA_SALT_FAIL_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "salt_chi2_results" / "fail.csv"
     )
 
-    SN_II_SALT_VALUES_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "salt_chi2_results" / "values.csv"
+    SN_IA_SALT_VALUES_OUTPUT_PATH = (
+        DATA_DIR / "sn_ia_test_results" / "salt_chi2_results" / "values.csv"
     )
 
     LIGHT_CURVE_DATA_PATH = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    SN_II_SALT_PHASE_PLOT_OUTPUT_PATH = (
-        IMAGE_DIR / "sn_ii_light_curves" / "salt_plots" / "phase_cut"
+    SN_IA_SALT_PHASE_PLOT_OUTPUT_PATH = (
+        IMAGE_DIR / "sn_ia_light_curves" / "salt_plots" / "phase_cut"
     )
 
     bazin_salt_chi2_cut(
-        phase_cuts_path=SN_II_SALT_PHASE_PATH,
+        phase_cuts_path=SN_IA_SALT_PHASE_PATH,
         light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-        values_output_path=SN_II_SALT_VALUES_OUTPUT_PATH,
-        pass_output_path=SN_II_SALT_PASS_OUTPUT_PATH,
-        fail_output_path=SN_II_SALT_FAIL_OUTPUT_PATH,
+        values_output_path=SN_IA_SALT_VALUES_OUTPUT_PATH,
+        pass_output_path=SN_IA_SALT_PASS_OUTPUT_PATH,
+        fail_output_path=SN_IA_SALT_FAIL_OUTPUT_PATH,
     )
