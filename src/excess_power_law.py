@@ -13,66 +13,89 @@ def fifty_percent_flux_calculation(
     light_curve_data_path: Path,
     band: str,
 ) -> pl.DataFrame:
-    """Calculates the 50 per cent peak flux threshold for a specified band.
+    """This function finds the time when the observed flux across each band was 50 per cent of the g band flux.
 
     Args:
-        objects_path (Path): Path to the object catalog file.
-        light_curve_data_path (Path): Path to the light curve data file.
-        band (str): Band pass identifier to filter on (e.g., 'g').
+        object_path (Path): The path to the CSV where all the objects are.
+        light_curve_data_path (Path): The path to the light curve data of all objects.
 
     Returns:
-        pl.DataFrame: Filtered light curve data with peak and 50% peak flux columns.
+        pl.DataFrame: Returns a dataframe with an new column that is the mjd time where the observed flux is 50 per cent of the peak in the g band.
     """
+    # Reading and loading the light curve data and finding the light curve data that matches the objects that we have loaded in.
     light_curve_data = loading_light_curve_data_and_objects(
         objects_path=objects_path, light_curve_data_path=light_curve_data_path
     )
 
-    # Filter band and compute peak and 50% threshold in a single vectorized pass
-    return light_curve_data.filter(pl.col("r:band") == band).with_columns(
-        pl.col("r:psfFlux").max().over("r:diaObjectId").alias("peak_band_flux"),
-        (pl.col("r:psfFlux").max().over("r:diaObjectId") * 0.5).alias(
-            "50_per_cent_peak_flux"
-        ),
+    # Getting only the g band detections and finding the peak g band flux for each object.
+    band_df = light_curve_data.filter(pl.col("r:band") == band).with_columns(
+        pl.col("r:psfFlux").max().over("r:diaObjectId").alias("peak_band_flux")
     )
+
+    band_df = band_df.with_columns(
+        (pl.col("peak_band_flux") * 0.5).alias("50_per_cent_peak_flux")
+    )
+
+    return band_df
 
 
 def find_fifty_per_cent_time(
     band_df: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Finds the midpointMjdTai closest to the 50% peak flux during the rising phase.
+    """Here we find the midpointMjdTai that aligns closest with the quantity of the 50 % flux column.
 
     Args:
-        band_df (pl.DataFrame): Polars dataframe containing band data with peak_band_flux
-            and 50_per_cent_peak_flux columns.
-
+        fifty_per_cent_band_df (pl.DataFrame): The polars dataframe that has all the data from the fifty per cent band flux calcualtion.
     Returns:
-        pl.DataFrame: One row per object representing the epoch closest to 50% peak flux.
+        pl.DataFrame: Returns the dataframe that was passed to this function with a new column identifying the epoch that is closest to the 50 per cent peak flux calculation.
     """
-    # 1. Get the first MJD where peak flux occurs per object (handles potential duplicate peak values)
-    peak_mjd_df = (
-        band_df.filter(pl.col("r:psfFlux") == pl.col("peak_band_flux"))
-        .group_by("r:diaObjectId")
-        .agg(pl.col("r:midpointMjdTai").min().alias("peak_mjd"))
+    # Finding the peak row so we can track the MJD for that peak.
+    peak_df = band_df.filter(
+        pl.col("r:psfFlux") == pl.col("peak_band_flux")
+    ).with_columns(pl.col("r:midpointMjdTai").alias("peak_mjd"))
+
+    # Join the df that contains the peak info and the df with all the objects in it.
+    peak_df = band_df.join(
+        peak_df.select("r:diaObjectId", "peak_mjd"), on="r:diaObjectId", how="left"
     )
 
-    # 2. Join peak MJD, filter to rising phase (<= peak_mjd), and compute delta_flux
-    rise_df = (
-        band_df.join(peak_mjd_df, on="r:diaObjectId", how="inner")
-        .filter(pl.col("r:midpointMjdTai") <= pl.col("peak_mjd"))
-        .with_columns(
-            (pl.col("r:psfFlux") - pl.col("50_per_cent_peak_flux"))
-            .abs()
-            .alias("delta_flux")
-        )
+    # Finding the difference between the peak in the g band for the objects and all the fluxes for the other measurements for the objects.
+    difference_df = peak_df.with_columns(
+        (pl.col("r:psfFlux") - pl.col("50_per_cent_peak_flux"))
+        .abs()
+        .alias("delta_flux")
+    ).sort(["r:diaObjectId", "r:midpointMjdTai"])
+
+    # Adding a column that is the previous flux measurement for each row.
+    difference_df = difference_df.with_columns(
+        pl.col("r:psfFlux").shift(1).over("r:diaObjectId").alias("previous_flux")
     )
 
-    # 3. Find the point closest to 50% flux for each object on the rise phase
-    fifty_per_cent_df = rise_df.filter(
-        pl.col("delta_flux") == pl.col("delta_flux").min().over("r:diaObjectId")
+    # Adding a column that is the next flux measurement for each row.
+    difference_df = difference_df.with_columns(
+        pl.col("r:psfFlux").shift(-1).over("r:diaObjectId").alias("next_flux")
     )
 
-    # 4. Break ties if two epochs are equidistant from 50% flux
-    return fifty_per_cent_df.unique(subset=["r:diaObjectId"], keep="first")
+    # Filter to retain only the points for the objects that are before the peak flux in g band.
+    rise_df = difference_df.filter(pl.col("r:midpointMjdTai") <= pl.col("peak_mjd"))
+
+    # Filtering to points that are apart of the rise component where the previous measurement was less than the middle measurement and the next measurement is higher flux.
+    filtered_df = rise_df.filter(
+        (pl.col("previous_flux") < pl.col("r:psfFlux"))
+        & (pl.col("next_flux") > pl.col("r:psfFlux"))
+    )
+
+    # Adding a column that is the minimum delta_flux measurement for each object to find the point that is the closest to the 50 per cent flux calculation.
+    fifty_per_cent_point_df = filtered_df.with_columns(
+        pl.col("delta_flux").min().over("r:diaObjectId").alias("min_abs_delta_flux")
+    )
+
+    # Here we find where the delta flux is the smallest value over each diaObjectId, however it only finds 14 rows?
+    filtered_df = fifty_per_cent_point_df.filter(
+        (pl.col("delta_flux").abs()) == pl.col("min_abs_delta_flux")
+    )
+
+    return filtered_df
 
 
 def iterate_over_bands(
@@ -80,58 +103,47 @@ def iterate_over_bands(
     light_curve_data_dir: Path,
     bands: list[str],
 ) -> pl.DataFrame:
-    """Calculates 50% peak flux epochs across specified bands with fallback priority.
-
-    Objects are evaluated in the order of the `bands` list. An object present in an
-    earlier band will not be duplicated by later bands.
+    """Iterates over the bands that you feed as a list of strings, this is so that if an object isn't well sampled in one band but you would like to keep it you can try other bands and they weill get appended.
 
     Args:
-        objects_dir (Path): Path to object catalog data.
-        light_curve_data_dir (Path): Path to light curve data.
-        bands (list[str]): List of bands in fallback priority order (e.g. ['g', 'r', 'i']).
+        band_df (pl.DataFrame): The dataframe that is the result from the 50 per cent peak flux calcuation.
+        bands (list[str]): The list of the bands as string entries
 
     Returns:
-        pl.DataFrame: DataFrame containing reference 50% peak flux timing (t50_mjd).
+        pl.DataFrame: The dataframe with the row that is the 50 per cent flux calculatio which is how we find the time to fit to for the power law.
     """
-    # Load light curve data once to prevent repeated disk read overhead
-    light_curve_data = loading_light_curve_data_and_objects(
-        objects_path=objects_dir, light_curve_data_path=light_curve_data_dir
-    )
 
-    processed_dfs: list[pl.DataFrame] = []
-
+    # Iterates through the bands that have been entered in the list
     for band in bands:
-        # Calculate peak for current band
-        band_df = light_curve_data.filter(pl.col("r:band") == band).with_columns(
-            pl.col("r:psfFlux").max().over("r:diaObjectId").alias("peak_band_flux"),
-            (pl.col("r:psfFlux").max().over("r:diaObjectId") * 0.5).alias(
-                "50_per_cent_peak_flux"
-            ),
+        result = fifty_percent_flux_calculation(
+            objects_path=objects_dir,
+            light_curve_data_path=light_curve_data_dir,
+            band=band,
         )
 
-        if band_df.is_empty():
-            continue
+        filtered_result = find_fifty_per_cent_time(
+            band_df=result,
+        )
+        if band == "g":
+            g_result = filtered_result
+        elif band == "r":
+            r_result = filtered_result
+        elif band == "i":
+            i_result = filtered_result
 
-        # Get 50% time for objects in current band
-        filtered_result = find_fifty_per_cent_time(band_df=band_df)
+    r_only = r_result.join(
+        g_result.select("r:diaObjectId"),
+        on="r:diaObjectId",
+        how="anti",
+    )
 
-        # Anti-join against all previously collected objects to maintain priority order
-        if processed_dfs:
-            existing_objects = pl.concat(
-                [df.select("r:diaObjectId") for df in processed_dfs]
-            ).unique()
+    i_only = i_result.join(
+        r_result.select("r:diaObjectId"),
+        on="r:diaObjectId",
+        how="anti",
+    )
 
-            filtered_result = filtered_result.join(
-                existing_objects, on="r:diaObjectId", how="anti"
-            )
-
-        processed_dfs.append(filtered_result)
-
-    if not processed_dfs:
-        return pl.DataFrame()
-
-    # Combine results across all priority levels
-    final_reference_points = pl.concat(processed_dfs)
+    final_reference_points = pl.concat([g_result, r_only, i_only])
 
     return final_reference_points.rename({"r:midpointMjdTai": "t50_mjd"}).select(
         [
@@ -145,6 +157,8 @@ def iterate_over_bands(
             "50_per_cent_peak_flux",
             "peak_mjd",
             "delta_flux",
+            "previous_flux",
+            "next_flux",
         ]
     )
 
@@ -154,30 +168,29 @@ def keep_observations_upto_t50(
     light_curve_data_path: Path,
     reference_df: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Filters light curve observations to keep only points up to t50_mjd.
+    """Filtering step to keep only observations up to the 50 per cent point before fitting to that point.
 
     Args:
-        objects (Path): Path to the object catalog file.
-        light_curve_data_path (Path): Path to the light curve data file.
-        reference_df (pl.DataFrame): Reference DataFrame containing `t50_mjd` per object
-            from `iterate_over_bands`.
+        objects (Path): Path to the objects of SN Ia that will be filtered.
+        light_curve_data (Path): Path to the light curve data for all the objects.
+        reference_df (pl.DataFrame): This is the dataframe resulting from the fifty_percent_flux_calculation, find_fifty_per_cent_time and iterate_over_bands functions.
 
     Returns:
-        pl.DataFrame: Light curve observations up to `t50_mjd` for each object's reference band.
+        pl.DataFrame: Returns a polars dataframe that contains only the points up to the 50 per cent time in either the g or i bands.
     """
+
     light_curve_data = loading_light_curve_data_and_objects(
         objects_path=objects,
         light_curve_data_path=light_curve_data_path,
     )
 
-    # Join on both object ID and band to retain observations for the chosen reference band
-    return (
-        light_curve_data.join(
-            reference_df.select("r:diaObjectId", "r:band", "t50_mjd"),
-            on=["r:diaObjectId", "r:band"],
-            how="inner",
+    t50_df = reference_df
+
+    filtered_light_curve_data = (
+        light_curve_data.join(t50_df, on="r:diaObjectId", how="inner")
+        .filter(
+            pl.col("r:midpointMjdTai") <= pl.col("t50_mjd"),
         )
-        .filter(pl.col("r:midpointMjdTai") <= pl.col("t50_mjd"))
         .select(
             [
                 "r:diaObjectId",
@@ -190,6 +203,8 @@ def keep_observations_upto_t50(
             ]
         )
     )
+
+    return filtered_light_curve_data
 
 
 def power_law_evaluator():
@@ -229,35 +244,33 @@ def power_law_evaluator():
 
 
 def power_law_model(
-    times: np.ndarray | list[float],
+    times: np.ndarray,
     t_fl: float,
     A_prime: float,
     alpha: float,
 ) -> np.ndarray:
-    """Computes the early power-law flux model for SN Ia light curves (Müller-Bravo et al., 2026).
-
-    Model: f(t) = A_prime * ((t - t_fl) / 10)^alpha  for t >= t_fl
-            f(t) = 0                                   for t < t_fl
+    """Computes the power law eqution output as an array of fluxes given the input of the parameters.
 
     Args:
-        times (np.ndarray): Rest-frame observation times up to t50.
-        t_fl (float): Time of first light in rest-frame days relative to t0.
-        A_prime (float): Power-law amplitude coefficient at t - t_fl = 10 days.
-        alpha (float): Power-law index.
+        times (np.ndarray): The array of times leading up to the 50 per cent point that was computed earlier.
+        t_fl (float): Time of first light value which is expressed with respect to the time of salt fitted t0. Thus this quantity should be in the rest-frame time.
+        A_prime (float): The amplitude coeefficent of the power law.
+        alpha (float): The exponent component of the power law.
 
     Returns:
-        np.ndarray: Model flux values evaluated at input times.
+        np.ndarray: Returns an array of the flux quantities resulting from the MCMC fitting of this equation to the inputted dataframe of flux points.
     """
-    t_arr = np.asarray(times, dtype=float)
-    model_flux = np.zeros_like(t_arr)
 
-    # Mask observations occurring after first light
-    mask = t_arr > t_fl
-    if not np.any(mask):
-        return model_flux
+    model_flux = np.zeros_like(
+        times,
+        dtype=float,
+    )
 
-    # Numerically stable formulation of A' * 10^(-alpha) * (t - t_fl)^alpha
-    model_flux[mask] = A_prime * ((t_arr[mask] - t_fl) / 10.0) ** alpha
+    A = A_prime * 10 ** (-alpha)
+
+    after_first_light = times >= t_fl
+
+    model_flux[after_first_light] = A * (times[after_first_light] - t_fl) ** alpha
 
     return model_flux
 
@@ -267,23 +280,24 @@ def rest_frame_conversion(
     pre_t50_objects_data: pl.DataFrame,
     output_path: Path | None = None,
 ) -> pl.DataFrame:
-    """Converts observer-frame MJD times and first-detection times to rest-frame days relative to t0.
-
-    Formula: t_rest = (t_obs - t0) / (1 + z)
+    """Converts the mjd times from observer frame to rest-frame time observations.
 
     Args:
-        object_salt_data (Path): Path to CSV containing SALT fit parameters (t0, z_used, t_fd).
-        pre_t50_objects_data (pl.DataFrame): DataFrame containing light curve observations up to t50.
-        output_path (Path | None): Optional path to save the resulting DataFrame as CSV.
+        object_salt_data (Path): Path to the SALT data for the objects so that we can derive the time of first light properly.
 
     Returns:
-        pl.DataFrame: DataFrame containing rest-frame times ('rest_frame_time', 't_fd_rest').
+        pl.DataFrame: Returns a Polars dataframe that we can then use for the computation of the 50 per cent flux and so on functions.
     """
-    # 1. Read required SALT parameters using schema overrides
-    salt_data = pl.read_csv(
+
+    salt_object_data = pl.read_csv(
         object_salt_data,
-        columns=["r:diaObjectId", "t0", "z_used", "t_fd"],
-        schema={
+        columns=[
+            "r:diaObjectId",
+            "t0",
+            "z_used",
+            "t_fd",
+        ],
+        schema_overrides={
             "r:diaObjectId": pl.String,
             "t0": pl.Float64,
             "z_used": pl.Float64,
@@ -291,21 +305,24 @@ def rest_frame_conversion(
         },
     )
 
-    # 2. Join SALT parameters and compute rest-frame transformations in a single pass
-    rest_frame_df = pre_t50_objects_data.join(
-        salt_data, on="r:diaObjectId", how="inner"
-    ).with_columns(
-        ((pl.col("r:midpointMjdTai") - pl.col("t0")) / (1.0 + pl.col("z_used"))).alias(
-            "rest_frame_time"
-        ),
-        ((pl.col("t_fd") - pl.col("t0")) / (1.0 + pl.col("z_used"))).alias("t_fd_rest"),
+    salt_object_data = pre_t50_objects_data.join(
+        salt_object_data,
+        on="r:diaObjectId",
+        how="inner",
     )
 
-    # 3. Export to CSV if output path is specified
-    if output_path is not None:
-        rest_frame_df.write_csv(output_path)
+    rest_frame_time = salt_object_data.with_columns(
+        ((pl.col("r:midpointMjdTai") - pl.col("t0")) / (1 + pl.col("z_used"))).alias(
+            "rest_frame_time"
+        ),
+    ).with_columns(
+        ((pl.col("t_fd") - pl.col("t0")) / (1 + pl.col("z_used"))).alias("t_fd_rest"),
+    )
 
-    return rest_frame_df
+    if output_path is not None:
+        rest_frame_time.write_csv(output_path)
+
+    return rest_frame_time
 
 
 def log_prior_function(
@@ -313,42 +330,36 @@ def log_prior_function(
     band_data: dict,
     t_fd_rest: float,
 ) -> float:
-    """Computes log-prior using Equation A2 from Müller-Bravo et al. (2026).
-
-    P(A', alpha) proportional to A'^(-1) * 10^(-alpha)
-    => log P(A', alpha) = -ln(A') - alpha * ln(10)
+    """The priors of the fitting in log form to work in log probabilities when doing the MCMC fitting.
 
     Args:
-        theta (np.ndarray): Parameter array [t_fl, A_prime_1, alpha_1, ...].
-        band_data (dict): Dictionary of active fitting bands.
-        t_fd_rest (float): Rest-frame time of first detection.
+        theta (np.ndarray): A numpy array for the parameters to check the fitted ranges in.
+        t_fd_rest (pl.Float64): The rest frame time of first detection for the object.
 
     Returns:
-        float: Log-prior probability (-inf if out of bounds).
+        pl.Float64: _description_
     """
+
     t_fl = theta[0]
 
-    # First light must precede first detection
-    if not (-100.0 < t_fl < t_fd_rest):
+    if not (-100 < t_fl < t_fd_rest):
         return -np.inf
 
     log_prior = 0.0
-    num_bands = len(band_data)
 
-    for index in range(num_bands):
-        a_prime = theta[1 + 2 * index]
+    fit_bands = list(band_data.keys())
+
+    for index, band in enumerate(fit_bands):
+        A_prime = theta[1 + 2 * index]
         alpha = theta[2 + 2 * index]
 
-        # Enforce positive amplitude & reasonable physical bounds on exponent
-        if a_prime <= 0.0:
+        if A_prime <= 0:
             return -np.inf
 
-        # Constrain alpha to avoid floating-point overflow during MCMC steps
-        if not (1.0 <= alpha <= 1e8):
+        if not 1 <= alpha <= 1e8:
             return -np.inf
 
-        # Equation A2 prior term: -ln(A') - alpha * ln(10)
-        log_prior += -np.log(a_prime) - (alpha * np.log(10.0))
+        log_prior += -np.log(A_prime) - alpha * np.log(10)
 
     return log_prior
 
@@ -357,50 +368,46 @@ def log_likelihood_function(
     theta: np.ndarray,
     band_data: dict,
 ) -> float:
-    """Computes the Gaussian log-likelihood for early light curve power-law fitting across bands.
+    """The log likelihood function given the values of theta that have been guessed by the MCMC algorithm and the flux computed by the power law model to assess how good of a guess the algorithm has made.
 
     Args:
-        theta (np.ndarray): Parameter vector [t_fl, A_prime_1, alpha_1, ...].
-        band_data (dict): Nested dictionary structured as:
-            {
-                'g': {'times': np.ndarray, 'flux': np.ndarray, 'flux_error': np.ndarray},
-                ...
-            }
+        theta (np.ndarray): An array of the guessed parameters from the algorithm of the three power law parameters.
+        times (np.ndarray): An array of the times to enter into the power law for the object to estimate the flux.
+        flux (np.ndarray): An array of real flux values that were observed.
+        flux_error (np.ndarray): The psf error of the flux measurements as an array.
 
     Returns:
-        float: Total log-likelihood value across all fitted bands.
+        float: The likelihood of the estimated parameters for the power law flux model.
     """
-    t_fl = theta[0]
+
+    fit_bands = list(band_data.keys())
+
     log_likelihood = 0.0
 
-    for index, (band, data) in enumerate(band_data.items()):
-        a_prime = theta[1 + 2 * index]
+    t_fl = theta[0]
+
+    for index, band in enumerate(fit_bands):
+        A_prime = theta[1 + 2 * index]
         alpha = theta[2 + 2 * index]
 
-        times = data["times"]
-        flux = data["flux"]
-        flux_err = data["flux_error"]
-
-        # Safeguard against bad/zero error values
-        if np.any(flux_err <= 0) or np.any(np.isnan(flux_err)):
-            return -np.inf
+        times = band_data[band]["times"]
+        flux = band_data[band]["flux"]
+        flux_error = band_data[band]["flux_error"]
 
         model_flux = power_law_model(
             times=times,
             t_fl=t_fl,
-            A_prime=a_prime,
+            A_prime=A_prime,
             alpha=alpha,
         )
 
         residual = flux - model_flux
-        inv_variance = 1.0 / (flux_err**2)
 
-        # Standard Gaussian log-likelihood
         log_likelihood += -0.5 * np.sum(
-            (residual**2) * inv_variance + np.log(2.0 * np.pi * (flux_err**2))
+            (residual / flux_error) ** 2 + np.log(2 * np.pi * flux_error**2)
         )
 
-    return float(log_likelihood)
+    return log_likelihood
 
 
 def log_probability_function(
@@ -408,35 +415,31 @@ def log_probability_function(
     band_data: dict,
     t_fd_rest: float,
 ) -> float:
-    """Computes the total log-posterior probability (log-prior + log-likelihood).
+    """The probability that these parameters of the fit with respect to the real fluxes and flux errors are determined.
 
     Args:
-        theta (np.ndarray): Parameter vector [t_fl, A_prime_1, alpha_1, ...].
-        band_data (dict): Dictionary containing time, flux, and error arrays per band.
-        t_fd_rest (float): Rest-frame time of first detection.
+        theta (np.ndarray): The array that contains that paremeters that are used to perform the power law fit.
+        t_fd_rest (float): The time of first detection in the rest frame for the object.
+        times (np.ndarray): The array of times for each dectection for the object.
+        flux (np.ndarray): The array of the measured fluxes for the object.
+        flux_error (np.ndarray): The psfFlux measured error in the flux measurements.
 
     Returns:
-        float: Total log-probability (-inf if prior or likelihood is invalid).
+        float: The calculated overall probability of the fitted parameters
     """
+
     lp = log_prior_function(
         theta=theta,
         band_data=band_data,
         t_fd_rest=t_fd_rest,
     )
-
-    # Short-circuit likelihood calculation if prior is invalid (-inf)
     if not np.isfinite(lp):
         return -np.inf
 
-    ll = log_likelihood_function(
+    return lp + log_likelihood_function(
         theta=theta,
         band_data=band_data,
     )
-
-    if not np.isfinite(ll):
-        return -np.inf
-
-    return float(lp + ll)
 
 
 def fitting_power_law(
@@ -444,16 +447,16 @@ def fitting_power_law(
     n_steps: int,
     fit_df_output_path: Path | None = None,
 ) -> pl.DataFrame:
-    """Fits the early excess power-law model using emcee MCMC across rest-frame light curves.
+    """Fitting the power law and iterating and minimising is done in this function, using the dataframe from the rest-frame conversion and the prior functions.
 
     Args:
-        rest_frame_objects (pl.DataFrame): Rest-frame transformed observations up to t50.
-        n_steps (int): Total MCMC steps to run per object.
-        fit_df_output_path (Path | None): Optional CSV output path for fitted parameters.
+        rest_frame_objects (pl.DataFrame): The dataframe with the lightcurve data up to the fifty per cent point and the times of the observations converted to the rest-frame times.
+        fit_df_output_path (Path | None, optional): The output path for the dataframe of the fit parameters that the mimnimisation arrived on a sa CSV. Defaults to None.
 
     Returns:
-        pl.DataFrame: Summary table containing posterior percentiles for fitted parameters.
+        pl.DataFrame: The dataframe of the fit parameters for the power law.
     """
+
     results = {
         "r:diaObjectId": [],
         "t_fl": [],
@@ -483,90 +486,128 @@ def fitting_power_law(
         "t50_mjd": [],
         "sampler_nwalkers": [],
         "sampler_nsteps": [],
+        # "acceptance_fraction": [],
+        # "tau_t_fl": [],
+        # "tau_A_prime": [],
+        # "tau_alpha": [],
+        # "converged": [],
     }
 
-    # Dynamically scale burn-in to avoid discarding more steps than were executed
-    burn_in = min(500, int(n_steps * 0.3))
+    for object_id, object_df in rest_frame_objects.group_by("r:diaObjectId"):
+        # Filtering the dataframe to just the individual band.
+        rest_frame_objects_df = object_df
 
-    for (object_id,), object_df in rest_frame_objects.group_by(
-        "r:diaObjectId", maintain_order=True
-    ):
         band_data = {}
-        for current_band in ["g", "r", "i"]:
+
+        for current_band in [
+            "g",
+            "r",
+            "i",
+        ]:
             band_df = object_df.filter(pl.col("r:band") == current_band)
+
             if band_df.height > 0:
                 band_data[current_band] = {
+                    # Making Numpy arrays of the columns for the iteration and fitting.
                     "times": band_df["rest_frame_time"].to_numpy(),
                     "flux": band_df["r:psfFlux"].to_numpy(),
                     "flux_error": band_df["r:psfFluxErr"].to_numpy(),
                 }
 
-        if not band_data:
-            continue
+        # Finding the first detection for the object
+        t_fd_rest = rest_frame_objects_df["t_fd_rest"].first()
 
-        t_fd_rest = object_df["t_fd_rest"].first()
+        # Bands present in the object that will be used for the fit.
         fit_bands = list(band_data.keys())
 
-        # Construct parameter vector [t_fl, A_prime_1, alpha_1, ...]
-        # Center initial t_fl safely prior to first detection
-        initial_t_fl = min(-18.0, t_fd_rest - 2.0)
-        theta = [initial_t_fl]
+        # Initial guess for theta for this test object.
+        theta = [
+            -18,
+        ]
 
-        for _ in fit_bands:
-            theta.extend([2.0, 2.0])  # A' = 2.0, alpha = 2.0 (fireball index)
+        # Adding extra priors if more bands are present.
+        for band in fit_bands:
+            theta.extend(
+                [
+                    2.0,
+                    4.0,
+                ]
+            )
 
+        # Converting the list to a numpy array.
         theta = np.array(theta)
-        ndim = len(theta)
-        nwalkers = max(32, 2 * ndim)
 
-        # Initialize walkers with tight scatter to guarantee valid initial log-prior
-        pos = theta + 1e-3 * np.random.randn(nwalkers, ndim)
+        # Rough scatter approximation for the fitting vector theta.
+        scatter = [
+            0.1,
+        ]
 
-        # Clamp initial walker positions into strict valid prior bounds
-        pos[:, 0] = np.clip(pos[:, 0], -45.0, t_fd_rest - 0.1)
-        for b_idx in range(len(fit_bands)):
-            pos[:, 1 + 2 * b_idx] = np.maximum(pos[:, 1 + 2 * b_idx], 0.01)  # A' > 0
-            pos[:, 2 + 2 * b_idx] = np.clip(
-                pos[:, 2 + 2 * b_idx], 1.0, 4.5
-            )  # 1 <= alpha <= 5
+        # Adding extra scatter to extra extra prior for the detected bands
+        for band in fit_bands:
+            scatter.extend(
+                [
+                    0.5,
+                    0.5,
+                ]
+            )
 
+        # Converting scatter list to numpy array.
+        scatter = np.array(scatter)
+
+        # Beginning position for the MCMC fitting process.
+        pos = theta + scatter * np.random.randn(100, len(theta))
+
+        # Initialising the ensemble sample from the emcee library
+        nwalkers, ndim = pos.shape
         sampler = emcee.EnsembleSampler(
             nwalkers=nwalkers,
             ndim=ndim,
             log_prob_fn=log_probability_function,
-            args=(band_data, t_fd_rest),
+            args=(
+                band_data,
+                t_fd_rest,
+            ),
         )
 
-        sampler.run_mcmc(initial_state=pos, nsteps=n_steps, progress=False)
+        # Running the MCMC fitting algorithm.
+        sampler.run_mcmc(
+            initial_state=pos,
+            nsteps=n_steps,
+            progress=True,
+        )
 
-        flat_samples = sampler.get_chain(discard=burn_in, thin=10, flat=True)
+        flat_samples = sampler.get_chain(discard=500, thin=10, flat=True)
 
-        # Extract percentiles for t_fl
-        q16, t_fl_val, q84 = np.percentile(flat_samples[:, 0], [16, 50, 84])
-        results["t_fl"].append(float(t_fl_val))
-        results["t_fl_err_low"].append(float(t_fl_val - q16))
-        results["t_fl_err_high"].append(float(q84 - t_fl_val))
+        q16, t_fl, q84 = np.percentile(flat_samples[:, 0], [16, 50, 84])
 
-        # Extract band-specific posteriors
+        results["t_fl"].append(float(t_fl))
+        results["t_fl_err_low"].append(float(t_fl - q16))
+        results["t_fl_err_high"].append(float(q84 - t_fl))
+
         for band in ["g", "r", "i"]:
             if band in fit_bands:
                 index = fit_bands.index(band)
-                a_idx, alpha_idx = 1 + 2 * index, 2 + 2 * index
+                A_prime_index = 1 + 2 * index
+                alpha_index = 2 + 2 * index
 
-                a_q16, a_val, a_q84 = np.percentile(
-                    flat_samples[:, a_idx], [16, 50, 84]
+                q16, A_prime, q84 = np.percentile(
+                    flat_samples[:, A_prime_index], [16, 50, 84]
                 )
-                results[f"A_prime_{band}"].append(float(a_val))
-                results[f"A_prime_{band}_err_low"].append(float(a_val - a_q16))
-                results[f"A_prime_{band}_err_high"].append(float(a_q84 - a_val))
 
-                al_q16, al_val, al_q84 = np.percentile(
-                    flat_samples[:, alpha_idx], [16, 50, 84]
+                results[f"A_prime_{band}"].append(float(A_prime))
+                results[f"A_prime_{band}_err_low"].append(float(A_prime - q16))
+                results[f"A_prime_{band}_err_high"].append(float(q84 - A_prime))
+
+                q16, alpha, q84 = np.percentile(
+                    flat_samples[:, alpha_index], [16, 50, 84]
                 )
-                results[f"alpha_{band}"].append(float(al_val))
-                results[f"alpha_{band}_err_low"].append(float(al_val - al_q16))
-                results[f"alpha_{band}_err_high"].append(float(al_q84 - al_val))
+
+                results[f"alpha_{band}"].append(float(alpha))
+                results[f"alpha_{band}_err_low"].append(float(alpha - q16))
+                results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
+
             else:
+                # Append None for missing bands to preserve exact column heights
                 results[f"A_prime_{band}"].append(None)
                 results[f"A_prime_{band}_err_low"].append(None)
                 results[f"A_prime_{band}_err_high"].append(None)
@@ -575,57 +616,52 @@ def fitting_power_law(
                 results[f"alpha_{band}_err_low"].append(None)
                 results[f"alpha_{band}_err_high"].append(None)
 
-        results["r:diaObjectId"].append(object_id)
-        results["t_fd"].append(object_df["t_fd"].first())
-        results["t_fd_rest"].append(object_df["t_fd_rest"].first())
-        results["z_used"].append(object_df["z_used"].first())
-        results["t50_mjd"].append(object_df["t50_mjd"].first())
+        results["r:diaObjectId"].append(object_id[0])
+        results["t_fd"].append(rest_frame_objects_df["t_fd"].item(0))
+        results["t_fd_rest"].append(rest_frame_objects_df["t_fd_rest"].item(0))
+        results["z_used"].append(rest_frame_objects_df["z_used"].item(0))
         results["sampler_nsteps"].append(n_steps)
         results["sampler_nwalkers"].append(nwalkers)
+        results["t50_mjd"].append(rest_frame_objects_df["t50_mjd"].item(0))
 
-    results_df = pl.DataFrame(results)
+    results = pl.DataFrame(results)
 
-    if fit_df_output_path is not None:
-        results_df.write_csv(fit_df_output_path)
-
-    return results_df
+    return results, sampler
 
 
 def excluding_excess_window(
     rest_frame_conversion_df: pl.DataFrame,
-    band: str | list[str],
-    excess_window_days: float = 3.0,
+    band: str,
     output_path: Path | None = None,
 ) -> pl.DataFrame:
-    """Removes observations falling within the early excess window [t_fd_rest, t_fd_rest + excess_window_days].
+    """Remove any points in the excess window from the dataframe that will be used for the power law fitting process.
 
     Args:
-        rest_frame_conversion_df (pl.DataFrame): Rest-frame transformed light curve data.
-        band (str | list[str]): Passband identifier(s) to exclude early excess from (e.g., 'g' or ['g', 'r']).
-        excess_window_days (float, optional): Window size in rest-frame days after first detection. Defaults to 3.0.
-        output_path (Path | None, optional): Optional CSV output path for filtered data. Defaults to None.
+        rest_frame_conversion_df (pl.DataFrame): dataframe of the points from the rest-frame conversion function.
+        output_path (Path | None, optional): Optional CSV output path of the dataframe from this fucntion. Defaults to None.
 
     Returns:
-        pl.DataFrame: DataFrame with points inside the specified excess window removed.
+        pl.DataFrame: The dataframe with the data points that are in the excess window removed before the fitting.
     """
-    bands_to_filter = [band] if isinstance(band, str) else band
 
-    # Identify points strictly inside the excess window for target bands
-    in_excess_window = pl.col("r:band").is_in(bands_to_filter) & pl.col(
-        "rest_frame_time"
-    ).is_between(
-        pl.col("t_fd_rest"),
-        pl.col("t_fd_rest") + excess_window_days,
-        closed="both",
+    # Defining the excess window (for use we take the t_fd and add 3 days remove any points that have a time in that range.)
+    rest_frame_objects_df = rest_frame_conversion_df.filter(
+        ~(
+            (pl.col("r:band") == band)
+            & pl.col("rest_frame_time").is_between(
+                pl.col("t_fd_rest"),
+                pl.col("t_fd_rest") + 3,
+                closed="both",
+            )
+        )
     )
 
-    # Keep all observations outside the excess window
-    filtered_df = rest_frame_conversion_df.filter(in_excess_window.not_())
-
     if output_path is not None:
-        filtered_df.write_csv(output_path)
+        rest_frame_objects_df.write_csv(
+            output_path,
+        )
 
-    return filtered_df
+    return rest_frame_objects_df
 
 
 def walkers_chain_plot(
@@ -688,27 +724,31 @@ def fit_sample_parameters_plot(
     full_rest_data_df: pl.DataFrame,
     output_path: Path | None = None,
 ) -> None:
-    """Plots the median sampled power-law values against light curve observations and pulls.
+    """Plots the median sampled values from the sampling of parameters for the power law against the real data of the light curves of the objects.
 
     Args:
-        pl_fit_params_df (pl.DataFrame): DataFrame output from fitting_power_law.
-        rest_frame_no_eex (pl.DataFrame): DataFrame with excess window removed.
-        full_rest_data_df (pl.DataFrame): Complete rest-frame light curve DataFrame.
-        output_path (Path | None, optional): Output directory to save generated plots.
+        pl_fit_params_df (pl.DataFrame): The results of the chain from the sampling of the power law, this should be the resulting dataframe output from the power law fitting function.
+        output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
     """
-    # 1. Fixed indexing bug: iterate directly over pl_fit_params_df
-    for (diaObjectId,), object_df in pl_fit_params_df[0].group_by(
-        "r:diaObjectId", maintain_order=True
-    ):
+
+    for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
+        diaObjectId = object_df["r:diaObjectId"].item()
+
         rest_band_data = {}
+
         band_data = {}
 
-        for current_band in ["g", "r", "i"]:
-            # Complete dataset for plotting
+        for current_band in [
+            "g",
+            "r",
+            "i",
+        ]:
+            # Filter for the light curve data of this object in the desired band too.
             rest_band_df = full_rest_data_df.filter(
                 (pl.col("r:band") == current_band)
-                & (pl.col("r:diaObjectId") == diaObjectId)
+                & (pl.col("r:diaObjectId") == diaObjectId),
             )
+
             if rest_band_df.height > 0:
                 rest_band_data[current_band] = {
                     "times": rest_band_df["rest_frame_time"].to_numpy(),
@@ -716,45 +756,47 @@ def fit_sample_parameters_plot(
                     "flux_error": rest_band_df["r:psfFluxErr"].to_numpy(),
                 }
 
-            # Fitted dataset (without excess window)
             band_df = rest_frame_no_eex.filter(
                 (pl.col("r:band") == current_band)
-                & (pl.col("r:diaObjectId") == diaObjectId)
+                & (pl.col("r:diaObjectId") == diaObjectId),
             )
+
             if band_df.height > 0:
                 band_data[current_band] = {
+                    # Making Numpy arrays of the columns for the iteration and fitting.
                     "times": band_df["rest_frame_time"].to_numpy(),
                     "flux": band_df["r:psfFlux"].to_numpy(),
                     "flux_error": band_df["r:psfFluxErr"].to_numpy(),
                 }
 
-        # Filter bands that actually have parameters fit
-        fit_bands = [
-            band
-            for band in band_data
-            if object_df[f"A_prime_{band}"].item() is not None
-        ]
+        fit_bands = list(band_data.keys())
 
-        if not fit_bands:
-            continue
+        # Grabbing the time of first detection for the object
+        model_parameters = {}
 
-        model_parameters = {
-            band: {
+        for band in fit_bands:
+            model_parameters[band] = {
                 "A_prime": object_df[f"A_prime_{band}"].item(),
                 "alpha": object_df[f"alpha_{band}"].item(),
             }
-            for band in fit_bands
-        }
 
         t_fl_med = object_df["t_fl"].item()
         t_fd_rest = object_df["t_fd_rest"].item()
 
-        # Build smooth grid across the full rest_band_data time span
         model_grids = {}
-        model_flux = {}
+
         for band in fit_bands:
-            times_full = rest_band_data[band]["times"]
-            model_grids[band] = np.linspace(np.min(times_full), np.max(times_full), 300)
+            times = band_data[band]["times"]
+
+            model_grids[band] = np.linspace(
+                np.min(times),
+                np.max(times),
+                300,
+            )
+
+        model_flux = {}
+
+        for band in fit_bands:
             model_flux[band] = power_law_model(
                 times=model_grids[band],
                 t_fl=t_fl_med,
@@ -762,7 +804,10 @@ def fit_sample_parameters_plot(
                 alpha=model_parameters[band]["alpha"],
             )
 
-        fig, (axes_fit, axes_resid) = plt.subplots(
+        (
+            _fig,
+            (axes_fit, axes_resid),
+        ) = plt.subplots(
             nrows=2,
             ncols=1,
             sharex=True,
@@ -777,7 +822,6 @@ def fit_sample_parameters_plot(
 
             in_ranges = (times >= t_fd_rest) & (times <= t_fd_rest + 3)
 
-            # Excess points (faded)
             plot_data = axes_fit.errorbar(
                 x=times[in_ranges],
                 y=flux[in_ranges],
@@ -791,7 +835,6 @@ def fit_sample_parameters_plot(
 
             data_colour = plot_data.lines[0].get_color()
 
-            # Non-excess points (solid)
             axes_fit.errorbar(
                 x=times[~in_ranges],
                 y=flux[~in_ranges],
@@ -804,14 +847,13 @@ def fit_sample_parameters_plot(
                 label=f"lsst{band}",
             )
 
-            # Smooth power law model curve
             axes_fit.plot(
                 model_grids[band],
                 model_flux[band],
                 color=data_colour,
             )
 
-            # Model evaluated at observation points for residual calculation
+            # Model evaluated at the actual observation times
             model_at_data = power_law_model(
                 times=times,
                 t_fl=t_fl_med,
@@ -819,9 +861,8 @@ def fit_sample_parameters_plot(
                 alpha=model_parameters[band]["alpha"],
             )
 
-            residuals = (flux - model_at_data) / flux_error
+            residuals = (flux - model_at_data) / (flux_error)
 
-            # Residuals for excess points (faded - matched to top plot)
             axes_resid.errorbar(
                 x=times[in_ranges],
                 y=residuals[in_ranges],
@@ -830,45 +871,68 @@ def fit_sample_parameters_plot(
                 mec="white",
                 color=data_colour,
                 mew=1,
-                alpha=1,
             )
 
-            # Residuals for non-excess points (solid - matched to top plot)
             axes_resid.errorbar(
                 x=times[~in_ranges],
                 y=residuals[~in_ranges],
                 fmt="o",
                 capsize=3,
                 mec="white",
+                alpha=0.3,
                 color=data_colour,
                 mew=1,
-                alpha=0.3,
             )
 
-        # Draw reference lines and regions
-        axes_resid.axhline(c="black")
-        axes_resid.axhspan(
-            -5, 5, color="grey", linestyle=":", alpha=0.12, label=r"$5 \sigma$ region"
-        )
-        axes_resid.axhspan(
-            -3, 3, color="grey", linestyle="--", alpha=0.25, label=r"$3 \sigma$ region"
+        axes_resid.axhline(
+            c="black",
         )
 
-        for ax in (axes_fit, axes_resid):
-            ax.axvline(
-                x=t_fd_rest,
-                linestyle="--",
-                label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d" if ax == axes_fit else None,
-                color="#0072B2",
-            )
-            ax.axvline(
-                x=t_fd_rest + 3,
-                linestyle=":",
-                label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d"
-                if ax == axes_fit
-                else None,
-                color="#0072B2",
-            )
+        axes_resid.axhspan(
+            -5,
+            5,
+            color="grey",
+            linestyle=":",
+            alpha=0.12,
+            label=r"$5 \sigma$ region",
+        )
+
+        axes_resid.axhspan(
+            -3,
+            3,
+            color="grey",
+            linestyle="--",
+            alpha=0.25,
+            label=r"$3 \sigma$ region",
+        )
+
+        axes_fit.axvline(
+            x=t_fd_rest,
+            linestyle="--",
+            label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_fit.axvline(
+            x=t_fd_rest + 3,
+            linestyle=":",
+            label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_resid.axvline(
+            x=t_fd_rest,
+            linestyle="--",
+            label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_resid.axvline(
+            x=t_fd_rest + 3,
+            linestyle=":",
+            label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d",
+            color="#0072B2",
+        )
 
         axes_fit.axvline(
             t_fl_med,
@@ -881,20 +945,15 @@ def fit_sample_parameters_plot(
         axes_fit.set_title(f"{diaObjectId}")
         axes_resid.set_xlabel(r"Rest-frame days since $B$-band peak")
         axes_resid.set_ylabel("Pull")
-        axes_fit.legend(loc="best", frameon=False)
-
+        axes_fit.legend(
+            loc="best",
+            frameon=False,
+        )
         plt.tight_layout()
-
         if output_path is not None:
-            output_path.mkdir(parents=True, exist_ok=True)
-            fig.savefig(
-                output_path / f"{diaObjectId}_eex_power_law_fit.jpg",
-                dpi=300,
-                bbox_inches="tight",
-            )
-
+            plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
         plt.show()
-        plt.close(fig)
+        plt.close()
 
 
 def eex_detection(
@@ -904,33 +963,38 @@ def eex_detection(
     fail_output_path: Path | None = None,
     values_output_path: Path | None = None,
 ) -> pl.DataFrame:
-    """Calculates pulls for rest-frame light curves and flags early excess candidates.
-
-    Objects are flagged as having an early excess if they have pull >= 5 across at least
-    2 distinct nights within the excess window [t_fd_rest, t_fd_rest + 3].
+    """Reconstruct the fluxes at the datapoint times from the power law fit parameters, calculate pulls and check for objects with pulls greater than 5 and save them as "passed".
 
     Args:
-        pl_fit_params_df (pl.DataFrame): Output DataFrame from fitting_power_law.
-        full_rest_frame_lc_df (pl.DataFrame): Full rest-frame light curve observations.
-        pass_output_path (Path | None): Path to save passing objects CSV.
-        fail_output_path (Path | None): Path to save failing objects CSV.
-        values_output_path (Path | None): Path to save detailed pull calculations CSV.
+        pl_fit_params_df (pl.DataFrame): Dataframe that has the objects pl fit parameters resulting from the MCMC sampling.
+        full_rest_frame_lc_df (pl.DataFrame): Dataframe containing the light curve data in rest frame that will be fit to.
+        pass_output_path (Path | None, optional): Output path for all the passing objects from the excess check. Defaults to None.
+        fail_output_path (Path | None, optional): Output path for all the failing objects from the excess check. Defaults to None.
+        values_output_path (Path | None, optional): Output path for all the values resulting from the excess check. Defaults to None.
 
     Returns:
-        pl.DataFrame: pl_fit_params_df augmented with an 'early_excess' boolean column.
+        pl.DataFrame: The values dataframe that is the same as the values CSV.
     """
+
     pull_records = []
 
-    # Iterate over fitted objects directly
-    for (diaObjectId,), object_df in pl_fit_params_df[0].group_by(
-        "r:diaObjectId", maintain_order=True
+    for object_id, object_df in pl_fit_params_df[0].group_by(
+        "r:diaObjectId",
+        maintain_order=True,
     ):
+        diaObjectId = object_df["r:diaObjectId"].item()
+
         rest_band_data = {}
 
-        for current_band in ["g", "r", "i"]:
+        for current_band in [
+            "g",
+            "r",
+            "i",
+        ]:
+            # Filter for the light curve data of this object in the desired band too.
             rest_band_df = full_rest_frame_lc_df.filter(
                 (pl.col("r:band") == current_band)
-                & (pl.col("r:diaObjectId") == diaObjectId)
+                & (pl.col("r:diaObjectId") == diaObjectId),
             )
 
             if rest_band_df.height > 0:
@@ -941,10 +1005,21 @@ def eex_detection(
                     "flux_error": rest_band_df["r:psfFluxErr"].to_numpy(),
                 }
 
-        available_bands = list(rest_band_data.keys())
-        fit_bands = [
-            b for b in available_bands if object_df[f"A_prime_{b}"].item() is not None
-        ]
+        avaliable_bands = list(rest_band_data.keys())
+
+        model_parameters = {}
+        fit_bands = []
+
+        for band in avaliable_bands:
+            a_prime = object_df[f"A_prime_{band}"].item()
+            alpha = object_df[f"alpha_{band}"].item()
+
+            if a_prime is not None and alpha is not None:
+                model_parameters[band] = {
+                    "A_prime": a_prime,
+                    "alpha": alpha,
+                }
+                fit_bands.append(band)
 
         if not fit_bands:
             continue
@@ -954,44 +1029,46 @@ def eex_detection(
         for band in fit_bands:
             times = rest_band_data[band]["times"]
             flux = rest_band_data[band]["flux"]
-            flux_err = rest_band_data[band]["flux_error"]
+            flux_error = rest_band_data[band]["flux_error"]
 
             model_at_data = power_law_model(
                 times=times,
                 t_fl=t_fl_med,
-                A_prime=object_df[f"A_prime_{band}"].item(),
-                alpha=object_df[f"alpha_{band}"].item(),
+                A_prime=model_parameters[band]["A_prime"],
+                alpha=model_parameters[band]["alpha"],
             )
 
-            pulls = (flux - model_at_data) / flux_err
+            pull = (flux - model_at_data) / (flux_error)
 
-            for source_id, p in zip(rest_band_data[band]["diaSourceId"], pulls):
+            for source_id, t, p in zip(
+                (rest_band_data[band]["diaSourceId"]), times, pull
+            ):
                 pull_records.append(
                     {
+                        "r:diaObjectId": diaObjectId,
                         "r:diaSourceId": source_id,
-                        "pull": float(p),
+                        "r:band": band,
+                        "rest_frame_time": t,
+                        "pull": p,
                     }
                 )
 
-    if not pull_records:
-        pull_df = pl.DataFrame(schema={"r:diaSourceId": pl.String, "pull": pl.Float64})
-    else:
-        pull_df = pl.DataFrame(pull_records)
-
-    # Join pull values onto main light curve without duplicating metadata columns
+    pull_df = pl.DataFrame(pull_records)
     full_lc_with_pulls_df = full_rest_frame_lc_df.join(
-        pull_df, on="r:diaSourceId", how="left"
+        pull_df,
+        on=[
+            "r:diaSourceId",
+        ],
+        how="left",
     )
 
     early_window = pl.col("rest_frame_time").is_between(
         pl.col("t_fd_rest"),
-        pl.col("t_fd_rest") + 3.0,
-        closed="both",
+        pl.col("t_fd_rest") + 3,
     )
 
-    # Count distinct excess nights (pull >= 5 within window)
     eex_candidates = full_lc_with_pulls_df.filter(
-        early_window & (pl.col("pull") >= 5.0)
+        early_window & (pl.col("pull") >= 5)
     ).with_columns(pl.col("r:midpointMjdTai").floor().cast(pl.Int64).alias("night"))
 
     eex_nights = eex_candidates.group_by("r:diaObjectId").agg(
@@ -999,16 +1076,22 @@ def eex_detection(
     )
 
     full_lc_with_pulls_df = (
-        full_lc_with_pulls_df.join(eex_nights, on="r:diaObjectId", how="left")
+        full_lc_with_pulls_df.join(
+            other=eex_nights,
+            on="r:diaObjectId",
+            how="left",
+        )
         .with_columns(pl.col("excess_nights").fill_null(0))
         .with_columns((pl.col("excess_nights") >= 2).alias("early_excess"))
     )
 
-    passing_object_ids = full_lc_with_pulls_df.filter(pl.col("early_excess"))[
-        "r:diaObjectId"
-    ].unique()
+    passing_object_ids = (
+        full_lc_with_pulls_df.filter(pl.col("early_excess"))
+        .select("r:diaObjectId")
+        .unique()["r:diaObjectId"]
+    )
 
-    fit_params_with_eex = pl_fit_params_df.with_columns(
+    fit_params_with_eex = pl_fit_params_df[0].with_columns(
         pl.col("r:diaObjectId").is_in(passing_object_ids).alias("early_excess")
     )
 
