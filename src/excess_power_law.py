@@ -631,6 +631,7 @@ def fitting_power_law(
 
 def excluding_excess_window(
     rest_frame_conversion_df: pl.DataFrame,
+    window_length:int,
     band: str,
     output_path: Path | None = None,
 ) -> pl.DataFrame:
@@ -650,7 +651,7 @@ def excluding_excess_window(
             (pl.col("r:band") == band)
             & pl.col("rest_frame_time").is_between(
                 pl.col("t_fd_rest"),
-                pl.col("t_fd_rest") + 3,
+                pl.col("t_fd_rest") + window_length,
                 closed="both",
             )
         )
@@ -685,11 +686,11 @@ def walkers_chain_plot(
 
     (
         nsteps,
-        nwalkers,
+        _nwalkers,
         ndim,
     ) = samples.shape
 
-    fig, axes = plt.subplots(
+    _fig, axes = plt.subplots(
         ndim,
         1,
         figsize=(10, 2 * ndim),
@@ -721,6 +722,7 @@ def walkers_chain_plot(
 def fit_sample_parameters_plot(
     pl_fit_params_df: pl.DataFrame,
     rest_frame_no_eex: pl.DataFrame,
+    window_length:int,
     full_rest_data_df: pl.DataFrame,
     output_path: Path | None = None,
 ) -> None:
@@ -820,7 +822,7 @@ def fit_sample_parameters_plot(
             flux = rest_band_data[band]["flux"]
             flux_error = rest_band_data[band]["flux_error"]
 
-            in_ranges = (times >= t_fd_rest) & (times <= t_fd_rest + 3)
+            in_ranges = (times >= t_fd_rest) & (times <= t_fd_rest + window_length)
 
             plot_data = axes_fit.errorbar(
                 x=times[in_ranges],
@@ -914,9 +916,9 @@ def fit_sample_parameters_plot(
         )
 
         axes_fit.axvline(
-            x=t_fd_rest + 3,
+            x=t_fd_rest + window_length,
             linestyle=":",
-            label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d",
+            label=rf"$t_{{fd}} + {window_length} ={t_fd_rest + window_length:.2f}$ d",
             color="#0072B2",
         )
 
@@ -928,9 +930,9 @@ def fit_sample_parameters_plot(
         )
 
         axes_resid.axvline(
-            x=t_fd_rest + 3,
+            x=t_fd_rest + window_length,
             linestyle=":",
-            label=rf"$t_{{fd}} + 3d ={t_fd_rest + 3:.2f}$ d",
+            label=rf"$t_{{fd}} + {window_length} ={t_fd_rest + window_length:.2f}$ d",
             color="#0072B2",
         )
 
@@ -959,6 +961,7 @@ def fit_sample_parameters_plot(
 def eex_detection(
     pl_fit_params_df: pl.DataFrame,
     full_rest_frame_lc_df: pl.DataFrame,
+    window_length: int,
     pass_output_path: Path | None = None,
     fail_output_path: Path | None = None,
     values_output_path: Path | None = None,
@@ -1064,7 +1067,7 @@ def eex_detection(
 
     early_window = pl.col("rest_frame_time").is_between(
         pl.col("t_fd_rest"),
-        pl.col("t_fd_rest") + 3,
+        pl.col("t_fd_rest") + window_length,
     )
 
     eex_candidates = full_lc_with_pulls_df.filter(
@@ -1125,18 +1128,18 @@ if __name__ == "__main__":
     )
 
     OBJECT_PASS_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "pass.csv"
+        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "4_day_window" / "pass.csv"
     )
 
     OBJECT_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "fail.csv"
+        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "4_day_window" / "fail.csv"
     )
 
     OBJECT_VALUES_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "values.csv"
+        DATA_DIR / "eex_results" / "simple_power_law" / "results" / "4_day_window" / "values.csv"
     )
 
-    PLOTS_OUTPUT_PATH = IMAGE_DIR / "early_excess_plots" / "simple_power_law"
+    PLOTS_OUTPUT_PATH = IMAGE_DIR / "early_excess_plots" / "simple_power_law" / "4_day_window"
 
     TEST_OBJECT_DIR = (
         DATA_DIR
@@ -1190,6 +1193,7 @@ if __name__ == "__main__":
     for band in BANDS:
         rest_data_no_eex = excluding_excess_window(
             rest_frame_conversion_df=full_rest_data,
+            window_length=4,
             band=band,
         )
 
@@ -1204,17 +1208,19 @@ if __name__ == "__main__":
     #     discard=500,
     # )
 
-    eex_detection(
-        pl_fit_params_df=test_result,
-        full_rest_frame_lc_df=full_rest_data,
-        pass_output_path=OBJECT_PASS_OUTPUT_PATH,
-        fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
-        values_output_path=OBJECT_VALUES_OUTPUT_PATH,
-    )
+    # eex_detection(
+    #     pl_fit_params_df=test_result,
+    #     full_rest_frame_lc_df=full_rest_data,
+    #     window_length=4,
+    #     pass_output_path=OBJECT_PASS_OUTPUT_PATH,
+    #     fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
+    #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
+    # )
 
     fit_sample_parameters_plot(
         pl_fit_params_df=test_result,
         rest_frame_no_eex=rest_data_no_eex,
+        window_length=4,
         full_rest_data_df=full_rest_data,
         output_path=PLOTS_OUTPUT_PATH,
     )
