@@ -28,11 +28,17 @@ def slope_calculation(
     min_time_span: float = MIN_PRE_PEAK_TIME_SPAN_DAYS,
     min_peak_snr: float = MIN_PEAK_SNR,
 ) -> tuple[float, int] | None:
-    """This function finds the slope of the band of the lightcurve prepeak by fitting a
+    """Fits the slope to the points pre-maximum light per band and returns the slope and number of points used.
 
-    polynomial of degree 1 to the points of the light curve before the brightest point
-    of the light curve. Returns None if there isn't enough pre-peak data in this band
-    to attempt a fit.
+    Args:
+        group_df (pl.DataFrame): The light curve data of the object.
+        band (str): The band the slope calculation is done in.
+        min_points (int, optional): The minimum number of points required to calculate the slope. Defaults to MIN_PRE_PEAK_POINTS.
+        min_time_span (float, optional): The minimum number of MJD days required to calculate the slope. Defaults to MIN_PRE_PEAK_TIME_SPAN_DAYS.
+        min_peak_snr (float, optional): The minimum SNR that the peak point has to have for the slope to be calculated.. Defaults to MIN_PEAK_SNR.
+
+    Returns:
+        tuple[float, int] | None: Can return the slope and the number of points that were used for the fitting but can also return None if the object didn't get a fit.
     """
     band_df = group_df.filter((pl.col("r:band") == band) & (pl.col("r:psfFlux") > 0))
     if band_df.is_empty():
