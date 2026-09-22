@@ -25,50 +25,6 @@ def bazin_salt_phase_cut(
     fail_output_path: Path | None = None,
     values_output_path: Path | None = None,
 ) -> pl.DataFrame:
-    """
-    Apply the Bazin et al. SALT quality cuts.
-
-    The rest-frame phase is defined as
-
-        tau = (t_obs - t0) / (1 + z_host)
-
-    where:
-        t0     = fitted SALT time of maximum
-        z_host = host-galaxy photometric redshift
-
-    Quality requirements
-    --------------------
-    1. At least one measurement with -10 < tau < +5 days.
-    2. At least one measurement with  +5 < tau < +20 days.
-    3. At least one colour pair among:
-            (g, i), (r, z), (i, z)
-        where each band has at least one measurement with
-            -10 < tau < +35 days.
-
-    Parameters
-    ----------
-    salt_fits_path : Path
-        CSV containing the SALT fit results. Must contain:
-        - r:diaObjectId
-        - host_photoz
-        - t0
-        - fit_success
-
-    light_curve_data_path : Path
-        Rubin light-curve parquet file.
-
-    output_path : Path
-        Path to save the quality-cut results.
-
-    Returns
-    -------
-    pl.DataFrame
-        SALT fit results with phase-coverage counts and quality flags.
-    """
-
-    # --------------------------------------------------------------
-    # Load SALT fit results
-    # --------------------------------------------------------------
 
     salt_fits = pl.read_csv(
         salt_fits_path,
@@ -79,13 +35,6 @@ def bazin_salt_phase_cut(
             "fit_success": pl.Boolean,
         },
     )
-
-    # --------------------------------------------------------------
-    # Load only photometry belonging to these objects
-    #
-    # Use the same basic measurement validity requirements as the
-    # SALT fitting stage. Negative fluxes are retained.
-    # --------------------------------------------------------------
 
     light_curve_data = (
         pl.read_parquet(light_curve_data_path)
@@ -99,10 +48,6 @@ def bazin_salt_phase_cut(
         )
     )
 
-    # --------------------------------------------------------------
-    # Attach SALT t0 and host photo-z to every photometric point
-    # --------------------------------------------------------------
-
     phase_data = light_curve_data.join(
         salt_fits.select(
             "r:diaObjectId",
@@ -114,22 +59,11 @@ def bazin_salt_phase_cut(
         how="left",
     )
 
-    # --------------------------------------------------------------
-    # Calculate rest-frame phase
-    #
-    # IMPORTANT:
-    #   host_photoz is used here, NOT fitted_z.
-    # --------------------------------------------------------------
-
     phase_data = phase_data.with_columns(
         ((pl.col("r:midpointMjdTai") - pl.col("t0")) / (1.0 + pl.col("z_used"))).alias(
             "tau"
         )
     )
-
-    # --------------------------------------------------------------
-    # Define phase-window membership for every observation
-    # --------------------------------------------------------------
 
     phase_data = phase_data.with_columns(
         ((pl.col("tau") > -10) & (pl.col("tau") < 5)).alias("in_peak_phase"),
@@ -137,18 +71,9 @@ def bazin_salt_phase_cut(
         ((pl.col("tau") > -10) & (pl.col("tau") < 35)).alias("in_colour_phase"),
     )
 
-    # --------------------------------------------------------------
-    # Count measurements in each required region
-    # --------------------------------------------------------------
-
     quality_counts = phase_data.group_by("r:diaObjectId").agg(
-        # Requirement 1
         pl.col("in_peak_phase").sum().alias("n_peak_phase"),
-        # Requirement 2
         pl.col("in_shape_phase").sum().alias("n_shape_phase"),
-        # Requirement 3:
-        # number of observations in each band in the
-        # -10 < tau < +35 colour window
         ((pl.col("in_colour_phase")) & (pl.col("r:band") == "g"))
         .sum()
         .alias("n_g_colour"),
@@ -163,22 +88,12 @@ def bazin_salt_phase_cut(
         .alias("n_z_colour"),
     )
 
-    # --------------------------------------------------------------
-    # Join counts back to SALT results
-    #
-    # Left join means objects without usable photometry remain in
-    # the output rather than disappearing.
-    # --------------------------------------------------------------
-
     results = salt_fits.join(
         quality_counts,
         on="r:diaObjectId",
         how="left",
         maintain_order="left",
-    )
-
-    # Objects without valid phase information get zero counts.
-    results = results.with_columns(
+    ).with_columns(
         pl.col(
             "n_peak_phase",
             "n_shape_phase",
@@ -189,12 +104,7 @@ def bazin_salt_phase_cut(
         ).fill_null(0)
     )
 
-    # --------------------------------------------------------------
-    # Individual Bazin quality flags
-    # --------------------------------------------------------------
-
     results = results.with_columns(
-        # Do we actually have everything required to calculate tau?
         (
             pl.col("fit_success").fill_null(False)
             & pl.col("t0").is_not_null()
@@ -203,11 +113,8 @@ def bazin_salt_phase_cut(
             & pl.col("z_used").is_finite()
             & (pl.col("z_used") > 0)
         ).alias("has_quality_inputs"),
-        # Criterion (i)
         (pl.col("n_peak_phase") >= 1).alias("pass_peak_phase"),
-        # Criterion (ii)
         (pl.col("n_shape_phase") >= 1).alias("pass_shape_phase"),
-        # Criterion (iii): individual colour combinations
         ((pl.col("n_g_colour") >= 1) & (pl.col("n_i_colour") >= 1)).alias(
             "pass_gi_colour"
         ),
@@ -219,19 +126,13 @@ def bazin_salt_phase_cut(
         ),
     )
 
-    # --------------------------------------------------------------
-    # Overall colour and SALT quality flags
-    # --------------------------------------------------------------
-
     results = results.with_columns(
         (
             pl.col("pass_gi_colour")
             | pl.col("pass_rz_colour")
             | pl.col("pass_iz_colour")
         ).alias("pass_colour")
-    )
-
-    results = results.with_columns(
+    ).with_columns(
         (
             pl.col("has_quality_inputs")
             & pl.col("pass_peak_phase")
@@ -239,10 +140,6 @@ def bazin_salt_phase_cut(
             & pl.col("pass_colour")
         ).alias("pass_salt_quality")
     )
-
-    # --------------------------------------------------------------
-    # Number of Bazin quality requirements failed
-    # --------------------------------------------------------------
 
     results = results.with_columns(
         (
@@ -252,9 +149,17 @@ def bazin_salt_phase_cut(
         ).alias("number_quality_failed")
     )
 
-    results.write_csv(values_output_path)
-    results.filter(pl.col("pass_salt_quality")).write_csv(pass_output_path)
-    results.filter(~pl.col("pass_salt_quality")).write_csv(fail_output_path)
+    if values_output_path is not None:
+        values_output_path.parent.mkdir(parents=True, exist_ok=True)
+        results.write_csv(values_output_path)
+
+    if pass_output_path is not None:
+        pass_output_path.parent.mkdir(parents=True, exist_ok=True)
+        results.filter(pl.col("pass_salt_quality")).write_csv(pass_output_path)
+
+    if fail_output_path is not None:
+        fail_output_path.parent.mkdir(parents=True, exist_ok=True)
+        results.filter(~pl.col("pass_salt_quality")).write_csv(fail_output_path)
 
     return results
 
@@ -264,20 +169,6 @@ def get_salt3_fitted_bands(
     model: sncosmo.Model,
     band_map: dict[str, str] = BAND_MAP,
 ) -> set[str]:
-    """
-    Determine which Rubin bands should enter the SALT3 fit.
-
-    A band is included when:
-
-    1. Its rest-frame effective wavelength is within the adopted
-        SALT3 fitting range of 2800--8700 Angstrom.
-
-    2. The full observed bandpass is physically covered by the
-        SALT3 model at the supplied redshift.
-
-    The supplied redshift should be the host-galaxy photo-z for
-    the host-photo-z branch of the analysis.
-    """
 
     fitted_bands = set()
 
@@ -301,6 +192,72 @@ def get_salt3_fitted_bands(
     return fitted_bands
 
 
+def unfitted_band_chi2(
+    group_df: pl.DataFrame,
+    fitted_model: sncosmo.Model,
+    band: str,
+    band_map: dict[str, str] = BAND_MAP,
+) -> dict:
+
+    sncosmo_band = band_map[band]
+
+    # Can the final fitted SALT3 model physically evaluate this band?
+    if not fitted_model.bandoverlap(sncosmo_band):
+        return {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+            "model_can_evaluate": False,
+        }
+
+    band_df = group_df.filter(pl.col("r:band") == band)
+
+    if band_df.height == 0:
+        return {
+            "chi2": None,
+            "n_points": 0,
+            "chi2_per_point": None,
+            "model_can_evaluate": True,
+        }
+
+    data = Table(
+        {
+            "time": band_df["r:midpointMjdTai"].to_numpy(),
+            "band": np.full(
+                band_df.height,
+                sncosmo_band,
+            ),
+            "flux": band_df["r:psfFlux"].to_numpy(),
+            "fluxerr": band_df["r:psfFluxErr"].to_numpy(),
+            "zp": np.full(
+                band_df.height,
+                31.4,
+            ),
+            "zpsys": np.full(
+                band_df.height,
+                "ab",
+            ),
+        }
+    )
+
+    chi2 = float(
+        sncosmo.chisq(
+            data,
+            fitted_model,
+            modelcov=True,
+        )
+    )
+
+    n_points = len(data)
+
+    return {
+        "chi2": chi2,
+        "n_points": n_points,
+        "chi2_per_point": chi2 / n_points,
+        "model_can_evaluate": True,
+    }
+
+
 def bazin_salt_chi2_cut(
     phase_cuts_path: Path,
     light_curve_data_path: Path,
@@ -308,31 +265,6 @@ def bazin_salt_chi2_cut(
     pass_output_path: Path,
     fail_output_path: Path,
 ) -> pl.DataFrame:
-    """
-    Calculate SALT chi-square statistics per fitted band for objects
-    that passed the Bazin SALT phase-quality cut.
-
-    Uses the best-fit SALT3 parameters already stored in the input CSV.
-
-    Bazin fitted-band requirements:
-        g : chi2 / N < 10
-        r : chi2 / N < 8
-        i : chi2 / N < 8
-        z : chi2 / N < 8
-
-    Overall SALT requirement:
-        chi2 / ndof < 6
-
-    Notes
-    -----
-    SNCosmo provides a global ndof, but not a separate ndof for each band.
-    Therefore the per-band statistic is stored explicitly as chi2 / N_band
-    rather than being labelled a formal reduced chi-square.
-    """
-
-    # ------------------------------------------------------------
-    # Read SALT / phase-quality results
-    # ------------------------------------------------------------
 
     objects_df = pl.read_csv(
         phase_cuts_path,
@@ -340,10 +272,6 @@ def bazin_salt_chi2_cut(
             "r:diaObjectId": pl.String,
         },
     )
-
-    # ------------------------------------------------------------
-    # Read only photometry for objects entering this stage
-    # ------------------------------------------------------------
 
     light_curve_data = (
         pl.read_parquet(light_curve_data_path)
@@ -367,10 +295,6 @@ def bazin_salt_chi2_cut(
 
     results = []
 
-    # ------------------------------------------------------------
-    # Process each phase-quality-passing object
-    # ------------------------------------------------------------
-
     for row in objects_df.iter_rows(named=True):
         object_id = row["r:diaObjectId"]
 
@@ -378,10 +302,6 @@ def bazin_salt_chi2_cut(
 
         if group_df is None or group_df.height == 0:
             continue
-
-        # --------------------------------------------------------
-        # Reconstruct the fitted SALT model
-        # --------------------------------------------------------
 
         model = sncosmo.Model(source="salt3")
 
@@ -392,10 +312,6 @@ def bazin_salt_chi2_cut(
             x1=row["x1"],
             c=row["c"],
         )
-
-        # --------------------------------------------------------
-        # Calculate chi2 in bands that actually entered the fit
-        # --------------------------------------------------------
 
         band_results = {}
 
@@ -483,36 +399,27 @@ def bazin_salt_chi2_cut(
         # Calculate unfitted band chi squared
         # --------------------------------------------------------
 
-        g_unfitted = {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
-            "model_can_evaluate": None,
-        }
+        g_unfitted = (
+            unfitted_band_chi2(group_df, model, "g")
+            if not row["g_fitted"]
+            else {
+                "chi2": None,
+                "n_points": 0,
+                "chi2_per_point": None,
+                "model_can_evaluate": None,
+            }
+        )
 
-        z_unfitted = {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
-            "model_can_evaluate": None,
-        }
-
-        if row["g_fitted"] is False:
-            g_unfitted = unfitted_band_chi2(
-                group_df=group_df,
-                fitted_model=model,
-                band="g",
-            )
-
-        if row["z_fitted"] is False:
-            z_unfitted = unfitted_band_chi2(
-                group_df=group_df,
-                fitted_model=model,
-                band="z",
-            )
-        # --------------------------------------------------------
-        # Extract results
-        # --------------------------------------------------------
+        z_unfitted = (
+            unfitted_band_chi2(group_df, model, "z")
+            if not row["z_fitted"]
+            else {
+                "chi2": None,
+                "n_points": 0,
+                "chi2_per_point": None,
+                "model_can_evaluate": None,
+            }
+        )
 
         results.append(
             {
@@ -541,11 +448,6 @@ def bazin_salt_chi2_cut(
         )
 
     chi2_df = pl.DataFrame(results)
-    pl.Config.set_tbl_cols(-1)
-    pl.Config.set_tbl_rows(-1)
-    # ------------------------------------------------------------
-    # Join per-band statistics back onto the phase-quality table
-    # ------------------------------------------------------------
 
     results_df = objects_df.join(
         chi2_df,
@@ -553,15 +455,6 @@ def bazin_salt_chi2_cut(
         how="left",
         maintain_order="left",
     )
-
-    # ------------------------------------------------------------
-    # Bazin fitted-band chi2 flags
-    #
-    # A null means that band was not part of the SALT fit.
-    # We keep the individual flags for now and do not yet combine
-    # them into the final chi2 selection, because the next stage is
-    # the fitted-vs-unfitted band logic.
-    # ------------------------------------------------------------
 
     results_df = results_df.with_columns(
         (pl.col("g_chi2_per_point") < 10).alias("pass_g_fitted_chi2"),
@@ -585,85 +478,15 @@ def bazin_salt_chi2_cut(
         ).alias("pass_chi2_quality")
     )
 
+    values_output_path.parent.mkdir(parents=True, exist_ok=True)
+    pass_output_path.parent.mkdir(parents=True, exist_ok=True)
+    fail_output_path.parent.mkdir(parents=True, exist_ok=True)
+
     results_df.write_csv(values_output_path)
     results_df.filter(pl.col("pass_chi2_quality")).write_csv(pass_output_path)
     results_df.filter(~pl.col("pass_chi2_quality")).write_csv(fail_output_path)
 
     return results_df
-
-
-def unfitted_band_chi2(
-    group_df: pl.DataFrame,
-    fitted_model: sncosmo.Model,
-    band: str,
-    band_map: dict[str, str] = BAND_MAP,
-) -> dict:
-    """
-    Calculate chi-square for a band that did not participate in
-    the SALT3 fit.
-
-    The SALT parameters remain fixed. If SALT3 cannot physically
-    evaluate the band at the fitted redshift, the statistic is
-    returned as null rather than extrapolating the model.
-    """
-
-    sncosmo_band = band_map[band]
-
-    # Can the final fitted SALT3 model physically evaluate this band?
-    if not fitted_model.bandoverlap(sncosmo_band):
-        return {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
-            "model_can_evaluate": False,
-        }
-
-    band_df = group_df.filter(pl.col("r:band") == band)
-
-    if band_df.height == 0:
-        return {
-            "chi2": None,
-            "n_points": 0,
-            "chi2_per_point": None,
-            "model_can_evaluate": True,
-        }
-
-    data = Table(
-        {
-            "time": band_df["r:midpointMjdTai"].to_numpy(),
-            "band": np.full(
-                band_df.height,
-                sncosmo_band,
-            ),
-            "flux": band_df["r:psfFlux"].to_numpy(),
-            "fluxerr": band_df["r:psfFluxErr"].to_numpy(),
-            "zp": np.full(
-                band_df.height,
-                31.4,
-            ),
-            "zpsys": np.full(
-                band_df.height,
-                "ab",
-            ),
-        }
-    )
-
-    chi2 = float(
-        sncosmo.chisq(
-            data,
-            fitted_model,
-            modelcov=True,
-        )
-    )
-
-    n_points = len(data)
-
-    return {
-        "chi2": chi2,
-        "n_points": n_points,
-        "chi2_per_point": chi2 / n_points,
-        "model_can_evaluate": True,
-    }
 
 
 if __name__ == "__main__":
@@ -699,10 +522,11 @@ if __name__ == "__main__":
         IMAGE_DIR / "sn_ia_light_curves" / "salt_plots" / "phase_cut"
     )
 
-    bazin_salt_chi2_cut(
-        phase_cuts_path=SN_IA_SALT_PHASE_PATH,
-        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-        values_output_path=SN_IA_SALT_VALUES_OUTPUT_PATH,
-        pass_output_path=SN_IA_SALT_PASS_OUTPUT_PATH,
-        fail_output_path=SN_IA_SALT_FAIL_OUTPUT_PATH,
-    )
+if SN_IA_SALT_PHASE_PATH.exists():
+        bazin_salt_chi2_cut(
+            phase_cuts_path=SN_IA_SALT_PHASE_PATH,
+            light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+            values_output_path=SN_IA_SALT_VALUES_OUTPUT_PATH,
+            pass_output_path=SN_IA_SALT_PASS_OUTPUT_PATH,
+            fail_output_path=SN_IA_SALT_FAIL_OUTPUT_PATH,
+        )
