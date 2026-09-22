@@ -522,11 +522,11 @@ if __name__ == "__main__":
         IMAGE_DIR / "sn_ia_light_curves" / "salt_plots" / "phase_cut"
     )
 
-if SN_IA_SALT_PHASE_PATH.exists():
-        bazin_salt_chi2_cut(
-            phase_cuts_path=SN_IA_SALT_PHASE_PATH,
-            light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-            values_output_path=SN_IA_SALT_VALUES_OUTPUT_PATH,
-            pass_output_path=SN_IA_SALT_PASS_OUTPUT_PATH,
-            fail_output_path=SN_IA_SALT_FAIL_OUTPUT_PATH,
-        )
+    if SN_IA_SALT_PHASE_PATH.exists():
+            bazin_salt_chi2_cut(
+                phase_cuts_path=SN_IA_SALT_PHASE_PATH,
+                light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+                values_output_path=SN_IA_SALT_VALUES_OUTPUT_PATH,
+                pass_output_path=SN_IA_SALT_PASS_OUTPUT_PATH,
+                fail_output_path=SN_IA_SALT_FAIL_OUTPUT_PATH,
+            )

@@ -8,6 +8,10 @@ import polars as pl
 import sncosmo
 
 from rubin_eex_finder.models.excess_power_law import power_law_model
+from rubin_eex_finder.visualisation.style import set_publication_style
+
+# Set the style for all figures in this script.
+set_publication_style()
 
 
 def bazin_curve(
@@ -162,7 +166,7 @@ def plot_eex_salt_candidate_diagnostic(
         "y": "lssty",
     }
 
-    BAND_COLORS = {
+    BAND_COLOURS = {
         "u": "blue",
         "g": "dodgerblue",
         "r": "mediumspringgreen",
@@ -204,87 +208,64 @@ def plot_eex_salt_candidate_diagnostic(
             & pl.col("r:midpointMjdTai").is_finite()
             & (pl.col("r:psfFluxErr") > 0)
         )
-    )
-
-    light_curve_data = light_curve_data.join(
-        object_df.select(
-            "r:diaObjectId",
-            "z_used",
-            "t0",
-            "x0",
-            "x1",
-            "c",
-            "t_fd",
-        ),
+    ).join(
+        object_df.select("r:diaObjectId", "z_used", "t0", "x0", "x1", "c", "t_fd"),
         on="r:diaObjectId",
         how="inner",
     )
 
-    groups = {
-        key[0]: group_df.sort("r:midpointMjdTai")
-        for key, group_df in light_curve_data.group_by(
-            "r:diaObjectId",
-            maintain_order=True,
-        )
-    }
-
-    for object_id, group_df in groups.items():
-        z_used = group_df["z_used"].item(0)
-        t0 = group_df["t0"].item(0)
-        x0 = group_df["x0"].item(0)
-        x1 = group_df["x1"].item(0)
-        c = group_df["c"].item(0)
-        t_fd = group_df["t_fd"].item(0)
+    for (object_id,), group_df in light_curve_data.group_by("r:diaObjectId"):
+        z_used = group_df["z_used"][0]
+        t0 = group_df["t0"][0]
+        x0 = group_df["x0"][0]
+        x1 = group_df["x1"][0]
+        c = group_df["c"][0]
+        t_fd = group_df["t_fd"][0]
 
         model = sncosmo.Model(source="salt3")
-
         model.set(z=z_used, t0=t0, x0=x0, x1=x1, c=c)
 
-        excess_start = t_fd
-        excess_end = t_fd - 4.0
+        group_df = group_df.with_columns(
+            phase_rest=((pl.col("r:midpointMjdTai") - t0) / (1.0 + z_used))
+        )
+
+        phase_start = (t_fd - t0) / (1.0 + z_used)
+        phase_end = phase_start + 4.0
 
         group_df = group_df.with_columns(
-            (pl.col("r:midpointMjdTai") - t0).alias("phase_obs"),
-            ((pl.col("r:midpointMjdTai") - t0) / (1 + z_used)).alias("phase_rest"),
-            (
-                (pl.col("r:midpointMjdTai") >= excess_start)
-                & (pl.col("r:midpointMjdTai") <= excess_end)
-            ).alias("in_excess_window"),
+            in_excess_window=(pl.col("phase_rest") >= phase_start)
+            & (pl.col("phase_rest") <= phase_end)
         )
 
-        bands_present = group_df["r:band"].unique().to_list()
+        fig, (ax_flux, ax_pull) = plt.subplots(
+            nrows=2,
+            ncols=1,
+            figsize=(7, 5.5),
+            sharex=True,
+            gridspec_kw={"height_ratios": [3.5, 1], "hspace": 0.05},
+        )
+
         bands_present = [
-            b for b in ["u", "g", "r", "i", "z", "y"] if b in bands_present
+            b
+            for b in ["u", "g", "r", "i", "z", "y"]
+            if b in group_df["r:band"].unique().to_list()
         ]
 
-        n_bands = len(bands_present)
-        fig, axes = plt.subplots(
-            nrows=n_bands * 2,
-            ncols=1,
-            figsize=(9, 3.2 * n_bands),
-            sharex=True,
-            gridspec_kw={"height_ratios": [3, 1] * n_bands},
-        )
+        ax_flux.set_xlim(-30, 0)
 
-        if n_bands == 1:
-            axes = [axes[0], axes[1]]
+        for band in bands_present:
+            sncosmo_band = BAND_MAP[band]
+            colour = BAND_COLOURS[band]
 
-        for i, band in enumerate(bands_present):
-            flux_ax = axes[2 * i]
-            pull_ax = axes[2 * i + 1]
-
-            band_df = group_df.filter(pl.col("r:band") == band)
-
+            band_df = group_df.filter(pl.col("r:band") == band).sort("phase_rest")
             if band_df.height == 0:
                 continue
 
             times = band_df["r:midpointMjdTai"].to_numpy()
             flux = band_df["r:psfFlux"].to_numpy()
             fluxerr = band_df["r:psfFluxErr"].to_numpy()
-            xvals = band_df["phase_rest"].to_numpy()  # use rest-frame axis
+            phase = band_df["phase_rest"].to_numpy()  # use rest-frame axis
             in_window = band_df["in_excess_window"].to_numpy()
-
-            sncosmo_band = BAND_MAP[band]
 
             model_flux = np.array(
                 [model.bandflux(sncosmo_band, t, zp=31.4, zpsys="ab") for t in times]
@@ -292,101 +273,93 @@ def plot_eex_salt_candidate_diagnostic(
 
             pull = (flux - model_flux) / fluxerr
 
+            sncosmo_band = BAND_MAP[band]
+
             # smooth model curve
-            t_grid = np.linspace(times.min() - 5, times.max() + 5, 300)
-            x_grid = (t_grid - t0) / (1.0 + z_used)
+            phase_grid = np.linspace(-32, 5, 400)
+            t_grid = t0 + phase_grid * (1.0 + z_used)
             model_grid = np.array(
                 [model.bandflux(sncosmo_band, t, zp=31.4, zpsys="ab") for t in t_grid]
             )
 
-            color = BAND_COLORS[band]
+            ax_flux.plot(
+                phase_grid,
+                model_grid,
+                color=colour,
+                lw=1.5,
+                zorder=2,
+            )
 
             # Plot points outside window: faded
             outside = ~in_window
             if np.any(outside):
-                flux_ax.errorbar(
-                    xvals[outside],
+                ax_flux.errorbar(
+                    phase[outside],
                     flux[outside],
                     yerr=fluxerr[outside],
                     fmt="o",
-                    color=color,
-                    alpha=0.3,
-                    capsize=2,
+                    color=colour,
+                    alpha=0.25,
+                    capsize=0,
+                    zorder=3,
+                )
+                ax_pull.scatter(
+                    phase[outside],
+                    pull[outside],
+                    color=colour,
+                    alpha=0.25,
+                    s=20,
+                    zorder=3,
                 )
 
             # Plot points inside window: opaque
             if np.any(in_window):
-                flux_ax.errorbar(
-                    xvals[in_window],
+                ax_flux.errorbar(
+                    phase[in_window],
                     flux[in_window],
                     yerr=fluxerr[in_window],
                     fmt="o",
-                    color=color,
+                    color=colour,
+                    markeredgecolor="white",
+                    markeredgewidth=0.5,
                     alpha=1.0,
-                    capsize=4,
+                    markersize=5.5,
+                    capsize=0,
+                    label=f"lsst{band}",
+                    zorder=4,
                 )
 
-            flux_ax.plot(x_grid, model_grid, color=color)
-            flux_ax.axhline(0, linestyle="--")
-            flux_ax.set_ylabel(r"flux ($ZP_{AB}=25.0$)")
-            flux_ax.text(
-                0.95,
-                0.88,
-                f"lsst{band}",
-                transform=flux_ax.transAxes,
-                ha="right",
-                va="top",
-            )
-
-            # pull panel
-            if np.any(outside):
-                pull_ax.scatter(
-                    xvals[outside],
-                    pull[outside],
-                    color=color,
-                    alpha=0.3,
-                )
-
-            if np.any(in_window):
-                pull_ax.scatter(
-                    xvals[in_window],
+                ax_pull.scatter(
+                    phase[in_window],
                     pull[in_window],
-                    color=color,
+                    color=colour,
+                    edgecolor="white",
+                    linewidth=0.5,
                     alpha=1.0,
+                    s=30,
+                    zorder=4,
                 )
 
-            pull_ax.axhline(0, color="black")
-            pull_ax.axhline(3, alpha=0.3)
-            pull_ax.axhline(5, alpha=0.5)
-            pull_ax.axhline(-3, alpha=0.3)
-            pull_ax.axhline(-5, alpha=0.5)
-            pull_ax.set_ylabel("pull")
+        # Shaded pull bands
+        ax_pull.axhline(0, color="black", lw=1, zorder=1)
+        ax_pull.axhspan(-3, 3, color="gray", alpha=0.15, zorder=0)
+        ax_pull.axhspan(-5, 5, color="grey", alpha=0.08, zorder=0)
+        ax_pull.set_ylim(-6, 8)
+        ax_pull.set_ylabel("Pull", fontsize=12)
 
-            # Excess-window lines in rest-frame phase
-            left_edge = (t_fd - t0) / (1.0 + z_used)
-            right_edge = left_edge + 4.0
+        for ax in (ax_flux, ax_pull):
+            ax.axvline(phase_start, linestyle=":", color="#E94E77", lw=1.5, zorder=1)
+            ax.axvline(phase_end, linestyle=":", color="#E94E77", lw=1.5, zorder=1)
 
-            flux_ax.axvline(left_edge, linestyle=":")
-            flux_ax.axvline(right_edge, linestyle=":")
-            pull_ax.axvline(left_edge, linestyle=":")
-            pull_ax.axvline(right_edge, linestyle=":")
+        ax_flux.legend(loc="upper left", frameon="false", fontsize=11)
 
-        axes[-1].set_xlabel("Rest-frame days since SALT3 B-band peak")
+        ax_pull.set_xlabel("Rest-frame days since $B$-band peak", fontsize=11)
 
-        fig.suptitle(object_id, y=0.995)
+        ax_flux.set_ylabel("Flux (nJy)")
 
-        summary_text = (
-            f"z = {z_used:.6f}\n"
-            f"$t_0$ = {t0:.2f}\n"
-            f"$x_0$ = {x0:.6e}\n"
-            f"$x_1$ = {x1:.3f}\n"
-            f"$c$ = {c:.3f}\n"
-            f"$t_{{fd}}$ = {t_fd:.2f}"
-        )
-        fig.text(0.02, 0.98, summary_text, va="top")
-
-        plt.tight_layout(rect=[0, 0, 1, 0.97])
+        plt.tight_layout()
         if plot_output_path is not None:
+            plot_output_path.mkdir(parents=True, exist_ok=True)
             fig.savefig(plot_output_path / f"{object_id}_eex_diagnostic.png", dpi=200)
         plt.show()
         plt.close(fig)
@@ -683,3 +656,26 @@ def fit_sample_parameters_plot(
             plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
         plt.show()
         plt.close()
+
+
+if __name__ == "__main__":
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+    )
+
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    )
+
+    OBJECTS = (
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
+    )
+
+    plot_eex_salt_candidate_diagnostic(
+        object_df_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+    )
