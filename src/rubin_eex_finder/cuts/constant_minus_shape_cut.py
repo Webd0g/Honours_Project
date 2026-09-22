@@ -145,7 +145,9 @@ def constant_fit(flux: np.ndarray, flux_err: np.ndarray) -> tuple:
 
 
 def constant_batch_fits(
-    object_path: Path, light_curve_data_path: Path, band: str
+    object_path: Path,
+    light_curve_data_path: Path,
+    band: str,
 ) -> pl.DataFrame:
 
     objects = pl.read_csv(
@@ -154,74 +156,49 @@ def constant_batch_fits(
         columns=["r:diaObjectId"],
     )["r:diaObjectId"].to_list()
 
-    light_curve_data = pl.read_parquet(
-        light_curve_data_path,
-        columns=[
-            "r:diaObjectId",
-            "r:band",
-            "r:psfFlux",
-            "r:psfFluxErr",
-            "r:midpointMjdTai",
-            "r:diaSourceId",
-        ],
-    ).with_columns(pl.col("r:diaObjectId").cast(pl.String))
-
-    light_curve_data = light_curve_data.filter(
-        pl.col("r:diaObjectId").is_in(objects)
-        & (pl.col("r:band") == band)
-        & (pl.col("r:psfFlux") > 0)
-        & pl.col("r:psfFlux").is_finite()
-        & pl.col("r:psfFluxErr").is_finite()
-        & (pl.col("r:psfFluxErr") > 0)
+    return (
+        pl.read_parquet(
+            light_curve_data_path,
+            columns=[
+                "r:diaObjectId",
+                "r:band",
+                "r:psfFlux",
+                "r:psfFluxErr",
+                "r:midpointMjdTai",
+            ],
+        )
+        .with_columns(pl.col("r:diaObjectId").cast(pl.String))
+        .filter(
+            pl.col("r:diaObjectId").is_in(objects)
+            & (pl.col("r:band") == band)
+            & (pl.col("r:psfFlux") > 0)
+            & pl.col("r:psfFlux").is_finite()
+            & pl.col("r:psfFluxErr").is_finite()
+            & (pl.col("r:psfFluxErr") > 0)
+        )
+        .unique(subset=["r:diaObjectId", "r:midpointMjdTai"], keep="first")
+        .with_columns(weight=1.0 / (pl.col("r:psfFluxErr") ** 2))
+        .group_by("r:diaObjectId")
+        .agg(
+            [
+                pl.len().alias("n_obs"),
+                (
+                    (pl.col("weight") * pl.col("r:psfFlux")).sum()
+                    / pl.col("weight").sum()
+                ).alias("constant"),
+                pl.col("r:psfFlux"),
+                pl.col("r:psfFluxErr"),
+            ]
+        )
+        .filter(pl.col("n_obs") >= 2)
+        .with_columns(
+            reduced_chi2=(
+                ((pl.col("r:psfFlux") - pl.col("constant")) / pl.col("r:psfFluxErr")).list.eval(pl.element() ** 2)
+            ).list.sum()
+            / (pl.col("n_obs") - 1)
+        )
+        .select(["r:diaObjectId", "constant", "reduced_chi2"])
     )
-
-    results = {"r:diaObjectId": [], "constant": [], "reduced_chi2": []}
-
-    groups = {
-        key[0]: group_df
-        for key, group_df in light_curve_data.group_by(
-            "r:diaObjectId", maintain_order=True
-        )
-    }
-
-    for object_id in objects:
-        group_df = groups.get(object_id)
-
-        if group_df is None:
-            continue
-
-        band_df = group_df.sort("r:midpointMjdTai").unique(
-            subset=["r:midpointMjdTai"], keep="first", maintain_order=True
-        )
-
-        if len(band_df) < 2:
-            continue
-
-        flux = band_df["r:psfFlux"].to_numpy().astype(np.float64)
-
-        flux_err = band_df["r:psfFluxErr"].to_numpy().astype(np.float64)
-
-        # Remove invalid uncertainties
-        valid = np.isfinite(flux) & np.isfinite(flux_err) & (flux_err > 0)
-
-        flux = flux[valid]
-        flux_err = flux_err[valid]
-
-        if len(flux) < 2:
-            continue
-
-        constant, reduced_chi2 = constant_fit(
-            flux,
-            flux_err,
-        )
-
-        results["r:diaObjectId"].append(object_id)
-        results["constant"].append(constant)
-        results["reduced_chi2"].append(reduced_chi2)
-
-    result_df = pl.DataFrame(results)
-
-    return result_df
 
 
 def compute_delta_chi(
@@ -424,31 +401,35 @@ if __name__ == "__main__":
     #     output_path=HUNDRED_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH,
     # )
 
-    spectro_delta_chi_against_chi_SN_plot(
-        path_to_ii_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
-        path_to_ia_delta_chi_results=SN_IA_CHI2_CUT_VALUES_PATH,
-        path_to_photometric_delta_chi_results=(
-            Path.home()
-            / "Documents"
-            / "University"
-            / "Honours"
-            / "Honours_Project"
-            / "data"
-            / "constant_minus_shape_results"
-            / "constant_minus_shape_values.csv"
-        ),
-        output_path=Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "results_plots",
-        band="i",
-    )
+    # spectro_delta_chi_against_chi_SN_plot(
+    #     path_to_ii_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
+    #     path_to_ia_delta_chi_results=SN_IA_CHI2_CUT_VALUES_PATH,
+    #     path_to_photometric_delta_chi_results=(
+    #         Path.home()
+    #         / "Documents"
+    #         / "University"
+    #         / "Honours"
+    #         / "Honours_Project"
+    #         / "data"
+    #         / "constant_minus_shape_results"
+    #         / "constant_minus_shape_values.csv"
+    #     ),
+    #     output_path=Path.home()
+    #     / "Documents"
+    #     / "University"
+    #     / "Honours"
+    #     / "Honours_Project"
+    #     / "images"
+    #     / "results_plots",
+    #     band="i",
+    # )
 
     # save_pass_fail_objects(
     #     path_to_delta_chi_results=SN_II_CHI2_CUT_VALUES_PATH,
     #     output_path_pass=SN_II_CHI2_CUT_PASS_PATH,
     #     output_path_fail=SN_II_CHI2_CUT_FAIL_PATH,
     # )
+
+    print(constant_batch_fits(object_path=SN_IA_TIMING_CUTS_RESULTS, 
+                        light_curve_data_path=LIGHT_CURVE_DATA,
+                        band="i"))
