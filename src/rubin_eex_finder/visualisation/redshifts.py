@@ -1,10 +1,7 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import polars as pl
-
-FINK_OBJECTS_URL = "https://api.lsst.fink-portal.org/api/v1/sources"
 
 
 def host_photo_z_distro(
@@ -128,52 +125,3 @@ def normalised_z_residuals_plot(
     plt.savefig(plot_output_path / "residuals_salt3_fits_vs_hostz.png")
     plt.show()
 
-
-if __name__ == "__main__":
-    PATH_TO_OBJECTS = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "without_photo_z_tests"
-        / "with_photo_z_without_z_test.csv"
-    )
-
-    PATH_TO_OBJECTS_WITH_REDSHIFT = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-        / "objects_with_host_z.csv"
-    )
-
-    OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "data"
-        / "salt_fitting"
-    )
-
-    HOST_PHOTOZ_VS_SALT3Z_PLOT_OUTPUT_PATH = (
-        Path.home()
-        / "Documents"
-        / "University"
-        / "Honours"
-        / "Honours_Project"
-        / "images"
-        / "salt_plots"
-        / "with_photo_z_plots"
-    )
-
-    # # host_photo_z_distro(PATH_TO_OBJECTS_WITH_REDSHIFT)
-    # host_photoz_vs_salt3_z(PATH_TO_OBJECTS, HOST_PHOTOZ_VS_SALT3Z_PLOT_OUTPUT_PATH)
-    # normalised_z_residuals_plot(PATH_TO_OBJECTS, HOST_PHOTOZ_VS_SALT3Z_PLOT_OUTPUT_PATH)

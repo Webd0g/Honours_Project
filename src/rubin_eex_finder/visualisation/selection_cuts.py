@@ -622,6 +622,7 @@ def plot_salt_phase_diagnostic(
         fig.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
         plt.close(fig)
 
+
 def strip_plot(
     data_path: Path,
     output_path: Path | None = None,

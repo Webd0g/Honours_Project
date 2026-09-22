@@ -207,7 +207,15 @@ def plot_eex_salt_candidate_diagnostic(
     )
 
     light_curve_data = light_curve_data.join(
-        object_df.select("r:diaObjectId", "z_used", "t0", "x0", "x1", "c", "t_fd"),
+        object_df.select(
+            "r:diaObjectId",
+            "z_used",
+            "t0",
+            "x0",
+            "x1",
+            "c",
+            "t_fd",
+        ),
         on="r:diaObjectId",
         how="inner",
     )

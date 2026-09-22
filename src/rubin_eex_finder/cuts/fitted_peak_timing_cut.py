@@ -13,15 +13,15 @@ def fitted_peak_times(
     i_band_bazin_fits_path: Path,
     r_band_bazin_fits_path: Path,
 ) -> pl.DataFrame:
-    """Finds the peak times from the bazin fit parameters and
-    returns them as a column in a df.
+    """Finds the time of the peak points from the Bazin fit results.
 
     Args:
-        object_path (Path): Path to the CSV of objects.
-        bazin_fits_path (Path): Path to the CSV of the Bazin fit results.
+        objects_path (Path): Path to the CSV containing the list of objects.
+        i_band_bazin_fits_path (Path): Bazin fit results for the fits to the object's i band data.
+        r_band_bazin_fits_path (Path): Bazin fit results for the fits to the object's r band data.
 
     Returns:
-        pl.DataFrame: Returns a polars dataframe with the new column of the peak time derived from the Bazin fits.
+        pl.DataFrame: Returns the dataframe that consists of the new columns for the fitted peak times.
     """
 
     object_ids_df = pl.read_csv(
@@ -99,13 +99,19 @@ def peak_timing_cut(
     pass_output_path: Path | None = None,
     fail_output_path: Path | None = None,
 ) -> pl.DataFrame:
-    """The threshold for how great the difference between the peak of the i band bazin fit and the r band bazin fit are to pass the cut.
+    """Makes a cut based on the difference between the fitted peak in the i and r bands from the Bazin fits.
 
     Args:
-        objects_path (Path): Path to the CSV of objects
-        i_band_bazin_fits_path (Path): Path to the i band Bazin fits CSV
-        r_band_bazin_fits_path (Path): Path to the r band Bazin fits CSV
-        peak_time_difference_threshold (int): Number of days the fitted peaks can be apart.
+        objects_path (Path): Path to the CSV file that stores the list of objects to be used in the cut.
+        i_band_bazin_fits_path (Path): Bazin fit results for the fits to the object's i band data.
+        r_band_bazin_fits_path (Path): Bazin fit results for the fits to the object's r band data.
+        peak_time_difference_threshold (float): Set the threshold for the difference between the peak times in the two bands.
+        peak_time_difference_output_path (Path | None, optional): The output path for the CSV that is outputted of the values for the cut before the cut is made. Defaults to None.
+        pass_output_path (Path | None, optional): The path to where the passing objects get outputted to after the cut is made. Defaults to None.
+        fail_output_path (Path | None, optional): THe path to where the failing objects get outputted to as a CSV file after the cuts are made. Defaults to None.
+
+    Returns:
+        pl.DataFrame: Returns that is the dataframe that stores all of the objects after the cut has been made.
     """
 
     fitted_peak_times_df = fitted_peak_times(
