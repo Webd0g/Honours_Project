@@ -237,6 +237,12 @@ def plot_eex_salt_candidate_diagnostic(
             & (pl.col("phase_rest") <= phase_end)
         )
 
+        group_df = group_df.with_columns(
+            salt_fit_window=(
+                (pl.col("phase_rest") >= -10) & (pl.col("phase_rest") <= 40)
+            )
+        )
+
         fig, (ax_flux, ax_pull) = plt.subplots(
             nrows=2,
             ncols=1,
@@ -266,6 +272,7 @@ def plot_eex_salt_candidate_diagnostic(
             fluxerr = band_df["r:psfFluxErr"].to_numpy()
             phase = band_df["phase_rest"].to_numpy()  # use rest-frame axis
             in_window = band_df["in_excess_window"].to_numpy()
+            in_salt_fit_window = band_df["salt_fit_window"].to_numpy()
 
             model_flux = np.array(
                 [model.bandflux(sncosmo_band, t, zp=31.4, zpsys="ab") for t in times]
@@ -292,6 +299,7 @@ def plot_eex_salt_candidate_diagnostic(
 
             # Plot points outside window: faded
             outside = ~in_window
+            flux_outside = in_salt_fit_window
             if np.any(outside):
                 ax_flux.errorbar(
                     phase[outside],
@@ -322,10 +330,9 @@ def plot_eex_salt_candidate_diagnostic(
                     color=colour,
                     markeredgecolor="white",
                     markeredgewidth=0.5,
-                    alpha=1.0,
+                    alpha=0.25,
                     markersize=5.5,
                     capsize=0,
-                    label=f"lsst{band}",
                     zorder=4,
                 )
 
@@ -340,6 +347,21 @@ def plot_eex_salt_candidate_diagnostic(
                     zorder=4,
                 )
 
+            if np.any(flux_outside):
+                ax_flux.errorbar(
+                    phase[flux_outside],
+                    flux[flux_outside],
+                    yerr=fluxerr[flux_outside],
+                    fmt="o",
+                    color=colour,
+                    markeredgecolor="white",
+                    markeredgewidth=0.5,
+                    alpha=1,
+                    capsize=0,
+                    label = f"lsst{band}",
+                    zorder=3,
+                )
+
         # Shaded pull bands
         ax_pull.axhline(0, color="black", lw=1, zorder=1)
         ax_pull.axhspan(-3, 3, color="gray", alpha=0.15, zorder=0)
@@ -348,10 +370,27 @@ def plot_eex_salt_candidate_diagnostic(
         ax_pull.set_ylabel("Pull", fontsize=12)
 
         for ax in (ax_flux, ax_pull):
-            ax.axvline(phase_start, linestyle=":", color="#E94E77", lw=1.5, zorder=1)
-            ax.axvline(phase_end, linestyle=":", color="#E94E77", lw=1.5, zorder=1)
+            ax.axvline(
+                phase_start,
+                linestyle=":",
+                color="#E94E77",
+                lw=1.5,
+                zorder=1,
+                label=rf"$t_{{fd}} ={phase_start:.2f}$ d",
+            )
+            ax.axvline(
+                phase_end,
+                linestyle=":",
+                color="#E94E77",
+                lw=1.5,
+                zorder=1,
+                label=rf"$t_{{fd}} + 4 ={phase_start + 4:.2f}$ d",
+            )
 
-        ax_flux.legend(loc="upper left", frameon="false", fontsize=11)
+        ax_flux.legend(
+            loc="best",
+            frameon=False,
+        )
 
         ax_pull.set_xlabel("Rest-frame days since $B$-band peak", fontsize=11)
 
