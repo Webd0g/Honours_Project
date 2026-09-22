@@ -11,130 +11,22 @@ pre-peak rise was in a band other than g or r (e.g. i-band for higher redshift S
 
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import polars as pl
 
 from rubin_eex_finder.utils.light_curve_utils import add_night_and_SNR_columns
-from rubin_eex_finder.visualisation.light_curve_plotter import collect_light_curve_data
 
-# Directories for the objects that passed the first filtering done through the tags, second directory is for the output of the rate of rise cut.
-TEST_DIR = (
-    Path.home()
-    / "Documents"
-    / "University"
-    / "Honours"
-    / "Honours_Project"
-    / "data"
-    / "test_data"
-)
-PLOTS_DIR = (
-    Path.home()
-    / "Documents"
-    / "University"
-    / "Honours"
-    / "Honours_Project"
-    / "images"
-    / "test_data_images"
-)
-TEST_PASSED_DIR = TEST_DIR / "test_passed.csv"
-TEST_FAILED_DIR = TEST_DIR / "test_failed.csv"
-FAILED_DIR = (
-    Path.home()
-    / "Documents"
-    / "University"
-    / "Honours"
-    / "Honours_Project"
-    / "data"
-    / "slope_fitting_results"
-    / "objects_failing_slope_fit.csv"
-)
-PASSED_DIR = (
-    Path.home()
-    / "Documents"
-    / "University"
-    / "Honours"
-    / "Honours_Project"
-    / "data"
-    / "slope_fitting_results"
-    / "objects_passing_slope_fit.csv"
-)
-# Reading the csv for the objects that passed the Fink tag filtering and creating the CSVs where data will be stored.
-
-# Specifying how many objects go into each query to the API.
-CHUNK_SIZE = 500
-
-# Minimum number of pre-peak points needed in a band before a slope is even attempted.
-# np.polyfit needs at least 2 points to fit a line; kept low deliberately while we test
-# the loosened nonzero-slope criterion, per today's discussion with Anais.
 MIN_PRE_PEAK_POINTS = 3
-
-# Minimum time baseline (in days) spanned by the pre-peak points used in a fit.
-# Points clustered within a very short window can produce wildly unstable slopes,
-# since the denominator of the fit (variance in time) collapses toward zero even
-# with many points - this was seen directly in some objects showing slopes of 10-100+
-# despite having 10-20+ pre-peak detections, all crammed into a single night or two.
 MIN_PRE_PEAK_TIME_SPAN_DAYS = 5
-
-# This is so we remove spurious and noisey data that skews the results of the fit process too much
 MIN_PEAK_SNR = 10
-
-
-def collect_light_curve_info_with_fallback(
-    candidates: list[str],
-) -> pd.DataFrame | None:
-    """This function collects the lightcurve info of an object
-    and factors in a recursive self repair incase the script timesout
-    while running on large requests."""
-
-    data = collect_light_curve_data(",".join(candidates))
-    if data is not None:
-        return data
-
-    if len(candidates) <= 1:
-        print(f"Could not fetch data for object {candidates}, skipping.")
-        return None
-
-    mid = len(candidates) // 2
-    left = collect_light_curve_info_with_fallback(candidates[:mid])
-    right = collect_light_curve_info_with_fallback(candidates[mid:])
-
-    candidates_parts = [df for df in (left, right) if df is not None]
-    if not candidates_parts:
-        return None
-    return pd.concat(candidates_parts)
-
-
-def chunked_light_curve_data(candidates: list, chunk_size: int = 500) -> pd.DataFrame:
-    """
-    This function scrapes the Fink API for the light curve info necessary
-    to make cuts based on object qualities and produce plots of the light curves.
-    """
-    candidate_results = []
-
-    for diaObjectId in range(0, len(candidates), chunk_size):
-        chunked_ids = candidates[diaObjectId : diaObjectId + chunk_size]
-        candidates_light_curve_data = collect_light_curve_info_with_fallback(
-            chunked_ids
-        )
-        if candidates_light_curve_data is not None:
-            candidate_results.append(candidates_light_curve_data)
-
-    if not candidate_results:
-        raise RuntimeError(
-            f"No light curve data returned for candidate batch of size {len(candidates)}"
-        )
-
-    return pd.concat(candidate_results, ignore_index=True)
 
 
 def slope_calculation(
     group_df: pl.DataFrame,
     band: str,
     min_points: int = MIN_PRE_PEAK_POINTS,
-    min_time_span: int = MIN_PRE_PEAK_TIME_SPAN_DAYS,
-    min_peak_snr: int = MIN_PEAK_SNR,
+    min_time_span: float = MIN_PRE_PEAK_TIME_SPAN_DAYS,
+    min_peak_snr: float = MIN_PEAK_SNR,
 ) -> tuple[float, int] | None:
     """This function finds the slope of the band of the lightcurve prepeak by fitting a
 
@@ -146,13 +38,10 @@ def slope_calculation(
     if band_df.is_empty():
         return None
 
-    peak_row = band_df.filter(pl.col("r:psfFlux") == pl.col("r:psfFlux").max()).row(
-        0, named=True
-    )
-
-    peak_flux = peak_row["r:psfFlux"]
-    peak_flux_err = peak_row["r:psfFluxErr"]
-    peak_mjd = peak_row["r:midpointMjdTai"]
+    peak_row = band_df.sort(by="r:psfFlux", descending=True)[0]
+    peak_flux = peak_row["r:psfFlux"][0]
+    peak_flux_err = peak_row["r:psfFluxErr"][0]
+    peak_mjd = peak_row["r:midpointMjdTai"][0]
 
     peak_snr = peak_flux / peak_flux_err
     if peak_snr < min_peak_snr:
@@ -171,8 +60,7 @@ def slope_calculation(
     if len(pre_peak_best_points) < min_points:
         return None
 
-    min_mjd = pre_peak_best_points["r:midpointMjdTai"].min()
-    time_span = peak_mjd - min_mjd
+    time_span = peak_mjd - pre_peak_best_points["r:midpointMjdTai"].min()
     if time_span < min_time_span:
         return None
 
@@ -189,7 +77,8 @@ def slope_calculation(
 
 
 def compute_all_band_slopes(
-    group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS
+    group_df: pl.DataFrame,
+    min_points: int = MIN_PRE_PEAK_POINTS,
 ) -> dict[str, tuple[float, int]]:
     """
     Computes the pre-peak slope for every band present in this object's light curve,
@@ -197,11 +86,11 @@ def compute_all_band_slopes(
     where a slope could be calculated; bands with insufficient pre-peak data are
     omitted rather than included as None, so downstream code doesn't need to filter.
     """
-    bands_present = group_df["r:band"].unique()
+    bands_present = group_df["r:band"].unique().to_list()
     slopes = {}
 
     for band in bands_present:
-        result = slope_calculation(group_df, band, min_points)
+        result = slope_calculation(group_df, band, min_points=min_points)
         if result is not None:
             slopes[band] = result
 
@@ -209,7 +98,8 @@ def compute_all_band_slopes(
 
 
 def check_rate_of_rise(
-    group_df: pd.DataFrame, min_points: int = MIN_PRE_PEAK_POINTS
+    group_df: pl.DataFrame,
+    min_points: int = MIN_PRE_PEAK_POINTS,
 ) -> bool:
     """
     Computes the pre-peak slope across every available band for this object, and
@@ -249,6 +139,7 @@ def applying_the_rate_of_rise(
         schema_overrides={"r:diaObjectId": pl.String},
         columns=["r:diaObjectId"],
     )["r:diaObjectId"].to_list()
+
     light_curve_data = pl.read_parquet(light_curve_data_path)
     light_curve_data_filtered = light_curve_data.filter(
         pl.col("r:diaObjectId").cast(pl.String).is_in(objects)
@@ -260,8 +151,19 @@ def applying_the_rate_of_rise(
         else:
             failed.append(object_id)
 
-    pl.DataFrame(passed, schema=["r:diaObjectId"]).write_csv(output_path_passed)
-    pl.DataFrame(failed, schema=["r:diaObjectId"]).write_csv(output_path_failed)
+    passed_df = pl.DataFrame(passed, schema=["r:diaObjectId"]).write_csv(
+        output_path_passed
+    )
+    failed_df = pl.DataFrame(failed, schema=["r:diaObjectId"]).write_csv(
+        output_path_failed
+    )
+
+    if output_path_passed is not None:
+        output_path_passed.parent.mkdir(parents=True, exist_ok=True)
+        passed_df.write_csv(output_path_passed)
+    if output_path_failed is not None:
+        output_path_failed.parent.mkdir(parents=True, exist=True)
+        failed_df.write_csv(output_path_failed)
 
     return passed, failed
 
@@ -279,22 +181,14 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    # applying_the_rate_of_rise(
-    #     object_csv_path=HUNDRED_TEST_OBJECT_PATH,
-    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-    #     output_path_passed=HUNDRED_TEST_PASS_OUTPUT_PATH,
-    #     output_path_failed=HUNDRED_TEST_FAIL_OUTPUT_PATH,
-    # )
+    TEST_OBJECTS = DATA_DIR / "object_id_collection_results" / "all_objects.csv"
 
-    # batch_plotter(
-    #     object_path=II_FAIL_OUTPUT_PATH,
-    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-    #     output_path=II_FAIL_PLOT_OUTPUT,
-    # )
-
-    # bar_chart_pass_fractions(
-    #     passing_ia_objects=IA_PASS_OUTPUT_PATH,
-    #     failing_ia_objects=IA_FAIL_OUTPUT_PATH,
-    #     passing_ii_objects=II_PASS_OUTPUT_PATH,
-    #     failing_ii_objects=II_FAIL_OUTPUT_PATH,
-    # )
+    # Example Run
+    if TEST_OBJECTS.exists():
+        passed_ids, failed_ids = applying_the_rate_of_rise(
+            object_csv_path=TEST_OBJECTS,
+            light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+            # output_path_passed=PASS_OUT,
+            # output_path_failed=FAIL_OUT,
+        )
+        print(f"Passed: {len(passed_ids)} | Failed: {len(failed_ids)}")
