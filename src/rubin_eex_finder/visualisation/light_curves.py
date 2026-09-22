@@ -6,9 +6,18 @@ import numpy as np
 import polars as pl
 import requests as re
 from astropy.time import Time
-from utils.light_curve_utils import add_night_and_SNR_columns
 
-band_colours = {
+from rubin_eex_finder.utils.light_curve_utils import add_night_and_SNR_columns
+from rubin_eex_finder.visualisation.style import (
+    COLOR_CC,
+    COLOR_IA,
+    set_publication_style,
+)
+
+# Set global thesis plotting styles
+set_publication_style()
+
+BAND_COLOURS = {
     "u": "darkblue",
     "g": "blue",
     "r": "red",
@@ -19,43 +28,52 @@ band_colours = {
 
 
 def collect_light_curve_data(diaObjectId: str) -> pl.DataFrame | None:
-    r = re.post(
+    """Fetch light curve data for a given diaObjectId directly from the Fink API."""
+    response = re.post(
         "https://api.lsst.fink-portal.org/api/v1/sources",
         json={
             "diaObjectId": diaObjectId,
-            "columns": "r:diaObjectId, r:diaSourceId,r:midpointMjdTai,r:psfFlux,r:psfFluxErr, r:band",
+            "columns": (
+                "r:diaObjectId, r:diaSourceId, r:midpointMjdTai, r:psfFlux,"
+                " r:psfFluxErr, r:band"
+            ),
             "output-format": "json",
         },
     )
-    if r.status_code != 200:
+    if response.status_code != 200:
         print(
-            f"Failed to fetch the light curve info for {diaObjectId}: {r.status_code}"
+            f"Failed to fetch light curve info for {diaObjectId}: {response.status_code}"
         )
         return None
-    return pl.read_json(io.BytesIO(r.content))
+    return pl.read_json(io.BytesIO(response.content))
 
 
-def flux_to_mag():
-    """Returns Polars expressions for nanojansky flux to AB magnitude conversion with uncertainties.
-
-    Returns:
-        pl.DataFrame: returns a Polars dataframe with two new columns for AB magnitude and magnitude error.
-    """
-    mag = -2.5 * pl.col("r:psfFlux").log10() + 31.4
-    mag_err = (2.5 / np.log(10)) * (pl.col("r:psfFluxErr") / pl.col("r:psfFlux"))
+def flux_to_mag(
+    flux_col: str = "r:psfFlux", err_col: str = "r:psfFluxErr"
+) -> tuple[pl.Expr, pl.Expr]:
+    """Returns Polars expressions for nanojansky flux to AB magnitude conversion."""
+    mag = -2.5 * pl.col(flux_col).log10() + 31.4
+    mag_err = (2.5 / np.log(10)) * (pl.col(err_col) / pl.col(flux_col))
     return mag.alias("mag"), mag_err.alias("mag_err")
 
 
-def lightcurve_plotting(
-    light_curve_data: pl.DataFrame, diaObjectId: str, output_dir: str
-):
-    """The plotting of the objects lightcurve this function is what produces the plot
+def append_fitted_slopes(rows: list[dict], output_path: Path) -> None:
+    """Appends per-band fitted slope rows to a CSV file."""
+    if not rows:
+        return
 
-    Args:
-        light_curve_data (pl.DataFrame): The dataframe of all the object's light curve data.
-        diaObjectId (str): This is just the string that is the name of the Rubin object.
-        output_dir (str): The directory where the plots are saved to.
-    """
+    new_rows_df = pl.DataFrame(rows)
+    if not output_path.exists():
+        new_rows_df.write_csv(output_path)
+    else:
+        with open(output_path, "ab") as f:
+            new_rows_df.write_csv(f, include_header=False)
+
+
+def lightcurve_plotting(
+    light_curve_data: pl.DataFrame, diaObjectId: str, output_dir: Path
+) -> None:
+    """Plots a standard flux-space time-series light curve for a single object."""
     light_curve_data = light_curve_data.filter(pl.col("r:psfFlux") > 0).sort(
         "r:midpointMjdTai"
     )
@@ -68,7 +86,7 @@ def lightcurve_plotting(
     fig, ax = plt.subplots(figsize=(10, 6))
 
     for (band,), group in light_curve_data.group_by("r:band"):
-        colour = band_colours.get(band, "black")
+        colour = BAND_COLOURS.get(band, "black")
         ax.errorbar(
             group["date"].to_numpy(),
             group["r:psfFlux"].to_numpy(),
@@ -81,128 +99,30 @@ def lightcurve_plotting(
         )
 
     ax.set_xlabel("Observation Date")
-    ax.set_ylabel("Flux (nanojanskys)")
-    ax.set_title(f"Light curve - {diaObjectId}")
+    ax.set_ylabel("Flux (nJy)")
+    ax.set_title(f"Light Curve - {diaObjectId}")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.autofmt_xdate()
-    plt.tight_layout()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_dir / f"{diaObjectId}.png")
-    plt.close()
-
-
-def batch_plotter(object_path: Path, light_curve_data_path: Path, output_path: Path):
-    """_summary_
-
-    Args:
-        object_ids (_type_): _description_
-        output_path (Path): _description_
-        chunk_size (int, optional): _description_. Defaults to 500.
-    """
-    object_ids = pl.read_csv(
-        object_path,
-        schema_overrides={"r:diaObjectId": pl.String},
-        columns=["r:diaObjectId"],
-    )["r:diaObjectId"].to_list()
-
-    light_curve_data = pl.read_parquet(light_curve_data_path).with_columns(
-        pl.col("r:diaObjectId").cast(pl.String)
-    )
-    light_curve_data_filtered = light_curve_data.filter(
-        pl.col("r:diaObjectId").is_in(object_ids)
-    )
-
-    groups = {
-        key[0]: group_df
-        for key, group_df in light_curve_data_filtered.group_by(
-            "r:diaObjectId", maintain_order=True
-        )
-    }
-
-    for object_id in object_ids:
-        group_df = groups.get(object_id).filter(pl.col("r:psfFlux") > 0)
-
-        if group_df is None:
-            print(f"Object {object_id} does not have any light curve data.")
-            continue
-
-        lightcurve_plotting(group_df, object_id, output_path)
-
-
-band_colours = {
-    "u": "darkblue",
-    "g": "blue",
-    "r": "red",
-    "i": "darkred",
-    "z": "orange",
-    "y": "black",
-}
-
-
-def append_fitted_slopes(
-    rows: list[dict],
-    output_path: Path,
-) -> None:
-    """Appends per-band fitted slope rows to a CSV file, writing a header only if the
-
-    file doesn't already exist. Each row is expected to contain diaObjectId, band,
-    slope, and n_pre_peak_points.
-    """
-    if not rows:
-        return
-
-    new_rows_df = pl.DataFrame(rows)
-    if not output_path.exists():
-        new_rows_df.write_csv(output_path)
-    else:
-        with open(output_path, "ab") as f:
-            new_rows_df.write_csv(f, include_header=False)
-
-
-def collect_light_curve_data(diaObjectId: str) -> pl.DataFrame | None:
-    r = re.post(
-        "https://api.lsst.fink-portal.org/api/v1/sources",
-        json={
-            "diaObjectId": diaObjectId,
-            "columns": (
-                "r:diaObjectId, r:diaSourceId, r:midpointMjdTai, r:psfFlux,"
-                " r:psfFluxErr, r:band"
-            ),
-            "output-format": "json",
-        },
-    )
-    if r.status_code != 200:
-        print(
-            f"Failed to fetch the light curve info for {diaObjectId}: {r.status_code}"
-        )
-        return None
-    return pl.read_json(io.BytesIO(r.content))
+    plt.close(fig)
 
 
 def slope_fit_plotting(
     df: pl.DataFrame,
     diaObjectId: str,
     source_file: str,
-    output_dir: str,
+    output_dir: Path,
     min_pre_peak_points: int = 3,
-    min_pre_peak_time_span: float = 5,
+    min_pre_peak_time_span: float = 5.0,
     slopes_output_path: Path | None = None,
-    min_peak_SNR: int = 10,
-):
-    """Plots the light curve for one object directly in flux space (no magnitude
-
-    conversion), with the pre-peak linear fit for each band overlaid as a dashed
-    line. Also prints the fitted slope and number of pre-peak points used, per band,
-    and appends the same values to slopes_output_path so they can be inspected after
-    a batch run rather than just read off the console.
-
-    Working in flux rather than magnitude avoids fitting a straight line to a
-    logarithmic quantity, which was flagged as a potential source of distortion in
-    the rate-of-rise filter's output.
-    """
+    min_peak_SNR: float = 10.0,
+) -> None:
+    """Plots flux light curve with an overlaid pre-peak linear rate-of-rise fit."""
     df = df.filter(pl.col("r:psfFlux") > 0).sort("r:midpointMjdTai")
 
-    # Convert MJD to datetime
     dates = Time(df["r:midpointMjdTai"].to_numpy(), format="mjd").to_datetime()
     df = df.with_columns(pl.Series("date", dates))
 
@@ -210,12 +130,12 @@ def slope_fit_plotting(
     fitted_slope_rows = []
 
     for (band,), group in df.group_by("r:band"):
-        colour = band_colours.get(band, "black")
+        colour = BAND_COLOURS.get(band, "black")
 
         ax.errorbar(
-            group["date"],
-            group["r:psfFlux"],
-            yerr=group["r:psfFluxErr"],
+            group["date"].to_numpy(),
+            group["r:psfFlux"].to_numpy(),
+            yerr=group["r:psfFluxErr"].to_numpy(),
             fmt="o",
             color=colour,
             label=f"{band}-band",
@@ -223,17 +143,16 @@ def slope_fit_plotting(
             markersize=5,
         )
 
-        # Extract peak flux details using max row sorting
-        peak_row = group.sort("r:psfFlux", descending=True).row(0, named=True)
-        peak_flux = peak_row["r:psfFlux"]
-        peak_flux_err = peak_row["r:psfFluxErr"]
-        peak_mjd = peak_row["r:midpointMjdTai"]
+        # Extract peak flux details
+        peak_row = group.sort("r:psfFlux", descending=True)[0]
+        peak_flux = peak_row["r:psfFlux"][0]
+        peak_flux_err = peak_row["r:psfFluxErr"][0]
+        peak_mjd = peak_row["r:midpointMjdTai"][0]
 
         peak_SNR = peak_flux / peak_flux_err
         if peak_SNR < min_peak_SNR:
             print(
-                f"Object {diaObjectId}'s peak point's SNR is {peak_SNR:.2f},"
-                f" which doesn't pass the cut-off of {min_peak_SNR}"
+                f"[{diaObjectId}] {band}-band peak SNR ({peak_SNR:.2f}) < cutoff ({min_peak_SNR})"
             )
             continue
 
@@ -249,9 +168,7 @@ def slope_fit_plotting(
 
         if len(pre_peak_best_points) < min_pre_peak_points:
             print(
-                f"  [{diaObjectId}] {band}-band: only"
-                f" {len(pre_peak_best_points)} pre-peak point(s), skipping"
-                " fit."
+                f"  [{diaObjectId}] {band}-band: insufficient pre-peak points ({len(pre_peak_best_points)})"
             )
             continue
 
@@ -260,8 +177,7 @@ def slope_fit_plotting(
 
         if time_span < min_pre_peak_time_span:
             print(
-                f"  [{diaObjectId}] {band}-band: pre-peak points only span"
-                f" {time_span:.2f} days, skipping fit."
+                f"  [{diaObjectId}] {band}-band: pre-peak time span ({time_span:.2f}d) too short"
             )
             continue
 
@@ -275,12 +191,6 @@ def slope_fit_plotting(
 
         mjd_vals = mjd_series.to_numpy()
         slope, intercept = np.polyfit(mjd_vals, normalised_flux, 1, w=weights)
-
-        print(
-            f"  [{diaObjectId}] {band}-band: slope={slope:.5f},"
-            f" n_pre_peak={len(pre_peak_best_points)},"
-            f" pre-peak_time_span={time_span:.2f}"
-        )
 
         fitted_slope_rows.append(
             {
@@ -305,37 +215,53 @@ def slope_fit_plotting(
         )
 
     ax.set_xlabel("Observation Date")
-    ax.set_ylabel("Flux (nanojansky)")
-    ax.set_title(f"Light curve - {diaObjectId}\n({source_file})")
+    ax.set_ylabel("Flux (nJy)")
+    ax.set_title(f"Light Curve - {diaObjectId}\n({source_file})")
     ax.legend()
     ax.grid(True, alpha=0.3)
     fig.autofmt_xdate()
-    plt.tight_layout()
-    plt.savefig(f"{output_dir}.png")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_dir / f"{diaObjectId}.png")
     plt.close(fig)
 
-    append_fitted_slopes(fitted_slope_rows, slopes_output_path)
+    if slopes_output_path is not None:
+        append_fitted_slopes(fitted_slope_rows, slopes_output_path)
 
 
 def batch_plotter(
     object_path: Path,
     light_curve_data_path: Path,
     output_path: Path,
-):
-    """Batch Plotter takes a list of object IDs for which in this case are the results
-
-    from the slope fitting filter and plots the objects lightcurve in chunks.
-    """
-    objects = pl.read_csv(
+    plot_slope_fit: bool = False,
+    slopes_output_path: Path | None = None,
+) -> None:
+    """Executes batch light curve plotting for a collection of diaObjectIds."""
+    object_ids = pl.read_csv(
         object_path,
-        columns=["r:diaObjectId"],
         schema_overrides={"r:diaObjectId": pl.String},
+        columns=["r:diaObjectId"],
     )["r:diaObjectId"].to_list()
 
-    light_curve_data = pl.read_parquet(light_curve_data_path)
-    light_curve_data_filtered = light_curve_data.filter(
-        pl.col("r:diaObjectId").cast(pl.String).is_in(objects)
+    light_curve_data = pl.read_parquet(light_curve_data_path).with_columns(
+        pl.col("r:diaObjectId").cast(pl.String)
+    )
+    filtered_data = light_curve_data.filter(
+        pl.col("r:diaObjectId").is_in(object_ids)
     )
 
-    for (object_id,), group_df in light_curve_data_filtered.group_by("r:diaObjectId"):
-        slope_fit_plotting(group_df, object_id, object_id, output_path / f"{object_id}")
+    for (object_id,), group_df in filtered_data.group_by("r:diaObjectId"):
+        if plot_slope_fit:
+            slope_fit_plotting(
+                df=group_df,
+                diaObjectId=object_id,
+                source_file=object_path.name,
+                output_dir=output_path,
+                slopes_output_path=slopes_output_path,
+            )
+        else:
+            lightcurve_plotting(
+                light_curve_data=group_df,
+                diaObjectId=object_id,
+                output_dir=output_path,
+            )
