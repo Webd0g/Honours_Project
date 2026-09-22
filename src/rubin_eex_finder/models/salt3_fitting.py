@@ -7,7 +7,7 @@ import requests as re
 import sncosmo
 from astropy.table import Table
 
-from salt_selection_cuts import get_salt3_fitted_bands
+from rubin_eex_finder.cuts.salt_selection_cuts import get_salt3_fitted_bands
 
 FINK_OBJECTS_URL = "https://api.lsst.fink-portal.org/api/v1/sources"
 
