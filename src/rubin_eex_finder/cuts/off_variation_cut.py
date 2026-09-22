@@ -6,7 +6,7 @@ from pathlib import Path
 
 import polars as pl
 
-from rubin_eex_finder.visualisation.light_curve_plotter import lightcurve_plotting
+from rubin_eex_finder.visualisation.light_curves import lightcurve_plotting
 
 # Path to the directory where all the Bazin fits CSV are
 BAZIN_FITS_DATA_DIR = (
