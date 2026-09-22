@@ -154,61 +154,6 @@ def peak_timing_cut(
     return fitted_peak_times_df
 
 
-def x_match(
-    test_csv_path: Path,
-    fitted_peak_times_df: pl.DataFrame,
-) -> None:
-    """X-match between known supernovae and contaminants to calculate pass fractions."""
-    sn_like_df = pl.read_csv(
-        test_csv_path,
-        schema_overrides={"r:diaObjectId": pl.String},
-        columns=["r:diaObjectId"],
-    ).head(50)
-
-    cont_like_df = pl.read_csv(
-        test_csv_path,
-        schema_overrides={"r:diaObjectId": pl.String},
-        columns=["r:diaObjectId"],
-    ).tail(50)
-
-    cont_timing_df = fitted_peak_times_df.join(
-        cont_like_df, on="r:diaObjectId", how="inner"
-    )
-    sn_timing_df = fitted_peak_times_df.join(
-        sn_like_df, on="r:diaObjectId", how="inner"
-    )
-
-    pl.Config.set_tbl_rows(-1)
-
-    # Evaluate contaminants
-    if cont_timing_df.height > 0:
-        cont_pass = cont_timing_df.filter(pl.col("passes_peak_timing"))
-        cont_fail = cont_timing_df.filter(~pl.col("passes_peak_timing"))
-        print(f"Known cont objects tested: {cont_timing_df.height}")
-        print(f"Passed: {cont_pass.height}/{cont_timing_df.height}")
-        print(f"Failed: {cont_fail.height}/{cont_timing_df.height}")
-        print(f"Cont retention: {cont_pass.height / cont_timing_df.height:.2%}")
-        print(
-            cont_timing_df.select("peak_time_difference").describe(
-                percentiles=[0.25, 0.5, 0.75, 0.9, 0.95]
-            )
-        )
-
-    # Evaluate SN-like
-    if sn_timing_df.height > 0:
-        sn_pass = sn_timing_df.filter(pl.col("passes_peak_timing"))
-        sn_fail = sn_timing_df.filter(~pl.col("passes_peak_timing"))
-        print(f"\nKnown SN-like objects tested: {sn_timing_df.height}")
-        print(f"Passed: {sn_pass.height}/{sn_timing_df.height}")
-        print(f"Failed: {sn_fail.height}/{sn_timing_df.height}")
-        print(f"SN-like retention: {sn_pass.height / sn_timing_df.height:.2%}")
-        print(
-            sn_timing_df.select("peak_time_difference").describe(
-                percentiles=[0.25, 0.5, 0.75, 0.9, 0.95]
-            )
-        )
-
-
 if __name__ == "__main__":
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
