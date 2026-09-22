@@ -115,8 +115,18 @@ def compute_delta_chi(
     bazin_fit_data_path: Path,
     output_path: Path,
 ) -> pl.DataFrame:
-    """Here we compute the difference between the constant fit and the Bazin
-    fit and append it as a column to the df."""
+    """Computes the difference between the reduced chi squared of the Bazin fit and the constant fit.
+
+    Args:
+        object_path (Path): Path to the objects that will be fit with the constant.
+        light_curve_data_path (Path): Path to the parquet file for the light curve data of the objects.
+        band (str): The band for the objects that will be fitted to and compared.
+        bazin_fit_data_path (Path): The path to where the Bazin fits results are for the objects.
+        output_path (Path): The output path for the CSV that will host the new delta chi column.
+
+    Returns:
+        pl.DataFrame: Returns a polars dataframe that has the new delta chi parameter for each object.
+    """
 
     # Fit with a constant for the objects
     constant_fit_result = constant_batch_fits(
@@ -150,7 +160,14 @@ def compute_delta_chi(
 def delta_chi_check(
     path_to_delta_chi_results: Path,
 ) -> pl.DataFrame:
-    """Here we separate the objects that are above the unity line from those that are below the unity line."""
+    """Checks if objects have passed or failed based on the delta chi squared compared to the chi squared of the constant fit.
+
+    Args:
+        path_to_delta_chi_results (Path): Path to the values saved by the compute delta chi function.
+
+    Returns:
+        pl.DataFrame: Returns the objects that passed or failed as a polars dataframe.
+    """
 
     delta_chi_df = pl.read_csv(path_to_delta_chi_results)
 
@@ -169,8 +186,13 @@ def save_pass_fail_objects(
     output_path_pass: Path,
     output_path_fail: Path,
 ) -> None:
-    """Here we write the results of which objects passed and which objects failed the to their respective CSV files."""
+    """Saves the passing objects and failing objects to their own CSV files.
 
+    Args:
+        path_to_delta_chi_results (Path): Path to where the delta chi compute results are stored as a CSV file.
+        output_path_pass (Path): Where the passing objects should be outputted to, as a CSV file.
+        output_path_fail (Path): Where the failing objects will be saved to as a CSV file.
+    """
     delta_chi_df = delta_chi_check(path_to_delta_chi_results)
 
     output_path_pass.parent.mkdir(parents=True, exist_ok=True)
