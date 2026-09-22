@@ -2,11 +2,12 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import polars as pl
+from rubin_eex_finder.visualisation.style import set_publication_style
+
+set_publication_style()
 
 
-def host_photo_z_distro(
-    object_path: Path, output_path: Path | None = None
-) -> pl.DataFrame:
+def redshift_distro(object_path: Path, output_path: Path | None = None) -> pl.DataFrame:
     """This function finds the distribution of the host photo redshifts of the sample from the Supernova Selection cuts i.e. up until the fitted peak timing cut.
 
     Args:
@@ -17,41 +18,49 @@ def host_photo_z_distro(
         pl.DataFrame: The polars dataframe that contains the inforamtion collected by this function added to the input CSV file.
     """
 
-    with_photoz = pl.read_csv(
-        object_path,
+    redshift_data = pl.read_csv(
+        source=object_path,
         schema_overrides={
             "r:diaObjectId": pl.String,
-            "host_photoz": pl.Float64,
-            "host_photoz_err": pl.Float64,
+            "z_used": pl.Float64,
+            "z_source": pl.String,
         },
     ).filter(
-        pl.col("host_photoz").is_not_null()
-        & pl.col("host_photoz").is_finite()
-        & (pl.col("host_photoz") > 0)
+        pl.col("z_used").is_not_null()
+        & pl.col("z_used").is_finite()
+        & (pl.col("z_used") > 0)
     )
 
-    pl.Config.set_tbl_cols(-1)
-    pl.Config.set_tbl_rows(-1)
+    spectro_redshifts = redshift_data.filter(
+        pl.col("z_source") == "spectroscopic"
+    ).select(pl.col("z_used"))
 
-    print(
-        with_photoz.select("host_photoz", "host_photoz_err").describe(
-            [0.05, 0.25, 0.50, 0.75, 0.9, 0.95, 0.99]
-        )
+    host_photo_redshifts = redshift_data.filter(
+        pl.col("z_source") == "host_photoz"
+    ).select(pl.col("z_used"))
+
+    plt.hist(
+        x=spectro_redshifts,
+        bins=25,
+        edgecolor="black",
+        alpha=1,
+        zorder=2,
     )
 
-    redshifts = with_photoz["host_photoz"].to_numpy()
-
-    plt.figure(figsize=(8, 5))
-    plt.hist(redshifts, bins=30)
-
-    plt.xlabel("Host photometric redshifts")
+    plt.hist(
+        x=host_photo_redshifts,
+        bins=25,
+        alpha=1,
+        histtype="step",
+        linewidth=2,
+        zorder=1,
+    )
+    plt.xlabel("Redshifts")
     plt.ylabel("Number of objects")
-    plt.title("Host Photometric Redshift Distribution")
-
     plt.tight_layout()
     plt.show()
 
-    return with_photoz
+    return redshift_data
 
 
 def host_photoz_vs_salt3_z(
@@ -125,3 +134,25 @@ def normalised_z_residuals_plot(
     plt.savefig(plot_output_path / "residuals_salt3_fits_vs_hostz.png")
     plt.show()
 
+
+if __name__ == "__main__":
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+    )
+
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    OBJECT_DIR = (
+        DATA_DIR
+        / "salt_fitting"
+        / "ia_search"
+        / "with_z_results"
+        / "colour_stretch_results"
+        / "pass.csv"
+    )
+
+    redshift_distro(
+        object_path=OBJECT_DIR,
+    )
