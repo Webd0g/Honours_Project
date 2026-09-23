@@ -186,7 +186,7 @@ def plot_eex_salt_candidate_diagnostic(
             "c": pl.Float64,
             "t_fd": pl.Float64,
         },
-    ).filter(pl.col("r:diaObjectId") == "170019716323082348")
+    )
 
     light_curve_data = (
         pl.read_parquet(
@@ -202,7 +202,7 @@ def plot_eex_salt_candidate_diagnostic(
         )
         .with_columns(pl.col("r:diaObjectId").cast(pl.String))
         .filter(
-            pl.col("r:diaObjectId").is_in(object_df["r:diaObjectId"])
+            pl.col("r:diaObjectId").is_in(object_df["r:diaObjectId"].to_list())
             & pl.col("r:psfFlux").is_finite()
             & pl.col("r:psfFluxErr").is_finite()
             & pl.col("r:midpointMjdTai").is_finite()
@@ -274,20 +274,30 @@ def plot_eex_salt_candidate_diagnostic(
             in_window = band_df["in_excess_window"].to_numpy()
             in_salt_fit_window = band_df["salt_fit_window"].to_numpy()
 
-            model_flux = np.array(
-                [model.bandflux(sncosmo_band, t, zp=31.4, zpsys="ab") for t in times]
-            )
+            try:
+                model_flux = np.array(
+                    [
+                        model.bandflux(sncosmo_band, t, zp=31.4, zpsys="ab")
+                        for t in times
+                    ]
+                )
 
-            pull = (flux - model_flux) / fluxerr
+                pull = (flux - model_flux) / fluxerr
 
-            sncosmo_band = BAND_MAP[band]
+                sncosmo_band = BAND_MAP[band]
 
-            # smooth model curve
-            phase_grid = np.linspace(-32, 5, 400)
-            t_grid = t0 + phase_grid * (1.0 + z_used)
-            model_grid = np.array(
-                [model.bandflux(sncosmo_band, t, zp=31.4, zpsys="ab") for t in t_grid]
-            )
+                # smooth model curve
+                phase_grid = np.linspace(-32, 5, 400)
+                t_grid = t0 + phase_grid * (1.0 + z_used)
+                model_grid = np.array(
+                    [
+                        model.bandflux(sncosmo_band, t, zp=31.4, zpsys="ab")
+                        for t in t_grid
+                    ]
+                )
+            except ValueError as e:
+                print(f"Skipping band {band} for object {object_id}: {e}")
+                continue
 
             ax_flux.plot(
                 phase_grid,
@@ -358,7 +368,7 @@ def plot_eex_salt_candidate_diagnostic(
                     markeredgewidth=0.5,
                     alpha=1,
                     capsize=0,
-                    label = f"lsst{band}",
+                    label=f"lsst{band}",
                     zorder=3,
                 )
 
@@ -400,7 +410,6 @@ def plot_eex_salt_candidate_diagnostic(
         if plot_output_path is not None:
             plot_output_path.mkdir(parents=True, exist_ok=True)
             fig.savefig(plot_output_path / f"{object_id}_eex_diagnostic.png", dpi=200)
-        plt.show()
         plt.close(fig)
 
 
@@ -714,7 +723,8 @@ if __name__ == "__main__":
         DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
     )
 
-    plot_eex_salt_candidate_diagnostic(
-        object_df_path=OBJECTS,
-        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+    OUTPUT_PATH = (
+        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results" / "values"
     )
+
+    fit_sample_parameters_plot()

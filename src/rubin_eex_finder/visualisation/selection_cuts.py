@@ -840,3 +840,32 @@ def spectro_strip_plot(
         plt.savefig(output_path)
     plt.show()
 
+
+if __name__ == "__main__":
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+    )
+
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    IA_OBJECTS = (
+        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "values.csv"
+    )
+
+    II_OBJECTS = (
+        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "values.csv"
+    )
+
+    LIGHT_CURVE_DATA = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    )
+
+    OUTPUT_PATH = IMAGE_DIR / "fitted_peak_timing_plots" / "spectro"
+
+    spectro_strip_plots(
+        sn_ii_spectro_fitted_peak_timing_results=II_OBJECTS,
+        sn_ia_spectro_fitted_peak_timing_results=IA_OBJECTS,
+        output_path=OUTPUT_PATH,
+    )

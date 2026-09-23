@@ -1,12 +1,18 @@
 from pathlib import Path
 
 import emcee
+import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
 from rubin_eex_finder.models.early_excess_salt_detection import (
     loading_light_curve_data_and_objects,
 )
+from rubin_eex_finder.visualisation.style import set_publication_style
+
+set_publication_style()
+
+# from rubin_eex_finder.visualisation.fits import fit_sample_parameters_plot
 
 
 def fifty_percent_flux_calculation(
@@ -818,6 +824,244 @@ def eex_detection(
     return fit_params_with_eex
 
 
+def fit_sample_parameters_plot(
+    pl_fit_params_df: pl.DataFrame,
+    rest_frame_no_eex: pl.DataFrame,
+    window_length: int,
+    full_rest_data_df: pl.DataFrame,
+    output_path: Path | None = None,
+) -> None:
+    """Plots the median sampled values from the sampling of parameters for the power law against the real data of the light curves of the objects.
+
+    Args:
+        pl_fit_params_df (pl.DataFrame): The results of the chain from the sampling of the power law, this should be the resulting dataframe output from the power law fitting function.
+        output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
+    """
+
+    for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
+        diaObjectId = object_df["r:diaObjectId"].item()
+
+        rest_band_data = {}
+
+        band_data = {}
+
+        for current_band in [
+            "g",
+            "r",
+            "i",
+        ]:
+            # Filter for the light curve data of this object in the desired band too.
+            rest_band_df = full_rest_data_df.filter(
+                (pl.col("r:band") == current_band)
+                & (pl.col("r:diaObjectId") == diaObjectId),
+            )
+
+            if rest_band_df.height > 0:
+                rest_band_data[current_band] = {
+                    "times": rest_band_df["rest_frame_time"].to_numpy(),
+                    "flux": rest_band_df["r:psfFlux"].to_numpy(),
+                    "flux_error": rest_band_df["r:psfFluxErr"].to_numpy(),
+                }
+
+            band_df = rest_frame_no_eex.filter(
+                (pl.col("r:band") == current_band)
+                & (pl.col("r:diaObjectId") == diaObjectId),
+            )
+
+            if band_df.height > 0:
+                band_data[current_band] = {
+                    # Making Numpy arrays of the columns for the iteration and fitting.
+                    "times": band_df["rest_frame_time"].to_numpy(),
+                    "flux": band_df["r:psfFlux"].to_numpy(),
+                    "flux_error": band_df["r:psfFluxErr"].to_numpy(),
+                }
+
+        fit_bands = list(band_data.keys())
+
+        # Grabbing the time of first detection for the object
+        model_parameters = {}
+
+        for band in fit_bands:
+            model_parameters[band] = {
+                "A_prime": object_df[f"A_prime_{band}"].item(),
+                "alpha": object_df[f"alpha_{band}"].item(),
+            }
+
+        t_fl_med = object_df["t_fl"].item()
+        t_fd_rest = object_df["t_fd_rest"].item()
+
+        model_grids = {}
+
+        for band in fit_bands:
+            times = band_data[band]["times"]
+
+            model_grids[band] = np.linspace(
+                np.min(times),
+                np.max(times),
+                300,
+            )
+
+        model_flux = {}
+
+        for band in fit_bands:
+            model_flux[band] = power_law_model(
+                times=model_grids[band],
+                t_fl=t_fl_med,
+                A_prime=model_parameters[band]["A_prime"],
+                alpha=model_parameters[band]["alpha"],
+            )
+
+        (
+            _fig,
+            (axes_fit, axes_resid),
+        ) = plt.subplots(
+            nrows=2,
+            ncols=1,
+            sharex=True,
+            height_ratios=[3, 1],
+            figsize=(8, 5),
+        )
+
+        for band in fit_bands:
+            times = rest_band_data[band]["times"]
+            flux = rest_band_data[band]["flux"]
+            flux_error = rest_band_data[band]["flux_error"]
+
+            in_ranges = (times >= t_fd_rest) & (times <= t_fd_rest + window_length)
+
+            plot_data = axes_fit.errorbar(
+                x=times[in_ranges],
+                y=flux[in_ranges],
+                yerr=flux_error[in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                mew=1,
+                alpha=0.3,
+            )
+
+            data_colour = plot_data.lines[0].get_color()
+
+            axes_fit.errorbar(
+                x=times[~in_ranges],
+                y=flux[~in_ranges],
+                yerr=flux_error[~in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                color=data_colour,
+                mew=1,
+                label=f"lsst{band}",
+            )
+
+            axes_fit.plot(
+                model_grids[band],
+                model_flux[band],
+                color=data_colour,
+            )
+
+            # Model evaluated at the actual observation times
+            model_at_data = power_law_model(
+                times=times,
+                t_fl=t_fl_med,
+                A_prime=model_parameters[band]["A_prime"],
+                alpha=model_parameters[band]["alpha"],
+            )
+
+            residuals = (flux - model_at_data) / (flux_error)
+
+            axes_resid.errorbar(
+                x=times[in_ranges],
+                y=residuals[in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                color=data_colour,
+                mew=1,
+            )
+
+            axes_resid.errorbar(
+                x=times[~in_ranges],
+                y=residuals[~in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                alpha=0.3,
+                color=data_colour,
+                mew=1,
+            )
+
+        axes_resid.axhline(
+            c="black",
+        )
+
+        axes_resid.axhspan(
+            -5,
+            5,
+            color="grey",
+            linestyle=":",
+            alpha=0.12,
+            label=r"$5 \sigma$ region",
+        )
+
+        axes_resid.axhspan(
+            -3,
+            3,
+            color="grey",
+            linestyle="--",
+            alpha=0.25,
+            label=r"$3 \sigma$ region",
+        )
+
+        axes_fit.axvline(
+            x=t_fd_rest,
+            linestyle="--",
+            label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_fit.axvline(
+            x=t_fd_rest + window_length,
+            linestyle=":",
+            label=rf"$t_{{fd}} + {window_length} ={t_fd_rest + window_length:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_resid.axvline(
+            x=t_fd_rest,
+            linestyle="--",
+            label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_resid.axvline(
+            x=t_fd_rest + window_length,
+            linestyle=":",
+            label=rf"$t_{{fd}} + {window_length} ={t_fd_rest + window_length:.2f}$ d",
+            color="#0072B2",
+        )
+
+        axes_fit.axvline(
+            t_fl_med,
+            linestyle="--",
+            label=rf"$t_{{\mathrm{{fl}}}}={t_fl_med:.2f}$ d",
+            color="#D55E00",
+        )
+
+        axes_fit.set_ylabel("Flux (nJy)")
+        axes_resid.set_xlabel(r"Rest-frame days since $B$-band peak")
+        axes_resid.set_ylabel("Pull")
+        axes_fit.legend(
+            loc="best",
+            frameon=False,
+        )
+        plt.tight_layout()
+        if output_path is not None:
+            plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
+        plt.show()
+        plt.close()
+
+
 if __name__ == "__main__":
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
@@ -941,3 +1185,11 @@ if __name__ == "__main__":
     #     fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
     #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
     # )
+
+    fit_sample_parameters_plot(
+        pl_fit_params_df=test_result,
+        rest_frame_no_eex=rest_data_no_eex,
+        window_length=4,
+        full_rest_data_df=full_rest_data,
+        output_path=PLOTS_OUTPUT_PATH,
+    )
