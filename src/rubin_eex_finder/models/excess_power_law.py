@@ -893,7 +893,7 @@ def fit_sample_parameters_plot(
         model_grids = {}
 
         for band in fit_bands:
-            times = band_data[band]["times"]
+            times = rest_band_data[band]["times"]
 
             model_grids[band] = np.linspace(
                 np.min(times),
