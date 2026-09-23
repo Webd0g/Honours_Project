@@ -2,12 +2,17 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import polars as pl
+
 from rubin_eex_finder.visualisation.style import set_publication_style
 
 set_publication_style()
 
 
-def redshift_distro(object_path: Path, output_path: Path | None = None) -> pl.DataFrame:
+def redshift_distro(
+    object_path: Path,
+    output_path: Path | None = None,
+    image_name: str | None = None,
+) -> pl.DataFrame:
     """This function finds the distribution of the host photo redshifts of the sample from the Supernova Selection cuts i.e. up until the fitted peak timing cut.
 
     Args:
@@ -31,34 +36,54 @@ def redshift_distro(object_path: Path, output_path: Path | None = None) -> pl.Da
         & (pl.col("z_used") > 0)
     )
 
-    spectro_redshifts = redshift_data.filter(
-        pl.col("z_source") == "spectroscopic"
-    ).select(pl.col("z_used"))
-
-    host_photo_redshifts = redshift_data.filter(
-        pl.col("z_source") == "host_photoz"
-    ).select(pl.col("z_used"))
-
-    plt.hist(
-        x=spectro_redshifts,
-        bins=25,
-        edgecolor="black",
-        alpha=1,
-        zorder=2,
+    spectro_redshifts = (
+        redshift_data.filter(pl.col("z_source") == "spectroscopic")
+        .select(pl.col("z_used"))
+        .to_numpy()
+        .flatten()
     )
 
-    plt.hist(
+    host_photo_redshifts = (
+        redshift_data.filter(pl.col("z_source") == "host_photoz")
+        .select(pl.col("z_used"))
+        .to_numpy()
+        .flatten()
+    )
+
+    fig, ax = plt.subplots()
+
+    ax.hist(
         x=host_photo_redshifts,
         bins=25,
         alpha=1,
+        color="#7F8C8D",
         histtype="step",
-        linewidth=2,
-        zorder=1,
+        linewidth=1.8,
+        label="Host photometric redshift",
+        zorder=2,
     )
-    plt.xlabel("Redshifts")
-    plt.ylabel("Number of objects")
-    plt.tight_layout()
-    plt.show()
+
+    y_max = ax.get_ylim()[1]
+
+    ax.vlines(
+        x=spectro_redshifts,
+        ymin=0,
+        colors="#0072B2",
+        ymax=y_max * 0.1,
+        alpha=0.8,
+        label="Spectroscopic redshift",
+        zorder=3,
+    )
+
+    ax.set_xlabel("Redshift")
+    ax.set_ylabel("Number of objects")
+    ax.legend(
+        loc="best",
+        frameon=False,
+    )
+    fig.tight_layout()
+    plt.savefig(output_path / f"{image_name}.png")
+    plt.close()
 
     return redshift_data
 
@@ -153,6 +178,10 @@ if __name__ == "__main__":
         / "pass.csv"
     )
 
+    OUTPUT_PATH = IMAGE_DIR / "results_plots"
+
     redshift_distro(
         object_path=OBJECT_DIR,
+        output_path=OUTPUT_PATH,
+        image_name="66_object_redshift_distribution",
     )
