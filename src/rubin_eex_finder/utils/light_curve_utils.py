@@ -184,27 +184,3 @@ if __name__ == "__main__":
     DATA_DIR = PROJECT_DIR / "data"
 
     IMAGES_DIR = PROJECT_DIR / "images"
-
-    OBJECT_PATH = (
-        DATA_DIR
-        / "salt_fitting"
-        / "ia_search"
-        / "with_z_results"
-        / "colour_stretch_results"
-        / "pass.csv"
-    )
-
-    OBJECTS = pl.read_csv(
-        source=OBJECT_PATH,
-        columns=["r:diaObjectId"],
-        schema_overrides={
-            "r:diaObjectId": pl.String,
-        },
-    )["r:diaObjectId"].to_list()
-
-    OUTPUT_PATH = (
-        DATA_DIR
-        / "light_curve_data"
-        / "forced_photometry_data"
-        / "photometric_ia_forced_photometry.parquet"
-    )
