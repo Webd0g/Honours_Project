@@ -17,9 +17,7 @@ Install with: pip install feets
 from pathlib import Path
 
 import light_curve as licu
-import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import polars as pl
 
 
@@ -260,66 +258,30 @@ def bazin_batch_fits(
 
 
 if __name__ == "__main__":
-    BANDS = [
-        "u",
-        "g",
-        "r",
-        "i",
-        "z",
-        "y",
-    ]
-
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SN_IA_TIMING_CUTS_RESULTS = (
-        DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "pass.csv"
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    SN_II_TIMING_CUTS_RESULTS = (
-        DATA_DIR / "sn_ii_test_results" / "timing_cuts_results" / "pass.csv"
-    )
+    OBJECTS = DATA_DIR / "object_collection_result" / "all_objects.csv"
 
-    LIGHT_CURVE_DATA = (
-        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
-    )
+    PASS = DATA_DIR / "pre_maximum_slope_fit_results" / "pass.csv"
 
-    SN_IA_BAZIN_FITS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "bazin_fits_results"
-    )
+    FAIL = DATA_DIR / "pre_maximum_slope_fit_results" / "fail.csv"
 
-    SN_II_BAZIN_FITS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "bazin_fits_results"
+    bazin_batch_fits(
+        csv_path=SN_II_TIMING_CUTS_RESULTS,
+        light_curve_data_path=LIGHT_CURVE_DATA,
+        band="i",
+        algorithm="mcmc",
+        mcmc_niter=2000,
+        output_path=SN_II_BAZIN_FITS_OUTPUT_PATH
+        / f"bazin_fits_{band}_band_results.csv",
     )
-
-    SN_IA_BAZIN_FITS_PLOTS_OUTPUT_PATH = (
-        IMAGE_DIR / "sn_ia_light_curves" / "bazin_fits_plots"
-    )
-
-    SN_II_BAZIN_FITS_PLOTS_OUTPUT_PATH = (
-        IMAGE_DIR / "sn_ii_light_curves" / "bazin_fits_plots"
-    )
-
-    for band in BANDS:
-        bazin_batch_fits(
-            csv_path=SN_II_TIMING_CUTS_RESULTS,
-            light_curve_data_path=LIGHT_CURVE_DATA,
-            band=band,
-            algorithm="mcmc",
-            mcmc_niter=2000,
-            output_path=SN_II_BAZIN_FITS_OUTPUT_PATH
-            / f"bazin_fits_{band}_band_results.csv",
-        )
-        # plot_bazin_fit_batch(
-        #     dict_path=SN_II_BAZIN_FITS_OUTPUT_PATH
-        #     / f"bazin_fits_{band}_band_results.csv",
-        #     csv_path=SN_II_TIMING_CUTS_RESULTS,
-        #     light_curve_data_path=LIGHT_CURVE_DATA,
-        #     band=band,
-        #     output_path=SN_II_BAZIN_FITS_PLOTS_OUTPUT_PATH / f"{band}_band",
-        # )

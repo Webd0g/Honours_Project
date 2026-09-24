@@ -132,73 +132,19 @@ if __name__ == "__main__":
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    TWENTY_OBJECT_TEST_VALUES_PATH = (
-        DATA_DIR
-        / "peak_timing_cuts_results"
-        / "20_object_test"
-        / "20_object_test_values.csv"
-    )
-
-    HUNDRED_OBJECT_TEST_VALUES_PATH = (
-        DATA_DIR
-        / "peak_timing_cuts_results"
-        / "100_object_test"
-        / "100_object_test_values.csv"
-    )
-
-    STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "peak_timing_plots" / "20_object_test"
-
-    SN_IA_OBJECT_DIR = (
-        DATA_DIR / "sn_ia_test_results" / "rate_of_rise_results" / "pass.csv"
-    )
-
-    SN_IA_PASS_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "pass.csv"
-    )
-
-    SN_IA_FAIL_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "fail.csv"
-    )
-
-    SN_IA_VALUES_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "values.csv"
-    )
-
-    SN_II_OBJECT_DIR = (
-        DATA_DIR / "sn_ii_test_results" / "rate_of_rise_results" / "pass.csv"
-    )
-
-    SN_II_PASS_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "timing_cuts_results" / "pass.csv"
-    )
-
-    SN_II_FAIL_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "timing_cuts_results" / "fail.csv"
-    )
-
-    SN_II_VALUES_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "timing_cuts_results" / "values.csv"
-    )
-
     LIGHT_CURVE_DATA_DIR = (
-        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+        DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    IA_STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "sn_ia_light_curves" / "peak_timing_results"
+    OBJECTS = DATA_DIR / "object_collection_result" / "all_objects.csv"
 
-    IA_PASS_PLOT_OUTPUT_PATH = IA_STRIP_PLOT_OUTPUT_PATH / "pass"
+    PASS = DATA_DIR / "pre_maximum_slope_fit_results" / "pass.csv"
 
-    IA_FAIL_PLOT_OUTPUT_PATH = IA_STRIP_PLOT_OUTPUT_PATH / "fail"
-
-    II_STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "sn_II_light_curves" / "peak_timing_results"
-
-    II_PASS_PLOT_OUTPUT_PATH = II_STRIP_PLOT_OUTPUT_PATH / "pass"
-
-    II_FAIL_PLOT_OUTPUT_PATH = II_STRIP_PLOT_OUTPUT_PATH / "fail"
+    FAIL = DATA_DIR / "pre_maximum_slope_fit_results" / "fail.csv"
 
     # loading_objects_and_light_data(
     #     object_path=SN_II_OBJECT_DIR,
