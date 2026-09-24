@@ -19,6 +19,7 @@ def fifty_percent_flux_calculation(
     objects_path: Path,
     light_curve_data_path: Path,
     band: str,
+    fraction: float = 0.5,
 ) -> pl.DataFrame:
     """This function finds the time when the observed flux across each band was 50 per cent of the g band flux.
 
@@ -40,75 +41,51 @@ def fifty_percent_flux_calculation(
     )
 
     band_df = band_df.with_columns(
-        (pl.col("peak_band_flux") * 0.5).alias("50_per_cent_peak_flux")
+        (pl.col("peak_band_flux") * fraction).alias("50_per_cent_peak_flux")
     )
 
     return band_df
 
 
-def find_fifty_per_cent_time(
+def find_target_flux_time(
     band_df: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Here we find the midpointMjdTai that aligns closest with the quantity of the 50 % flux column.
+    """Finds the epoch (midpointMjdTai) closest to the target percentage of peak flux on the rising branch."""
 
-    Args:
-        fifty_per_cent_band_df (pl.DataFrame): The polars dataframe that has all the data from the fifty per cent band flux calcualtion.
-    Returns:
-        pl.DataFrame: Returns the dataframe that was passed to this function with a new column identifying the epoch that is closest to the 50 per cent peak flux calculation.
-    """
-    # Finding the peak row so we can track the MJD for that peak.
-    peak_df = band_df.filter(
-        pl.col("r:psfFlux") == pl.col("peak_band_flux")
-    ).with_columns(pl.col("r:midpointMjdTai").alias("peak_mjd"))
-
-    # Join the df that contains the peak info and the df with all the objects in it.
-    peak_df = band_df.join(
-        peak_df.select("r:diaObjectId", "peak_mjd"), on="r:diaObjectId", how="left"
+    # 1. Identify peak epoch per object
+    peak_df = (
+        band_df.filter(pl.col("r:psfFlux") == pl.col("peak_band_flux"))
+        .select("r:diaObjectId", pl.col("r:midpointMjdTai").alias("peak_mjd"))
+        .unique(subset=["r:diaObjectId"])
     )
 
-    # Finding the difference between the peak in the g band for the objects and all the fluxes for the other measurements for the objects.
-    difference_df = peak_df.with_columns(
+    # 2. Join peak_mjd back to main band data
+    joined_df = band_df.join(peak_df, on="r:diaObjectId", how="left")
+
+    # 3. Filter strictly for points ON or BEFORE the peak
+    rise_df = joined_df.filter(pl.col("r:midpointMjdTai") <= pl.col("peak_mjd"))
+
+    # 4. Calculate absolute difference from target threshold
+    diff_df = rise_df.with_columns(
         (pl.col("r:psfFlux") - pl.col("50_per_cent_peak_flux"))
         .abs()
         .alias("delta_flux")
-    ).sort(["r:diaObjectId", "r:midpointMjdTai"])
-
-    # Adding a column that is the previous flux measurement for each row.
-    difference_df = difference_df.with_columns(
-        pl.col("r:psfFlux").shift(1).over("r:diaObjectId").alias("previous_flux")
     )
 
-    # Adding a column that is the next flux measurement for each row.
-    difference_df = difference_df.with_columns(
-        pl.col("r:psfFlux").shift(-1).over("r:diaObjectId").alias("next_flux")
-    )
+    # 5. Find the minimum delta_flux per object on the rising branch
+    closest_points_df = diff_df.with_columns(
+        pl.col("delta_flux").min().over("r:diaObjectId").alias("min_delta_flux")
+    ).filter(pl.col("delta_flux") == pl.col("min_delta_flux"))
 
-    # Filter to retain only the points for the objects that are before the peak flux in g band.
-    rise_df = difference_df.filter(pl.col("r:midpointMjdTai") <= pl.col("peak_mjd"))
-
-    # Filtering to points that are apart of the rise component where the previous measurement was less than the middle measurement and the next measurement is higher flux.
-    filtered_df = rise_df.filter(
-        (pl.col("previous_flux") < pl.col("r:psfFlux"))
-        & (pl.col("next_flux") > pl.col("r:psfFlux"))
-    )
-
-    # Adding a column that is the minimum delta_flux measurement for each object to find the point that is the closest to the 50 per cent flux calculation.
-    fifty_per_cent_point_df = filtered_df.with_columns(
-        pl.col("delta_flux").min().over("r:diaObjectId").alias("min_abs_delta_flux")
-    )
-
-    # Here we find where the delta flux is the smallest value over each diaObjectId, however it only finds 14 rows?
-    filtered_df = fifty_per_cent_point_df.filter(
-        (pl.col("delta_flux").abs()) == pl.col("min_abs_delta_flux")
-    )
-
-    return filtered_df
+    # Pick the first row per object in case of exact ties
+    return closest_points_df.unique(subset=["r:diaObjectId"])
 
 
 def iterate_over_bands(
     objects_dir: Path,
     light_curve_data_dir: Path,
     bands: list[str],
+    fraction: float = 0.5,
 ) -> pl.DataFrame:
     """Iterates over the bands that you feed as a list of strings, this is so that if an object isn't well sampled in one band but you would like to keep it you can try other bands and they weill get appended.
 
@@ -126,9 +103,10 @@ def iterate_over_bands(
             objects_path=objects_dir,
             light_curve_data_path=light_curve_data_dir,
             band=band,
+            fraction=fraction,
         )
 
-        filtered_result = find_fifty_per_cent_time(
+        filtered_result = find_target_flux_time(
             band_df=result,
         )
         if band == "g":
@@ -164,8 +142,6 @@ def iterate_over_bands(
             "50_per_cent_peak_flux",
             "peak_mjd",
             "delta_flux",
-            "previous_flux",
-            "next_flux",
         ]
     )
 
@@ -335,7 +311,6 @@ def rest_frame_conversion(
 def excluding_excess_window(
     rest_frame_conversion_df: pl.DataFrame,
     window_length: int,
-    band: str,
     output_path: Path | None = None,
 ) -> pl.DataFrame:
     """Remove any points in the excess window from the dataframe that will be used for the power law fitting process.
@@ -351,8 +326,7 @@ def excluding_excess_window(
     # Defining the excess window (for use we take the t_fd and add 3 days remove any points that have a time in that range.)
     rest_frame_objects_df = rest_frame_conversion_df.filter(
         ~(
-            (pl.col("r:band") == band)
-            & pl.col("rest_frame_time").is_between(
+            pl.col("rest_frame_time").is_between(
                 pl.col("t_fd_rest"),
                 pl.col("t_fd_rest") + window_length,
                 closed="both",
@@ -399,7 +373,7 @@ def log_prior_function(
         if A_prime <= 0:
             return -np.inf
 
-        if not 1 <= alpha <= 1e8:
+        if not 1.0 <= alpha <= 8.0:
             return -np.inf
 
         log_prior += -np.log(A_prime) - alpha * np.log(10)
@@ -565,7 +539,7 @@ def fitting_power_law(
 
         # Initial guess for theta for this test object.
         theta = [
-            -18,
+            t_fd_rest - 2.0,
         ]
 
         # Adding extra priors if more bands are present.
@@ -838,7 +812,7 @@ def fit_sample_parameters_plot(
         output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
     """
 
-    for object_id, object_df in pl_fit_params_df.group_by("r:diaObjectId"):
+    for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
         diaObjectId = object_df["r:diaObjectId"].item()
 
         rest_band_data = {}
@@ -1155,6 +1129,7 @@ if __name__ == "__main__":
         objects_dir=OBJECT_DIR,
         light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
         bands=BANDS,
+        fraction=0.5,
     )
 
     test_result = keep_observations_upto_t50(
@@ -1168,17 +1143,15 @@ if __name__ == "__main__":
         pre_t50_objects_data=test_result,
     )
 
-    for band in BANDS:
-        rest_data_no_eex = excluding_excess_window(
-            rest_frame_conversion_df=full_rest_data,
-            window_length=4,
-            band=band,
-        )
+    rest_data_no_eex = excluding_excess_window(
+        rest_frame_conversion_df=full_rest_data,
+        window_length=4,
+    )
 
-    # test_result = fitting_power_law(
-    #     rest_frame_objects=rest_data_no_eex,
-    #     n_steps=2000,
-    # )
+    test_result = fitting_power_law(
+        rest_frame_objects=rest_data_no_eex,
+        n_steps=2000,
+    )
 
     # walkers_chain_plot(
     #     sampler_results=test_result[1],
@@ -1195,15 +1168,14 @@ if __name__ == "__main__":
     #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
     # )
 
-    test_result = pl.read_csv(
-        source=POWER_LAW_PARAMS,
-        schema_overrides={"r:diaObjectId": pl.String},
-    )
+    # test_result = pl.read_csv(
+    #     source=POWER_LAW_PARAMS,
+    #     schema_overrides={"r:diaObjectId": pl.String},
+    # )
 
     fit_sample_parameters_plot(
         pl_fit_params_df=test_result,
         rest_frame_no_eex=rest_data_no_eex,
         window_length=4,
         full_rest_data_df=full_rest_data,
-        output_path=PLOTS_OUTPUT_PATH,
     )

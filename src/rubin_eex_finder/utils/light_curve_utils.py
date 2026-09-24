@@ -33,7 +33,7 @@ def pull_data_from_fink(
     objects: list[str] | None,
     api_url: str,
     columns: str,
-    output_path: Path | None,
+    output_path: Path | None = None,
 ) -> pl.DataFrame:
     """Queries the Fink API for the data for the list of objects and the columns that are requested in the columns input parameter.
 
@@ -58,7 +58,9 @@ def pull_data_from_fink(
     # Format output in a DataFrame
     if r.status_code == 200:
         pdf = pl.read_json(io.BytesIO(r.content))
-        pdf.write_parquet(output_path)
+        if output_path is not None:
+            pdf.write_parquet(output_path)
+        return pdf
 
 
 band_colours = {
@@ -170,6 +172,7 @@ def batch_plotter(object_path: Path, light_curve_data_path: Path, output_path: P
 
 if __name__ == "__main__":
     API_URL = "https://api.lsst.fink-portal.org/api/v1/fp"
+
     COLUMNS = (
         "r:diaObjectId,r:diaSourceId,r:midpointMjdTai,r:band,r:psfFlux,r:psfFluxErr"
     )
@@ -204,19 +207,4 @@ if __name__ == "__main__":
         / "light_curve_data"
         / "forced_photometry_data"
         / "photometric_ia_forced_photometry.parquet"
-    )
-
-    PLOTS_OUTPUT_PATH = IMAGES_DIR / "forced_photometry_plots"
-
-    # pull_data_from_fink(
-    #     objects=OBJECTS,
-    #     api_url=API_URL,
-    #     columns=COLUMNS,
-    #     output_path=OUTPUT_PATH,
-    # )
-
-    batch_plotter(
-        object_path=OBJECT_PATH,
-        light_curve_data_path=OUTPUT_PATH,
-        output_path=IMAGES_DIR,
     )
