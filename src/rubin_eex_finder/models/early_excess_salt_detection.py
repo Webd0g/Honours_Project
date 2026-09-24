@@ -178,34 +178,60 @@ def first_detection_determination(nightly_data: pl.DataFrame) -> pl.DataFrame:
         pl.DataFrame: another column per night where it is counted as a detection if the SNR is greater than 3 sigma.
     """
 
-    nightly_data_filtered = nightly_data.with_columns(
-        (pl.col("snr") >= 3).alias("is_detection")
+    # Sort the data chronologically by object, band and time.
+    data_sorted = nightly_data.sort(
+        by=[
+            "r:diaObject",
+            "r:band",
+            "nightly_mjd",
+        ]
     )
 
-    nightly_data_filtered = nightly_data_filtered.with_columns(
+    # Restrict to valid pre-peak phase window [-25d, 0d]
+    data_in_phase = data_sorted.filter(
+        pl.col("rest_frame_phase").is_between(
+            -25.0,
+            0.0,
+        )
+    )
+
+    # Tag 3-sigma detections
+    data_flagged = data_in_phase.with_columns(
+        (pl.col("snr") >= 3.0).alias("is_detection")
+    )
+
+    # Shift to night before and after
+    data_shifts = data_flagged.with_columns(
         pl.col("is_detection")
-        .shift(-2)
+        .shift(2)
         .over(["r:diaObjectId", "r:band"])
         .alias("two_epochs_before"),
         pl.col("is_detection")
-        .shift(-1)
+        .shift(1)
         .over(["r:diaObjectId", "r:band"])
         .alias("one_epoch_before"),
         pl.col("is_detection")
-        .shift(1)
+        .shift(-1)
         .over(["r:diaObjectId", "r:band"])
         .alias("one_epoch_after"),
     )
 
-    candidates = nightly_data_filtered.filter(
-        (~pl.col("two_epochs_before"))
-        & (~pl.col("one_epoch_before"))
+    # Filter for 2 non-detections before current detection, 1 detection after
+    candidates = data_shifts.filter(
+        (~pl.col("two_epochs_before").fill_null(False))
+        & (~pl.col("one_epoch_before").fill_null(False))
         & pl.col("is_detection")
-        & pl.col("one_epoch_after")
+        & pl.col("one_epoch_after").fill_null(False)
     )
 
+    # Group by object ID and pcik the earliest detection chronologically across.
     first_detections = (
-        candidates.sort(["r:diaObjectId"])
+        candidates.sort(
+            [
+                "r:diaObjectId",
+                "nightly_mjd",
+            ]
+        )
         .group_by(
             "r:diaObjectId",
             maintain_order=True,
