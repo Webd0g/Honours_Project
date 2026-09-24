@@ -838,7 +838,7 @@ def fit_sample_parameters_plot(
         output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
     """
 
-    for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
+    for object_id, object_df in pl_fit_params_df.group_by("r:diaObjectId"):
         diaObjectId = object_df["r:diaObjectId"].item()
 
         rest_band_data = {}
@@ -1134,6 +1134,15 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
+    POWER_LAW_PARAMS = (
+        DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "4_day_window"
+        / "pass.csv"
+    )
+
     BANDS = [
         "g",
         "r",
@@ -1166,10 +1175,10 @@ if __name__ == "__main__":
             band=band,
         )
 
-    test_result = fitting_power_law(
-        rest_frame_objects=rest_data_no_eex,
-        n_steps=2000,
-    )
+    # test_result = fitting_power_law(
+    #     rest_frame_objects=rest_data_no_eex,
+    #     n_steps=2000,
+    # )
 
     # walkers_chain_plot(
     #     sampler_results=test_result[1],
@@ -1185,6 +1194,11 @@ if __name__ == "__main__":
     #     fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
     #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
     # )
+
+    test_result = pl.read_csv(
+        source=POWER_LAW_PARAMS,
+        schema_overrides={"r:diaObjectId": pl.String},
+    )
 
     fit_sample_parameters_plot(
         pl_fit_params_df=test_result,

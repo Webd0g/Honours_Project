@@ -541,7 +541,7 @@ def plot_salt_phase_diagnostic(
     phase_results_path: Path,
     light_curve_data_path: Path,
     band_map: dict,
-    output_dir: Path,
+    output_dir: Path | None = None,
 ) -> None:
     """This function makes plots of the SALT fitted objects but plots the tau parameters as vertical lines to understand where objects are failing and if the phase cuts are doing what they are supposed to be doing, a diagnostic.
 
@@ -554,7 +554,7 @@ def plot_salt_phase_diagnostic(
         phase_results_path,
         schema_overrides={
             "r:diaObjectId": pl.String,
-            "z_used": pl.Float64,
+            "host_photoz": pl.Float64,
             "t0": pl.Float64,
         },
     )
@@ -574,16 +574,14 @@ def plot_salt_phase_diagnostic(
 
     for row in phase_results.iter_rows(named=True):
         object_id = row["r:diaObjectId"]
-        redshift = row["z_used"]
+        redshift = row["host_photoz"]
         if not row["fit_success"]:
             continue
 
         object_data = light_curve_data.filter(pl.col("r:diaObjectId") == object_id)
 
-        if row["z_used"] is None or not np.isfinite(row["z_used"]):
+        if row["host_photoz"] is None or not np.isfinite(row["host_photoz"]):
             continue
-
-        phase_positions = [tau * (1 + redshift) for tau in tau_edges]
 
         data = Table(
             {
@@ -599,7 +597,7 @@ def plot_salt_phase_diagnostic(
         model = sncosmo.Model(source="salt3")
 
         model.set(
-            z=row["z_used"],
+            z=row["host_photoz"],
             t0=row["t0"],
             x0=row["x0"],
             x1=row["x1"],
@@ -611,16 +609,54 @@ def plot_salt_phase_diagnostic(
             model=model,
         )
 
+        time_edges = [tau * (1 + redshift) for tau in tau_edges]
+
+        phase_regions = [
+            (time_edges[0], time_edges[1], "Peak", "#56B4E9"),
+            (time_edges[1], time_edges[2], "Decline", "#009E73"),
+            (time_edges[2], time_edges[3], "Tail", "#D55E00"),
+        ]
+
         for ax in fig.axes:
-            for tau, t_edge in zip(tau_edges, phase_positions):
+            for tau, t_edge in zip(tau_edges, time_edges):
                 ax.axvline(
                     t_edge,
                     linestyle="--",
-                    alpha=0.5,
+                    linewidth=0.8,
+                    color="#595959",
+                    alpha=0.7,
+                    zorder=1,
                 )
 
-        fig.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
-        plt.close(fig)
+            if ax.get_ylabel() != "pull":
+                for t_start, t_end, name, colour in phase_regions:
+                    ax.axvspan(
+                        t_start,
+                        t_end,
+                        color=colour,
+                        alpha=0.08,
+                        zorder=0,
+                    )
+
+                for tau, t_edge in zip(tau_edges, time_edges):
+                    sign = "+" if tau > 0 else ""
+                    ax.text(
+                        x=t_edge,
+                        y=0.98,
+                        s=rf"$\tau = {sign}{tau}$ d",
+                        transform=ax.get_xaxis_transform(),
+                        rotation=90,
+                        verticalalignment="top",
+                        horizontalalignment="right",
+                        fontsize=8,
+                        color="#333333",
+                        alpha=0.85,
+                    )
+
+        if output_dir is not None:
+            fig.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
+        plt.show()
+        # plt.close(fig)
 
 
 def strip_plot(
@@ -850,9 +886,7 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    IA_OBJECTS = (
-        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "values.csv"
-    )
+    IA_OBJECTS = DATA_DIR / "sn_ia_test_results" / "phase_results" / "values.csv"
 
     II_OBJECTS = (
         DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "values.csv"
@@ -864,8 +898,17 @@ if __name__ == "__main__":
 
     OUTPUT_PATH = IMAGE_DIR / "fitted_peak_timing_plots" / "spectro"
 
-    spectro_strip_plots(
-        sn_ii_spectro_fitted_peak_timing_results=II_OBJECTS,
-        sn_ia_spectro_fitted_peak_timing_results=IA_OBJECTS,
-        output_path=OUTPUT_PATH,
+    BAND_MAP = {
+        "u": "lsstu",
+        "g": "lsstg",
+        "r": "lsstr",
+        "i": "lssti",
+        "z": "lsstz",
+        "y": "lssty",
+    }
+
+    plot_salt_phase_diagnostic(
+        phase_results_path=IA_OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA,
+        band_map=BAND_MAP,
     )
