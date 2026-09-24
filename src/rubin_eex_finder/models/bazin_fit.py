@@ -270,18 +270,15 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    OBJECTS = DATA_DIR / "object_collection_result" / "all_objects.csv"
+    OBJECTS = DATA_DIR / "peak_timing_cut_results" / "pass.csv"
 
-    PASS = DATA_DIR / "pre_maximum_slope_fit_results" / "pass.csv"
-
-    FAIL = DATA_DIR / "pre_maximum_slope_fit_results" / "fail.csv"
+    OUTPUT_PATH = DATA_DIR / "bazin_fit_results"
 
     bazin_batch_fits(
-        csv_path=SN_II_TIMING_CUTS_RESULTS,
-        light_curve_data_path=LIGHT_CURVE_DATA,
+        csv_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
         band="i",
         algorithm="mcmc",
         mcmc_niter=2000,
-        output_path=SN_II_BAZIN_FITS_OUTPUT_PATH
-        / f"bazin_fits_{band}_band_results.csv",
+        output_path=OUTPUT_PATH / "bazin_fits_i_band_results.csv",
     )
