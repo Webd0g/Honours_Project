@@ -19,6 +19,7 @@ from rubin_eex_finder.utils.light_curve_utils import add_night_and_SNR_columns
 MIN_PRE_PEAK_POINTS = 3
 MIN_PRE_PEAK_TIME_SPAN_DAYS = 5
 MIN_PEAK_SNR = 10
+PRE_PEAK_WINDOW_DAYS = 30.0
 
 
 def slope_calculation(
@@ -27,6 +28,7 @@ def slope_calculation(
     min_points: int = MIN_PRE_PEAK_POINTS,
     min_time_span: float = MIN_PRE_PEAK_TIME_SPAN_DAYS,
     min_peak_snr: float = MIN_PEAK_SNR,
+    pre_peak_window_days: float = PRE_PEAK_WINDOW_DAYS,
 ) -> tuple[float, int] | None:
     """Fits the slope to the points pre-maximum light per band and returns the slope and number of points used.
 
@@ -53,7 +55,9 @@ def slope_calculation(
     if peak_snr < min_peak_snr:
         return None
 
-    pre_peak = band_df.filter(pl.col("r:midpointMjdTai") <= peak_mjd)
+    pre_peak = band_df.filter(
+        pl.col("r:midpointMjdTai").is_between(peak_mjd - pre_peak_window_days, peak_mjd)
+    )
 
     pre_peak = add_night_and_SNR_columns(pre_peak)
 
@@ -157,18 +161,14 @@ def applying_the_rate_of_rise(
         else:
             failed.append(object_id)
 
-    passed_df = pl.DataFrame(passed, schema=["r:diaObjectId"]).write_csv(
-        output_path_passed
-    )
-    failed_df = pl.DataFrame(failed, schema=["r:diaObjectId"]).write_csv(
-        output_path_failed
-    )
+    passed_df = pl.DataFrame(passed)
+    failed_df = pl.DataFrame(failed)
 
     if output_path_passed is not None:
         output_path_passed.parent.mkdir(parents=True, exist_ok=True)
         passed_df.write_csv(output_path_passed)
     if output_path_failed is not None:
-        output_path_failed.parent.mkdir(parents=True, exist=True)
+        output_path_failed.parent.mkdir(parents=True, exist_ok=True)
         failed_df.write_csv(output_path_failed)
 
     return passed, failed
@@ -179,22 +179,25 @@ if __name__ == "__main__":
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
     LIGHT_CURVE_DATA_DIR = (
-        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+        DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    TEST_OBJECTS = DATA_DIR / "object_id_collection_results" / "all_objects.csv"
+    OBJECTS = DATA_DIR / "object_collection_result" / "all_objects.csv"
 
-    # Example Run
-    if TEST_OBJECTS.exists():
-        passed_ids, failed_ids = applying_the_rate_of_rise(
-            object_csv_path=TEST_OBJECTS,
-            light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-            # output_path_passed=PASS_OUT,
-            # output_path_failed=FAIL_OUT,
-        )
-        print(f"Passed: {len(passed_ids)} | Failed: {len(failed_ids)}")
+    PASS = DATA_DIR / "pre_maximum_slope_fit_results" / "pass.csv"
+
+    FAIL = DATA_DIR / "pre_maximum_slope_fit_results" / "fail.csv"
+
+    passed_ids, failed_ids = applying_the_rate_of_rise(
+        object_csv_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        output_path_passed=PASS,
+        output_path_failed=FAIL,
+    )
+
+    print(f"Passed: {len(passed_ids)} | Failed: {len(failed_ids)}")
