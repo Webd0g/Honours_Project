@@ -6,6 +6,7 @@ import numpy as np
 import polars as pl
 import requests as re
 from astropy.time import Time
+from tqdm import tqdm
 
 
 def add_night_and_SNR_columns(band_df: pl.DataFrame) -> pl.DataFrame:
@@ -62,6 +63,62 @@ def pull_data_from_fink(
             pdf.write_parquet(output_path)
         return pdf
 
+
+def query_fink_chunk(
+    chunk_objects: list[str],
+    api_url: str = "https://api.lsst.fink-portal.org/api/v1/fp",
+    columns: str = "r:diaObjectId,r:band,nightly_mjd,fink_flux,fink_flux_err,snr,rest_frame_phase,z_used,t0",
+    timeout: int = 120,
+) -> pl.DataFrame:
+    """
+    Queries Fink API for a chunk of diaObjectIds.
+    Recursively splits the chunk in half if timeouts, 500, 502, 504, or 429 errors occur.
+    """
+    if not chunk_objects:
+        return pl.DataFrame()
+
+    try:
+        r = re.post(
+            api_url,
+            json={
+                "diaObjectId": ",".join(chunk_objects),
+                "columns": columns,
+                "output-format": "json",
+            },
+            timeout=timeout,
+        )
+        
+        # Explicit check for server errors before calling raise_for_status()
+        if r.status_code in (500, 502, 503, 504, 429):
+            raise re.exceptions.HTTPError(f"Server error {r.status_code}", response=r)
+
+        r.raise_for_status()
+
+        if r.status_code == 200 and len(r.content) > 0:
+            return pl.read_json(io.BytesIO(r.content))
+        return pl.DataFrame()
+
+    except (re.exceptions.HTTPError, re.exceptions.Timeout, re.exceptions.ConnectionError) as e:
+        status_code = getattr(e.response, "status_code", None) if hasattr(e, "response") else None
+        
+        # Target transient server/gateway failures and timeouts for splitting
+        if isinstance(e, (re.exceptions.Timeout, re.exceptions.ConnectionError)) or status_code in (500, 502, 503, 504, 429):
+            if len(chunk_objects) <= 1:
+                print(f"  [Warning] Skipping unqueryable object ID: {chunk_objects}")
+                return pl.DataFrame()
+
+            mid = len(chunk_objects) // 2
+            print(
+                f"  [{status_code or 'Timeout/ConnError'}] Splitting chunk of {len(chunk_objects)} into {mid} and {len(chunk_objects) - mid}..."
+            )
+
+            left_df = query_fink_chunk(chunk_objects[:mid], api_url, columns, timeout)
+            right_df = query_fink_chunk(chunk_objects[mid:], api_url, columns, timeout)
+
+            dfs = [df for df in [left_df, right_df] if df.height > 0]
+            return pl.concat(dfs, how="diagonal") if dfs else pl.DataFrame()
+        else:
+            raise
 
 band_colours = {
     "u": "darkblue",
@@ -181,6 +238,30 @@ if __name__ == "__main__":
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
     IMAGES_DIR = PROJECT_DIR / "images"
+
+    OBJECTS_PATH = DATA_DIR / "object_collection_result" / "all_objects.csv"
+
+    OBJECTS = pl.read_csv(
+        source=OBJECTS_PATH, schema_overrides={"r:diaObjectId": pl.String}
+    )["r:diaObjectId"].to_list()
+
+    # Batch calling helper to prevent initial massive payloads
+    BATCH_SIZE = 20
+    all_dfs = []
+
+    for i in tqdm(range(0, len(OBJECTS), BATCH_SIZE), desc="Fetching Fink forced photometry"):
+        batch = OBJECTS[i : i + BATCH_SIZE]
+        df_chunk = query_fink_chunk(
+            chunk_objects=batch,
+            api_url=API_URL,
+            columns=COLUMNS,
+        )
+        if df_chunk.height > 0:
+            all_dfs.append(df_chunk)
+
+    forced_light_curve_data = pl.concat(all_dfs, how="diagonal") if all_dfs else pl.DataFrame()
+
+    forced_light_curve_data.write_parquet(file="/home/riley/Documents/University/Honours/Honours_Project/data/forced_photometry_test/light_curve_data/forced_photometry_light_curve_data.parquet")
