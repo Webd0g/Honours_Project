@@ -142,7 +142,10 @@ def applying_the_rate_of_rise(
     one band and directs the objects to their respective lists. Finally this function
     produces two CSV files of the objects that passed and ones that failed.
     """
-    passed, failed = [], []
+    slope_fit_df = {
+        "r:diaObjectId": [],
+        "is_rising": [],
+    }
 
     objects = pl.read_csv(
         object_csv_path,
@@ -155,23 +158,24 @@ def applying_the_rate_of_rise(
         pl.col("r:diaObjectId").cast(pl.String).is_in(objects)
     )
 
-    for object_id, group_df in light_curve_data_filtered.group_by("r:diaObjectId"):
+    for (object_id,), group_df in light_curve_data_filtered.group_by("r:diaObjectId"):
         if check_rate_of_rise(group_df):
-            passed.append(object_id)
+            slope_fit_df["r:diaObjectId"].append(str(object_id))
+            slope_fit_df["is_rising"].append(True)
         else:
-            failed.append(object_id)
+            slope_fit_df["r:diaObjectId"].append(str(object_id))
+            slope_fit_df["is_rising"].append(False)
 
-    passed_df = pl.DataFrame(passed)
-    failed_df = pl.DataFrame(failed)
+    slope_fit_df = pl.DataFrame(slope_fit_df)
 
     if output_path_passed is not None:
         output_path_passed.parent.mkdir(parents=True, exist_ok=True)
-        passed_df.write_csv(output_path_passed)
+        slope_fit_df.filter(pl.col("is_rising")).write_csv(output_path_passed)
     if output_path_failed is not None:
         output_path_failed.parent.mkdir(parents=True, exist_ok=True)
-        failed_df.write_csv(output_path_failed)
+        slope_fit_df.filter(~pl.col("is_rising")).write_csv(output_path_failed)
 
-    return passed, failed
+    return slope_fit_df
 
 
 if __name__ == "__main__":
@@ -193,11 +197,9 @@ if __name__ == "__main__":
 
     FAIL = DATA_DIR / "pre_maximum_slope_fit_results" / "fail.csv"
 
-    passed_ids, failed_ids = applying_the_rate_of_rise(
+    applying_the_rate_of_rise(
         object_csv_path=OBJECTS,
         light_curve_data_path=LIGHT_CURVE_DATA_DIR,
         output_path_passed=PASS,
         output_path_failed=FAIL,
     )
-
-    print(f"Passed: {len(passed_ids)} | Failed: {len(failed_ids)}")

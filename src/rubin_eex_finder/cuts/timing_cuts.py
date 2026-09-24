@@ -140,38 +140,22 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    OBJECTS = DATA_DIR / "object_collection_result" / "all_objects.csv"
+    OBJECTS = DATA_DIR / "pre_maximum_slope_fit_results" / "pass.csv"
 
-    PASS = DATA_DIR / "pre_maximum_slope_fit_results" / "pass.csv"
+    PASS = DATA_DIR / "peak_timing_cut_results"/"pass.csv"
 
-    FAIL = DATA_DIR / "pre_maximum_slope_fit_results" / "fail.csv"
+    FAIL = DATA_DIR / "peak_timing_cut_results" / "fail.csv"
 
-    # loading_objects_and_light_data(
-    #     object_path=SN_II_OBJECT_DIR,
-    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-    #     output_path=SN_II_VALUES_PATH,
-    # )
+    VALUES = DATA_DIR / "peak_timing_cut_results" / "values.csv"
 
-    # timing_pass_check(
-    #     timing_cuts_values_path=SN_II_VALUES_PATH,
-    #     output_path_pass=SN_II_PASS_PATH,
-    #     output_path_fail=SN_II_FAIL_PATH,
-    # )
+    loading_objects_and_light_data(
+        object_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        output_path=VALUES,
+    )
 
-    # strip_plot(
-    #     data_path=TWENTY_OBJECT_TEST_VALUES_PATH,
-    #     output_path=STRIP_PLOT_OUTPUT_PATH / "20_object_test_strip_plot.png",
-    # )
-
-    # spectro_strip_plot(
-    #     passing_ia_objects=SN_IA_PASS_PATH,
-    #     failing_ia_objects=SN_IA_FAIL_PATH,
-    #     passing_ii_objects=SN_II_PASS_PATH,
-    #     failing_ii_objects=SN_II_FAIL_PATH,
-    # )
-
-    # batch_plotter(
-    #     object_path=HUNDRED_OBJECT_TEST_PASS_PATH,
-    #     light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-    #     output_path=PASS_PLOT_OUTPUT_PATH,
-    # )
+    timing_pass_check(
+        timing_cuts_values_path=VALUES,
+        output_path_pass=PASS,
+        output_path_fail=FAIL,
+    )
