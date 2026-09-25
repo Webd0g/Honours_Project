@@ -9,8 +9,6 @@ from astropy.time import Time
 
 from rubin_eex_finder.utils.light_curve_utils import add_night_and_SNR_columns
 from rubin_eex_finder.visualisation.style import (
-    COLOR_CC,
-    COLOR_IA,
     set_publication_style,
 )
 
@@ -246,9 +244,7 @@ def batch_plotter(
     light_curve_data = pl.read_parquet(light_curve_data_path).with_columns(
         pl.col("r:diaObjectId").cast(pl.String)
     )
-    filtered_data = light_curve_data.filter(
-        pl.col("r:diaObjectId").is_in(object_ids)
-    )
+    filtered_data = light_curve_data.filter(pl.col("r:diaObjectId").is_in(object_ids))
 
     for (object_id,), group_df in filtered_data.group_by("r:diaObjectId"):
         if plot_slope_fit:
@@ -265,3 +261,39 @@ def batch_plotter(
                 diaObjectId=object_id,
                 output_dir=output_path,
             )
+
+
+if __name__ == "__main__":
+    PROJECT_DIR = (
+        Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
+    )
+
+    DATA_DIR = PROJECT_DIR / "data"
+
+    IMAGE_DIR = PROJECT_DIR / "images"
+
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    )
+
+    OBJECTS = (
+        DATA_DIR / "constant_minus_shape_results" / "constant_minus_shape_passed.csv"
+    )
+
+    BAZIN_FIT_DATA_PATH = (
+        DATA_DIR / "bazin_fit_results" / "bazin_fits_i_band_results.csv"
+    )
+
+    PASS = DATA_DIR / "constant_minus_shape_result" / "passed.csv"
+
+    FAIL = DATA_DIR / "constant_minus_shape_result" / "failed.csv"
+
+    VALUES = DATA_DIR / "constant_minus_shape_result" / "values.csv"
+
+    PLOT_OUTPUT_PATH = IMAGE_DIR / "constant_minus_shape_plots" / "pass_2"
+
+    batch_plotter(
+        object_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        output_path=PLOT_OUTPUT_PATH,
+    )

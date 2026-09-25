@@ -48,7 +48,6 @@ def numb_pre_peak_post_peak(
         light_curve_data_path,
         columns=[
             "r:diaObjectId",
-            "r:diaSourceId",
             "r:band",
             "r:psfFlux",
             "r:midpointMjdTai",
@@ -68,13 +67,13 @@ def numb_pre_peak_post_peak(
     for object_id in object_ids:
         group_df = groups.get(object_id)
 
-        if group_df is None:
-            continue
+        # if group_df is None:
+        #     continue
 
-        group_df = group_df.unique(
-            subset=["r:diaSourceId"],
-            keep="first",
-        )
+        # group_df = group_df.unique(
+        #     subset=["r:diaSourceId"],
+        #     keep="first",
+        # )
 
         sampling_df = group_df.filter(
             pl.col("r:psfFlux").is_finite() & pl.col("r:midpointMjdTai").is_finite()
@@ -351,42 +350,26 @@ if __name__ == "__main__":
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SN_IA_SAMPLE_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    SN_II_SAMPLE_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "pass.csv"
-    )
+    OBJECTS = DATA_DIR / "constant_minus_shape_result" / "pass.csv"
 
-    SN_IA_PASS_PATH = DATA_DIR / "sn_ia_test_results" / "sampling_results" / "pass.csv"
+    PASS = DATA_DIR / "sampling_results" / "pass.csv"
 
-    SN_IA_FAIL_PATH = DATA_DIR / "sn_ia_test_results" / "sampling_results" / "fail.csv"
+    FAIL = DATA_DIR / "sampling_results" / "fail.csv"
 
-    SN_IA_VALUES_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "sampling_results" / "values.csv"
-    )
-
-    SN_II_PASS_PATH = DATA_DIR / "sn_ii_test_results" / "sampling_results" / "pass.csv"
-
-    SN_II_FAIL_PATH = DATA_DIR / "sn_ii_test_results" / "sampling_results" / "fail.csv"
-
-    SN_II_VALUES_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "sampling_results" / "values.csv"
-    )
-
-    LIGHT_CURVE_DATA = (
-        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
-    )
+    VALUES = DATA_DIR / "sampling_results" / "values.csv"
 
     sampling_cut(
-        candidate_path=SN_II_SAMPLE_PATH,
-        light_curve_data_path=LIGHT_CURVE_DATA,
-        values_output_path=SN_II_VALUES_PATH,
-        pass_output_path=SN_II_PASS_PATH,
-        fail_output_path=SN_II_FAIL_PATH,
+        candidate_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        values_output_path=VALUES,
+        pass_output_path=PASS,
+        fail_output_path=FAIL,
     )

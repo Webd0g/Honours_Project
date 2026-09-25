@@ -202,15 +202,15 @@ def bazin_batch_fits(
 
     for object_id in objects:
         group_df = groups.get(str(object_id))
+        peak_mjd = group_df.sort("r:psfFlux", descending=True,)["r:midpointMjdTai"][0]
         if group_df is None:
             continue
         band_df = (
             group_df.filter(
-                (pl.col("r:psfFlux") > 0)
-                & pl.col("r:psfFlux").is_finite()
+                pl.col("r:psfFlux").is_finite()
                 & pl.col("r:psfFluxErr").is_finite()
                 & (pl.col("r:psfFluxErr") > 0)
-                & pl.col("r:midpointMjdTai").is_finite()
+                & pl.col("r:midpointMjdTai").is_between(peak_mjd - 30.0, peak_mjd + 70.0)
             )
             .sort("r:midpointMjdTai")
             .unique(subset=["r:midpointMjdTai"], keep="first", maintain_order=True)

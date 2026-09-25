@@ -140,13 +140,14 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    OBJECTS = DATA_DIR / "pre_maximum_slope_fit_results" / "pass.csv"
+    OBJECTS = DATA_DIR / "sampling_results" / "pass.csv"
 
-    PASS = DATA_DIR / "peak_timing_cut_results"/"pass.csv"
+    PASS = DATA_DIR / "fitted_peak_timing_results" / "pass.csv"
 
-    FAIL = DATA_DIR / "peak_timing_cut_results" / "fail.csv"
+    FAIL = DATA_DIR / "fitted_peak_timing_results" / "fail.csv"
 
-    VALUES = DATA_DIR / "peak_timing_cut_results" / "values.csv"
+    VALUES = DATA_DIR / "fitted_peak_timing_results" / "values.csv"
+
 
     loading_objects_and_light_data(
         object_path=OBJECTS,

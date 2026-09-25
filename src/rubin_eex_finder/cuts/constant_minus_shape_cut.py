@@ -61,22 +61,22 @@ def constant_batch_fits(
         columns=["r:diaObjectId"],
     )["r:diaObjectId"].to_list()
 
-    return (
-        pl.read_parquet(
-            light_curve_data_path,
-            columns=[
-                "r:diaObjectId",
-                "r:band",
-                "r:psfFlux",
-                "r:psfFluxErr",
-                "r:midpointMjdTai",
-            ],
-        )
-        .with_columns(pl.col("r:diaObjectId").cast(pl.String))
-        .filter(
-            pl.col("r:diaObjectId").is_in(objects)
-            & (pl.col("r:band") == band)
-            & (pl.col("r:psfFlux") > 0)
+    df = pl.read_parquet(
+        light_curve_data_path,
+        columns=[
+            "r:diaObjectId",
+            "r:band",
+            "r:psfFlux",
+            "r:psfFluxErr",
+            "r:midpointMjdTai",
+        ],
+    ).with_columns(pl.col("r:diaObjectId").cast(pl.String))
+
+    band_df = df.filter(pl.col("r:diaObjectId").is_in(objects) & (pl.col("r:band") == band))
+
+    peak_mjds = (band_df.sort("r:psfFlux", descending=True).group_by("r:diaObjectId").first().select(["r:diaObjectId", pl.col("r:midpointMjdTai").alias("peak_mjd")]))
+
+    return (band_df.join(peak_mjds, on="r:diaObjectId", how="inner").filter(pl.col("r:midpointMjdTai").is_between(pl.col("peak_mjd") - 30.0, pl.col("peak_mjd") + 70.0)
             & pl.col("r:psfFlux").is_finite()
             & pl.col("r:psfFluxErr").is_finite()
             & (pl.col("r:psfFluxErr") > 0)
@@ -207,114 +207,30 @@ if __name__ == "__main__":
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    LIGHT_CURVE_DATA = (
-        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    TWENTY_OBJECT_DELTA_CHI2_RESULTS = (
-        DATA_DIR
-        / "constant_minus_shape_results"
-        / "20_object_test"
-        / "20_object_test.csv"
+    OBJECTS = DATA_DIR / "peak_timing_cut_results" / "pass.csv"
+
+    BAZIN_FIT_DATA_PATH = (
+        DATA_DIR / "bazin_fit_results" / "bazin_fits_i_band_results.csv"
     )
 
-    TWENTY_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH = (
-        IMAGE_DIR / "constant_minus_shape_plots" / "delta_chi_plots" / "20_object_test"
-    )
+    PASS = DATA_DIR / "constant_minus_shape_result" / "pass.csv"
 
-    TWENTY_OBJECT_TIMING_CUTS_RESULTS = (
-        DATA_DIR
-        / "peak_timing_cuts_results"
-        / "20_object_test"
-        / "20_object_test_pass.csv"
-    )
+    FAIL = DATA_DIR / "constant_minus_shape_result" / "fail.csv"
 
-    TWENTY_OBJECT_I_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "bazin_fits_results"
-        / "20_object_test"
-        / "bazin_fits_i_band_results.csv"
-    )
+    VALUES = DATA_DIR / "constant_minus_shape_result" / "values.csv"
 
-    HUNDRED_OBJECT_TIMING_CUTS_RESULTS = (
-        DATA_DIR
-        / "peak_timing_cuts_results"
-        / "100_object_test"
-        / "100_object_test_pass.csv"
-    )
-
-    HUNDRED_OBJECT_I_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "bazin_fits_results"
-        / "100_object_test"
-        / "bazin_fits_i_band_results.csv"
-    )
-
-    HUNDRED_OBJECT_DELTA_CHI2_RESULTS = (
-        DATA_DIR
-        / "constant_minus_shape_results"
-        / "100_object_test"
-        / "100_object_test.csv"
-    )
-
-    HUNDRED_OBJECT_DELTA_CHI2_PLOT_OUTPUT_PATH = (
-        IMAGE_DIR / "constant_minus_shape_plots" / "delta_chi_plots" / "100_object_test"
-    )
-
-    SN_IA_TIMING_CUTS_RESULTS = (
-        DATA_DIR / "sn_ia_test_results" / "timing_cuts_results" / "pass.csv"
-    )
-
-    SN_II_TIMING_CUTS_RESULTS = (
-        DATA_DIR / "sn_ii_test_results" / "timing_cuts_results" / "pass.csv"
-    )
-
-    SN_IA_I_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "sn_ia_test_results"
-        / "bazin_fits_results"
-        / "bazin_fits_i_band_results.csv"
-    )
-
-    SN_II_I_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "sn_ii_test_results"
-        / "bazin_fits_results"
-        / "bazin_fits_i_band_results.csv"
-    )
-
-    SN_IA_CHI2_CUT_PASS_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "pass.csv"
-    )
-
-    SN_IA_CHI2_CUT_FAIL_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "fail.csv"
-    )
-
-    SN_IA_CHI2_CUT_VALUES_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "constant_minus_shape_results" / "values.csv"
-    )
-
-    SN_II_CHI2_CUT_PASS_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "pass.csv"
-    )
-
-    SN_II_CHI2_CUT_FAIL_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "fail.csv"
-    )
-
-    SN_II_CHI2_CUT_VALUES_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "constant_minus_shape_results" / "values.csv"
-    )
-
-    print(
-        constant_batch_fits(
-            object_path=SN_IA_TIMING_CUTS_RESULTS,
-            light_curve_data_path=LIGHT_CURVE_DATA,
-            band="i",
-        )
+    compute_delta_chi(
+        object_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        band="i",
+        bazin_fit_data_path=BAZIN_FIT_DATA_PATH,
+        output_path=VALUES,
     )

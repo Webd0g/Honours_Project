@@ -159,70 +159,24 @@ if __name__ == "__main__":
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SN_IA_OBJECTS = DATA_DIR / "sn_ia_test_results" / "sampling_results" / "pass.csv"
-
-    SN_IA_I_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "sn_ia_test_results"
-        / "bazin_fits_results"
-        / "bazin_fits_i_band_results.csv"
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    SN_IA_R_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "sn_ia_test_results"
-        / "bazin_fits_results"
-        / "bazin_fits_r_band_results.csv"
-    )
+    OBJECTS = DATA_DIR / "sampling_results" / "pass.csv"
 
-    SN_II_I_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "sn_ii_test_results"
-        / "bazin_fits_results"
-        / "bazin_fits_i_band_results.csv"
-    )
+    PASS = DATA_DIR / "fitted_peak_timing_results" / "pass.csv"
 
-    SN_II_R_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR
-        / "sn_ii_test_results"
-        / "bazin_fits_results"
-        / "bazin_fits_r_band_results.csv"
-    )
+    FAIL = DATA_DIR / "fitted_peak_timing_results" / "fail.csv"
 
-    SN_II_OBJECTS = DATA_DIR / "sn_ii_test_results" / "sampling_results" / "pass.csv"
-
-    SN_IA_PASS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "pass.csv"
-    )
-
-    SN_IA_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "fail.csv"
-    )
-
-    SN_IA_VALUES_OUTPUT_PATH = (
-        DATA_DIR / "sn_ia_test_results" / "fitted_peak_timing_results" / "values.csv"
-    )
-
-    SN_II_PASS_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "pass.csv"
-    )
-
-    SN_II_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "fail.csv"
-    )
-
-    SN_II_VALUES_OUTPUT_PATH = (
-        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "values.csv"
-    )
-
-    SPECTRO_STRIP_PLOT_OUTPUT_PATH = IMAGE_DIR / "fitted_peak_timing_plots" / "spectro"
+    VALUES = DATA_DIR / "fitted_peak_timing_results" / "values.csv"
 
     df = peak_timing_cut(
-        objects_path=SN_IA_OBJECTS,
+        objects_path=OBJECTS,
         i_band_bazin_fits_path=SN_IA_I_BAND_BAZIN_FITS_RESULTS,
         r_band_bazin_fits_path=SN_IA_R_BAND_BAZIN_FITS_RESULTS,
         peak_time_difference_threshold=10.0,
