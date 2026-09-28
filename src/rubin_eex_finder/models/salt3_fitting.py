@@ -620,6 +620,342 @@ def many_object_salt3_fits(
     return results_df
 
 
+def many_object_salt3_fits_version_2(
+    objects_path: Path,
+    light_curve_data_path: Path,
+    output_path: Path,
+    plot_output_path: Path | None = None,
+) -> pl.DataFrame:
+    """Fit SALT3 to SN-like objects using either spectroscopic redshift or host
+
+    photometric redshift. Handles missing host_photoz/host_photoz_err columns.
+    """
+
+    # Read CSV with only the specified columns
+    objects_df = pl.read_csv(
+        objects_path,
+        schema_overrides={
+            "r:diaObjectId": pl.String,
+            "redshift": pl.Float64,
+            "host_photoz": pl.Float64,
+            "host_photoz_err": pl.Float64,
+        },
+    )
+
+    # Load and filter light curve parquet data
+    light_curve_data = (
+        pl.read_parquet(light_curve_data_path)
+        .with_columns(pl.col("r:diaObjectId").cast(pl.String))
+        .filter(
+            pl.col("r:diaObjectId").is_in(objects_df["r:diaObjectId"])
+            & pl.col("r:midpointMjdTai").is_finite()
+            & pl.col("r:psfFlux").is_finite()
+            & pl.col("r:psfFluxErr").is_finite()
+            & (pl.col("r:psfFluxErr") > 0)
+        )
+    )
+
+    # Group light curve data by diaObjectId
+    groups = {
+        key[0]: group_df.sort("r:midpointMjdTai")
+        for key, group_df in light_curve_data.group_by(
+            "r:diaObjectId",
+            maintain_order=True,
+        )
+    }
+
+    band_map = {
+        "u": "lsstu",
+        "g": "lsstg",
+        "r": "lsstr",
+        "i": "lssti",
+        "z": "lsstz",
+        "y": "lssty",
+    }
+
+    if plot_output_path is not None:
+        plot_output_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+    results = []
+
+    for row in objects_df.iter_rows(named=True):
+        object_id = row["r:diaObjectId"]
+        spec_z = row.get("redshift")
+        host_pz = row.get("host_photoz")
+        host_pz_err = row.get("host_photoz_err")
+
+        # Resolve redshift preference: redshift -> host_photoz
+        if spec_z is not None and np.isfinite(spec_z) and spec_z > 0:
+            z_used = spec_z
+            z_source = "spectroscopic"
+        elif host_pz is not None and np.isfinite(host_pz) and host_pz > 0:
+            z_used = host_pz
+            z_source = "host_photoz"
+        else:
+            # Skip objects without any valid redshift
+            results.append(
+                {
+                    "r:diaObjectId": object_id,
+                    "z_used": None,
+                    "z_source": None,
+                    "host_photoz": host_pz,
+                    "host_photoz_err": host_pz_err,
+                    "spec_z": spec_z,
+                    "t0": None,
+                    "t0_err": None,
+                    "x0": None,
+                    "x0_err": None,
+                    "x1": None,
+                    "x1_err": None,
+                    "c": None,
+                    "c_err": None,
+                    "chi2": None,
+                    "ndof": None,
+                    "reduced_chi2": None,
+                    "n_total_data": 0,
+                    "n_phase_data": 0,
+                    "n_fit_data": 0,
+                    "n_used": 0,
+                    "fit_success": False,
+                    "fit_message": "No valid redshift available",
+                }
+            )
+            continue
+
+        group_df = groups.get(object_id)
+
+        if group_df is None or group_df.height == 0:
+            results.append(
+                {
+                    "r:diaObjectId": object_id,
+                    "z_used": z_used,
+                    "z_source": z_source,
+                    "host_photoz": host_pz,
+                    "host_photoz_err": host_pz_err,
+                    "spec_z": spec_z,
+                    "t0": None,
+                    "t0_err": None,
+                    "x0": None,
+                    "x0_err": None,
+                    "x1": None,
+                    "x1_err": None,
+                    "c": None,
+                    "c_err": None,
+                    "chi2": None,
+                    "ndof": None,
+                    "reduced_chi2": None,
+                    "n_total_data": 0,
+                    "n_phase_data": 0,
+                    "n_fit_data": 0,
+                    "n_used": 0,
+                    "fit_success": False,
+                    "fit_message": "No light-curve data",
+                }
+            )
+            continue
+
+        n_total_data = group_df.height
+
+        # Dynamically estimate initial peak t0 guess using max flux (prefer i or r band)
+        i_band_df = group_df.filter(pl.col("r:band") == "i")
+        r_band_df = group_df.filter(pl.col("r:band") == "r")
+
+        if i_band_df.height > 0:
+            initial_t0_guess = i_band_df.sort("r:psfFlux", descending=True)[
+                "r:midpointMjdTai"
+            ][0]
+        elif r_band_df.height > 0:
+            initial_t0_guess = r_band_df.sort("r:psfFlux", descending=True)[
+                "r:midpointMjdTai"
+            ][0]
+        else:
+            initial_t0_guess = group_df.sort("r:psfFlux", descending=True)[
+                "r:midpointMjdTai"
+            ][0]
+
+        # Rest-frame phase cut [-10, 40] relative to peak guess
+        group_df = group_df.with_columns(
+            ((pl.col("r:midpointMjdTai") - initial_t0_guess) / (1.0 + z_used)).alias(
+                "rest_frame_phase"
+            ),
+        )
+
+        group_df = group_df.filter(
+            (pl.col("rest_frame_phase") >= -10) & (pl.col("rest_frame_phase") <= 40)
+        )
+
+        n_phase_data = group_df.height
+
+        if n_phase_data == 0:
+            results.append(
+                {
+                    "r:diaObjectId": object_id,
+                    "z_used": z_used,
+                    "z_source": z_source,
+                    "host_photoz": host_pz,
+                    "host_photoz_err": host_pz_err,
+                    "spec_z": spec_z,
+                    "t0": None,
+                    "t0_err": None,
+                    "x0": None,
+                    "x0_err": None,
+                    "x1": None,
+                    "x1_err": None,
+                    "c": None,
+                    "c_err": None,
+                    "chi2": None,
+                    "ndof": None,
+                    "reduced_chi2": None,
+                    "n_total_data": n_total_data,
+                    "n_phase_data": 0,
+                    "n_fit_data": 0,
+                    "n_used": 0,
+                    "fit_success": False,
+                    "fit_message": "No data in rest phase range",
+                }
+            )
+            continue
+
+        model = sncosmo.Model(source="salt3")
+
+        # Prepare astropy table for SNCosmo
+        fit_df = group_df.with_columns(
+            pl.col("r:band").replace(band_map).alias("sncosmo_band")
+        )
+
+        data = Table(
+            {
+                "time": fit_df["r:midpointMjdTai"].to_numpy(),
+                "band": fit_df["sncosmo_band"].to_numpy(),
+                "flux": fit_df["r:psfFlux"].to_numpy(),
+                "fluxerr": fit_df["r:psfFluxErr"].to_numpy(),
+                "zp": np.full(fit_df.height, 31.4),
+                "zpsys": np.full(fit_df.height, "ab"),
+            }
+        )
+
+        # Set redshift bounds
+        if (
+            z_source == "host_photoz"
+            and host_pz_err is not None
+            and np.isfinite(host_pz_err)
+            and host_pz_err > 0
+        ):
+            z_min = max(0.001, z_used - 2.0 * host_pz_err)
+            z_max = z_used + 2.0 * host_pz_err
+        elif z_source == "spectroscopic":
+            # Spectroscopic z is precise; narrow search bound
+            z_min = max(0.001, z_used - 0.01)
+            z_max = z_used + 0.01
+        else:
+            z_min = max(0.001, z_used - 0.05)
+            z_max = z_used + 0.05
+
+        try:
+            model.set(z=z_used)
+
+            result, fitted_model = sncosmo.fit_lc(
+                data,
+                model,
+                ["z", "t0", "x0", "x1", "c"],
+                bounds={
+                    "z": (z_min, z_max),
+                    "t0": (initial_t0_guess - 30, initial_t0_guess + 30),
+                    "x1": (-5, 5),
+                    "c": (-0.5, 0.5),
+                },
+                modelcov=True,
+            )
+
+            reduced_chi2 = result.chisq / result.ndof if result.ndof > 0 else None
+            n_used = int(np.sum(result.data_mask))
+            unique_bands = set(fit_df["r:band"].to_list())
+
+            results.append(
+                {
+                    "r:diaObjectId": object_id,
+                    "z_used": fitted_model["z"],
+                    "z_source": z_source,
+                    "host_photoz": host_pz,
+                    "host_photoz_err": host_pz_err,
+                    "spec_z": spec_z,
+                    "t0": fitted_model["t0"],
+                    "t0_err": result.errors.get("t0"),
+                    "x0": fitted_model["x0"],
+                    "x0_err": result.errors.get("x0"),
+                    "x1": fitted_model["x1"],
+                    "x1_err": result.errors.get("x1"),
+                    "c": fitted_model["c"],
+                    "c_err": result.errors.get("c"),
+                    "chi2": result.chisq,
+                    "ndof": result.ndof,
+                    "reduced_chi2": reduced_chi2,
+                    "n_total_data": n_total_data,
+                    "n_phase_data": n_phase_data,
+                    "n_fit_data": len(data),
+                    "n_used": n_used,
+                    "fit_success": result.success,
+                    "fitted_bands": ",".join(sorted(unique_bands)),
+                    "u_fitted": "u" in unique_bands,
+                    "g_fitted": "g" in unique_bands,
+                    "r_fitted": "r" in unique_bands,
+                    "i_fitted": "i" in unique_bands,
+                    "z_fitted": "z" in unique_bands,
+                    "y_fitted": "y" in unique_bands,
+                    "fit_message": str(result.message),
+                }
+            )
+
+            if plot_output_path is not None:
+                sncosmo.plot_lc(
+                    data,
+                    model=fitted_model,
+                    errors=result.errors,
+                )
+                plt.savefig(
+                    plot_output_path / f"{object_id}_SALT3.png",
+                    bbox_inches="tight",
+                )
+                plt.close()
+
+        except Exception as error:
+            results.append(
+                {
+                    "r:diaObjectId": object_id,
+                    "z_used": z_used,
+                    "z_source": z_source,
+                    "host_photoz": host_pz,
+                    "host_photoz_err": host_pz_err,
+                    "spec_z": spec_z,
+                    "t0": None,
+                    "t0_err": None,
+                    "x0": None,
+                    "x0_err": None,
+                    "x1": None,
+                    "x1_err": None,
+                    "c": None,
+                    "c_err": None,
+                    "chi2": None,
+                    "ndof": None,
+                    "reduced_chi2": None,
+                    "n_total_data": n_total_data,
+                    "n_phase_data": n_phase_data,
+                    "n_fit_data": 0,
+                    "n_used": 0,
+                    "fit_success": False,
+                    "fit_message": str(error),
+                }
+            )
+
+    results_df = pl.DataFrame(results)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    results_df.write_csv(output_path)
+    return results_df
+
+
 if __name__ == "__main__":
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
@@ -633,25 +969,17 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    I_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR / "bazin_fit_results" / "bazin_fits_i_band_results.csv"
-    )
-
-    R_BAND_BAZIN_FITS_RESULTS = (
-        DATA_DIR / "bazin_fit_results" / "bazin_fits_r_band_results.csv"
-    )
-
     OBJECTS = DATA_DIR / "fitted_peak_timing_results" / "pass.csv"
 
-    PASS = DATA_DIR / "fitted_peak_timing_results" / "pass.csv"
+    SALT_VALUES_OUTPUT_PATH = DATA_DIR / "salt_fitting" / "salt_fit_values.csv"
 
-    FAIL = DATA_DIR / "fitted_peak_timing_results" / "fail.csv"
+    OBJECTS_REDSHIFT_OUTPUT = DATA_DIR / "salt_fitting" / "objects_and_redshifts.csv"
 
-    VALUES = DATA_DIR / "fitted_peak_timing_results" / "values.csv"
+    SALT_PLOT_OUTPUT_PATH = IMAGE_DIR / "forced_photometry_plots" / "salt_fits"
 
-    results = many_object_salt3_fits(
-        objects_path=OBJECTS_PATH,
-        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-        output_path=EEX_SALT_RESULTS_PATH,
-        plot_output_path=EEX_SALT_PLOTS_PATH,
+    many_object_salt3_fits_version_2(
+        objects_path=OBJECTS_REDSHIFT_OUTPUT,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        output_path=SALT_VALUES_OUTPUT_PATH,
+        plot_output_path=SALT_PLOT_OUTPUT_PATH,
     )

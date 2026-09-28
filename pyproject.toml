@@ -9,7 +9,7 @@ description = "Rubin early excess finder pipeline"
 authors = [{name = "Riley Webster"}]
 readme = "README.md"
 requires-python = ">=3.10"
-depndecies = [
+dependencies = [
     "polars",
     "numpy",
     "matplotlib",

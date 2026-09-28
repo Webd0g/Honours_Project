@@ -11,3 +11,6 @@ __pycache__
 /src/**
 /notebooks
 /notebooks/**
+.toml
+.md
+.txt
