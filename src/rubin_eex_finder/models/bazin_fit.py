@@ -277,8 +277,8 @@ if __name__ == "__main__":
     bazin_batch_fits(
         csv_path=OBJECTS,
         light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-        band="i",
+        band="r",
         algorithm="mcmc",
         mcmc_niter=2000,
-        output_path=OUTPUT_PATH / "bazin_fits_i_band_results.csv",
+        output_path=OUTPUT_PATH / "bazin_fits_r_band_results.csv",
     )

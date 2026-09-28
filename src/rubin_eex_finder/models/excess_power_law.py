@@ -1081,7 +1081,7 @@ if __name__ == "__main__":
     )
 
     PLOTS_OUTPUT_PATH = (
-        IMAGE_DIR / "early_excess_plots" / "simple_power_law" / "4_day_window"
+        IMAGE_DIR / "early_excess_plots" / "simple_power_law" / "4_day_window" / "pass"
     )
 
     TEST_OBJECT_DIR = (
@@ -1148,10 +1148,10 @@ if __name__ == "__main__":
         window_length=4,
     )
 
-    test_result = fitting_power_law(
-        rest_frame_objects=rest_data_no_eex,
-        n_steps=2000,
-    )
+    # test_result = fitting_power_law(
+    #     rest_frame_objects=rest_data_no_eex,
+    #     n_steps=2000,
+    # )
 
     # walkers_chain_plot(
     #     sampler_results=test_result[1],
@@ -1168,14 +1168,15 @@ if __name__ == "__main__":
     #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
     # )
 
-    # test_result = pl.read_csv(
-    #     source=POWER_LAW_PARAMS,
-    #     schema_overrides={"r:diaObjectId": pl.String},
-    # )
+    test_result = pl.read_csv(
+        source=POWER_LAW_PARAMS,
+        schema_overrides={"r:diaObjectId": pl.String},
+    )
 
     fit_sample_parameters_plot(
         pl_fit_params_df=test_result,
         rest_frame_no_eex=rest_data_no_eex,
         window_length=4,
         full_rest_data_df=full_rest_data,
+        output_path=PLOTS_OUTPUT_PATH
     )

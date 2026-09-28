@@ -117,7 +117,7 @@ def peak_timing_cut(
     fitted_peak_times_df = fitted_peak_times(
         objects_path, i_band_bazin_fits_path, r_band_bazin_fits_path
     ).with_columns(
-        passess_peak_timing=pl.when(pl.col("valid_i_peak") & pl.col("valid_r_peak"))
+        passes_peak_timing=pl.when(pl.col("valid_i_peak") & pl.col("valid_r_peak"))
         .then(pl.col("peak_time_difference") <= peak_time_difference_threshold)
         .otherwise(True),
         fitted_peak_testable=(pl.col("valid_i_peak") & pl.col("valid_r_peak")),
@@ -167,6 +167,14 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
+    I_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR / "bazin_fit_results" / "bazin_fits_i_band_results.csv"
+    )
+
+    R_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR / "bazin_fit_results" / "bazin_fits_r_band_results.csv"
+    )
+
     OBJECTS = DATA_DIR / "sampling_results" / "pass.csv"
 
     PASS = DATA_DIR / "fitted_peak_timing_results" / "pass.csv"
@@ -177,12 +185,12 @@ if __name__ == "__main__":
 
     df = peak_timing_cut(
         objects_path=OBJECTS,
-        i_band_bazin_fits_path=SN_IA_I_BAND_BAZIN_FITS_RESULTS,
-        r_band_bazin_fits_path=SN_IA_R_BAND_BAZIN_FITS_RESULTS,
-        peak_time_difference_threshold=10.0,
-        # peak_time_difference_output_path=SN_IA_VALUES_OUTPUT_PATH,
-        # pass_output_path=SN_IA_PASS_OUTPUT_PATH,
-        # fail_output_path=SN_IA_FAIL_OUTPUT_PATH,
+        i_band_bazin_fits_path=I_BAND_BAZIN_FITS_RESULTS,
+        r_band_bazin_fits_path=R_BAND_BAZIN_FITS_RESULTS,
+        peak_time_difference_threshold=50.0,
+        peak_time_difference_output_path=VALUES,
+        pass_output_path=PASS,
+        fail_output_path=FAIL,
     )
 
-    print(df.head())
+    print(df.filter(pl.col("passes_peak_timing")))

@@ -181,7 +181,7 @@ def first_detection_determination(nightly_data: pl.DataFrame) -> pl.DataFrame:
     # Sort the data chronologically by object, band and time.
     data_sorted = nightly_data.sort(
         by=[
-            "r:diaObject",
+            "r:diaObjectId",
             "r:band",
             "nightly_mjd",
         ]
@@ -579,3 +579,19 @@ if __name__ == "__main__":
     EEX_SALT_PLOTS_PATH = (
         IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results"
     )
+
+    light_curve_data = loading_light_curve_data_and_objects(
+        objects_path=OBJECTS_PATH,
+        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+    )
+
+    test_nightly_data = nightly_weighted_average(
+        light_curve_data=light_curve_data,
+    )
+
+    test = first_detection_determination(
+        nightly_data=test_nightly_data,
+    )
+
+    pl.Config.set_tbl_rows(-1)
+    print(test)

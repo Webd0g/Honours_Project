@@ -621,37 +621,33 @@ def many_object_salt3_fits(
 
 
 if __name__ == "__main__":
-    PROJECT_ROOT = (
+    PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_ROOT / "data"
+    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
 
-    IMAGE_DIR = PROJECT_ROOT / "images"
+    IMAGE_DIR = PROJECT_DIR / "images"
 
-    OBJECTS_PATH = (
-        DATA_DIR
-        / "salt_fitting"
-        / "ia_search"
-        / "with_z_results"
-        / "salt_fit_values.csv"
+    LIGHT_CURVE_DATA_DIR = (
+        DATA_DIR / "light_curve_data" / "forced_photometry_light_curve_data.parquet"
     )
 
-    LIGHT_CURVE_DATA_PATH = (
-        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    I_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR / "bazin_fit_results" / "bazin_fits_i_band_results.csv"
     )
 
-    EEX_SALT_RESULTS_PATH = (
-        DATA_DIR
-        / "eex_results"
-        / "salt_method"
-        / "salt_fits"
-        / "salt_fit_values.csv"
+    R_BAND_BAZIN_FITS_RESULTS = (
+        DATA_DIR / "bazin_fit_results" / "bazin_fits_r_band_results.csv"
     )
 
-    EEX_SALT_PLOTS_PATH = (
-        IMAGE_DIR / "salt_plots" / "eex_search" / "salt_fits"
-    )
+    OBJECTS = DATA_DIR / "fitted_peak_timing_results" / "pass.csv"
+
+    PASS = DATA_DIR / "fitted_peak_timing_results" / "pass.csv"
+
+    FAIL = DATA_DIR / "fitted_peak_timing_results" / "fail.csv"
+
+    VALUES = DATA_DIR / "fitted_peak_timing_results" / "values.csv"
 
     results = many_object_salt3_fits(
         objects_path=OBJECTS_PATH,
