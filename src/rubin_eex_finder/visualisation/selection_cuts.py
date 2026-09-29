@@ -655,8 +655,7 @@ def plot_salt_phase_diagnostic(
 
         if output_dir is not None:
             fig.savefig(output_dir / f"{object_id}_phase_diagnostic.png")
-        plt.show()
-        # plt.close(fig)
+        plt.close(fig)
 
 
 def strip_plot(
@@ -886,17 +885,20 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    IA_OBJECTS = DATA_DIR / "sn_ia_test_results" / "phase_results" / "values.csv"
-
-    II_OBJECTS = (
-        DATA_DIR / "sn_ii_test_results" / "fitted_peak_timing_results" / "values.csv"
+    OBJECTS = (
+        DATA_DIR
+        / "salt_fitting"
+        / "ia_search"
+        / "with_z_results"
+        / "phase_cuts_results"
+        / "fail.csv"
     )
 
     LIGHT_CURVE_DATA = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    OUTPUT_PATH = IMAGE_DIR / "fitted_peak_timing_plots" / "spectro"
+    OUTPUT_PATH = IMAGE_DIR / "salt_plots" / "ia_search" / "phase_cuts" / "fail"
 
     BAND_MAP = {
         "u": "lsstu",
@@ -908,7 +910,8 @@ if __name__ == "__main__":
     }
 
     plot_salt_phase_diagnostic(
-        phase_results_path=IA_OBJECTS,
+        phase_results_path=OBJECTS,
         light_curve_data_path=LIGHT_CURVE_DATA,
         band_map=BAND_MAP,
+        output_dir=OUTPUT_PATH,
     )

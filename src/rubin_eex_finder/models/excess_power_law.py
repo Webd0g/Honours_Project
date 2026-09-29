@@ -859,6 +859,15 @@ def fit_sample_parameters_plot(
         output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
     """
 
+    band_colours = {
+        "u": "#00008B",
+        "g": "#0080FF",  # Deep Sky Blue
+        "r": "#00E575",  # Bluish Green / Emerald
+        "i": "#FFD700",  # Yellow
+        "z": "#FF4500",  # Vermilion / Red-Orange
+        "y": "#A52A2A",
+    }
+
     for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
         diaObjectId = object_df["r:diaObjectId"].item()
         t_fd_rest = object_df["t_fd_rest"].item()
@@ -867,14 +876,7 @@ def fit_sample_parameters_plot(
 
         # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
         fake_times = [
-            t_fd_rest - offset
-            for offset in [
-                10.0,
-                8.0,
-                6.0,
-                4.0,
-                2.0,
-            ]
+            t_fd_rest - 5
         ]
         synthetic_rows = []
         for current_band in ["g", "r", "i"]:
@@ -988,18 +990,21 @@ def fit_sample_parameters_plot(
 
             in_ranges = (times >= t_fd_rest) & (times <= t_fd_rest + window_length)
 
-            plot_data = axes_fit.errorbar(
-                x=times[in_ranges],
-                y=flux[in_ranges],
-                yerr=flux_error[in_ranges],
-                fmt="o",
-                capsize=3,
-                mec="white",
-                mew=1,
-                alpha=0.3,
+            data_colour = band_colours.get(
+                band,
+                "black",
             )
 
-            data_colour = plot_data.lines[0].get_color()
+            # plot_data = axes_fit.errorbar(
+            #     x=times[in_ranges],
+            #     y=flux[in_ranges],
+            #     yerr=flux_error[in_ranges],
+            #     fmt="o",
+            #     capsize=3,
+            #     mec="white",
+            #     mew=1,
+            #     alpha=0.3,
+            # )
 
             axes_fit.errorbar(
                 x=times[~in_ranges],
@@ -1076,28 +1081,28 @@ def fit_sample_parameters_plot(
             x=t_fd_rest,
             linestyle="--",
             label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
-            color="#0072B2",
+            color="#4E51E9",
         )
 
         axes_fit.axvline(
             x=t_fd_rest + window_length,
             linestyle=":",
             label=rf"$t_{{fd}} + {window_length} ={t_fd_rest + window_length:.2f}$ d",
-            color="#0072B2",
+            color="#4E51E9",
         )
 
         axes_resid.axvline(
             x=t_fd_rest,
             linestyle="--",
             label=rf"$t_{{fd}}={t_fd_rest:.2f}$ d",
-            color="#0072B2",
+            color="#4E51E9",
         )
 
         axes_resid.axvline(
             x=t_fd_rest + window_length,
             linestyle=":",
             label=rf"$t_{{fd}} + {window_length} ={t_fd_rest + window_length:.2f}$ d",
-            color="#0072B2",
+            color="#4E51E9",
         )
 
         axes_fit.axvline(
@@ -1110,6 +1115,7 @@ def fit_sample_parameters_plot(
         axes_fit.set_ylabel("Flux (nJy)")
         axes_resid.set_xlabel(r"Rest-frame days since $B$-band peak")
         axes_resid.set_ylabel("Pull")
+        axes_fit.set_title(label=f"{object_id[0]}")
         axes_fit.legend(
             loc="best",
             frameon=False,
