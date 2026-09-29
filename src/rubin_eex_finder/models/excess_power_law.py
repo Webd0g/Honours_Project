@@ -1230,7 +1230,7 @@ if __name__ == "__main__":
 
     rest_data_no_eex = excluding_excess_window(
         rest_frame_conversion_df=full_rest_data,
-        window_length=4,
+        window_length=3,
     )
 
     test_result = fitting_power_law(
@@ -1261,7 +1261,7 @@ if __name__ == "__main__":
     fit_sample_parameters_plot(
         pl_fit_params_df=test_result,
         rest_frame_no_eex=rest_data_no_eex,
-        window_length=4,
+        window_length=3,
         full_rest_data_df=full_rest_data,
         # output_path=PLOTS_OUTPUT_PATH
     )

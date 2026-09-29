@@ -87,7 +87,7 @@ def query_fink_chunk(
             },
             timeout=timeout,
         )
-        
+
         # Explicit check for server errors before calling raise_for_status()
         if r.status_code in (500, 502, 503, 504, 429):
             raise re.exceptions.HTTPError(f"Server error {r.status_code}", response=r)
@@ -98,11 +98,19 @@ def query_fink_chunk(
             return pl.read_json(io.BytesIO(r.content))
         return pl.DataFrame()
 
-    except (re.exceptions.HTTPError, re.exceptions.Timeout, re.exceptions.ConnectionError) as e:
-        status_code = getattr(e.response, "status_code", None) if hasattr(e, "response") else None
-        
+    except (
+        re.exceptions.HTTPError,
+        re.exceptions.Timeout,
+        re.exceptions.ConnectionError,
+    ) as e:
+        status_code = (
+            getattr(e.response, "status_code", None) if hasattr(e, "response") else None
+        )
+
         # Target transient server/gateway failures and timeouts for splitting
-        if isinstance(e, (re.exceptions.Timeout, re.exceptions.ConnectionError)) or status_code in (500, 502, 503, 504, 429):
+        if isinstance(
+            e, (re.exceptions.Timeout, re.exceptions.ConnectionError)
+        ) or status_code in (500, 502, 503, 504, 429):
             if len(chunk_objects) <= 1:
                 print(f"  [Warning] Skipping unqueryable object ID: {chunk_objects}")
                 return pl.DataFrame()
@@ -119,6 +127,7 @@ def query_fink_chunk(
             return pl.concat(dfs, how="diagonal") if dfs else pl.DataFrame()
         else:
             raise
+
 
 band_colours = {
     "u": "darkblue",
@@ -227,41 +236,172 @@ def batch_plotter(object_path: Path, light_curve_data_path: Path, output_path: P
         lightcurve_plotting(group_df, object_id, output_path)
 
 
-if __name__ == "__main__":
-    API_URL = "https://api.lsst.fink-portal.org/api/v1/fp"
+def colour_calculation(
+    salt_eex_candidates_object_path: Path,
+    power_law_eex_candidate_objects_path: Path,
+    light_curve_data_path: Path,
+    colour_calculation_output_path: Path,
+) -> pl.DataFrame:
+    """Calcualtes the colour in magnitude space between two different bands in the early excess region of the candidate.
 
-    COLUMNS = (
-        "r:diaObjectId,r:diaSourceId,r:midpointMjdTai,r:band,r:psfFlux,r:psfFluxErr"
+    Args:
+        eex_candidate_objects (Path): Path to the CSV file for the eex candidate objects
+        light_curve_data (Path): Path to the light curve data for all the objects.
+
+    Returns:
+        pl.DataFrame: The dataframe with the g-r colour for the eex candidate objects.
+    """
+
+    power_law_eex_candidates = pl.read_csv(
+        source=power_law_eex_candidate_objects_path,
+        schema_overrides={"r:diaObjectId": pl.String},
     )
 
+    salt_eex_candidates = pl.read_csv(
+        source=salt_eex_candidates_object_path,
+        schema_overrides={"r:diaObjectId": pl.String},
+    )
+
+    eex_candidates_df = pl.concat(
+        [power_law_eex_candidates, salt_eex_candidates], how="diagonal"
+    )
+
+    eex_candidates_list = eex_candidates_df["r:diaObjectId"].to_list()
+
+    light_curve_data = pl.read_parquet(source=light_curve_data_path)
+
+    light_curve_data_filtered = light_curve_data.filter(
+        pl.col("r:diaObjectId").is_in(eex_candidates_list),
+    ).sort(by=["r:diaObjectId", "r:midpointMjdTai", "r:band"], descending=False)
+
+    # Extract data points within the excess window which is three days for both salt and pl methods
+
+    eex_data_points = (
+        light_curve_data_filtered.join(
+            eex_candidates_df,
+            on="r:diaObjectId",
+            how="inner",
+        )
+        .filter(
+            pl.col("r:midpointMjdTai").is_between(
+                lower_bound=pl.col("t_fd"),
+                upper_bound=pl.col("t_fd") + 3.0,
+                closed="both",
+            )
+            & (pl.col("r:psfFlux") > 0)
+        )
+        .sort(by=["r:diaObjectId", "r:midpointMjdTai"])
+    )
+
+    eex_data_points = eex_data_points.with_columns(
+        (-2.5 * pl.col("r:psfFlux").log10() + 31.4).alias("mag"),
+        ((2.5 / np.log(10)) * (pl.col("r:psfFluxErr") / pl.col("r:psfFlux"))).alias(
+            "mag_err"
+        ),
+    )
+
+    # 1. Floor midpoint MJD to get observing night
+    nightly_mags = (
+        eex_data_points.with_columns(
+            pl.col("r:midpointMjdTai").floor().cast(pl.Int64).alias("night")
+        )
+        .group_by(["r:diaObjectId", "night", "r:band"])
+        .agg(
+            pl.col("mag").median().alias("median_mag"),
+            pl.col("mag_err").mean().alias("mean_mag_err"),
+        )
+    )
+
+    # 2. Pivot bands into separate columns (g, r, i)
+    pivoted = nightly_mags.pivot(
+        on="r:band",
+        index=["r:diaObjectId", "night"],
+        values=["median_mag", "mean_mag_err"],
+    )
+
+    # 3. Calculate g - r color (and magnitude error propagation in quadrature)
+    # Check if 'g' and 'r' exist in the pivoted columns
+    pivoted_cols = pivoted.columns
+
+    colour_exprs = []
+    if "median_mag_g" in pivoted_cols and "median_mag_r" in pivoted_cols:
+        colour_exprs.append(
+            (pl.col("median_mag_g") - pl.col("median_mag_r")).alias("g_minus_r")
+        )
+        if "mean_mag_err_g" in pivoted_cols and "mean_mag_err_r" in pivoted_cols:
+            colour_exprs.append(
+                (pl.col("mean_mag_err_g").pow(2) + pl.col("mean_mag_err_r").pow(2))
+                .sqrt()
+                .alias("g_minus_r_err")
+            )
+
+    if "median_mag_r" in pivoted_cols and "median_mag_i" in pivoted_cols:
+        colour_exprs.append(
+            (pl.col("median_mag_r") - pl.col("median_mag_i")).alias("r_minus_i")
+        )
+
+    if "median_mag_g" in pivoted_cols and "median_mag_i" in pivoted_cols:
+        colour_exprs.append(
+            (pl.col("median_mag_g") - pl.col("median_mag_i")).alias("g_minus_i")
+        )
+
+    if "median_mag_u" in pivoted_cols and "median_mag_g" in pivoted_cols:
+        colour_exprs.append(
+            (pl.col("median_mag_u") - pl.col("median_mag_g")).alias("u_minus_g")
+        )
+
+    if colour_exprs:
+        colours_df = pivoted.with_columns(colour_exprs)
+    else:
+        colours_df = pivoted
+
+    colours_df = colours_df.filter(
+        pl.col("g_minus_r").is_not_null()
+        | pl.col("r_minus_i").is_not_null()
+        | pl.col("g_minus_i").is_not_null()
+        | pl.col("u_minus_g").is_not_null()
+    )
+
+    if colour_calculation_output_path is not None:
+        colours_df.write_csv(file=colour_calculation_output_path)
+
+    # Filter for nights where same-night multi-band observations actually occurred
+    return colours_df
+
+
+if __name__ == "__main__":
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
     )
 
-    DATA_DIR = PROJECT_DIR / "data" / "forced_photometry_test"
+    DATA_DIR = PROJECT_DIR / "data"
 
-    IMAGES_DIR = PROJECT_DIR / "images"
+    IMAGE_DIR = PROJECT_DIR / "images"
 
-    OBJECTS_PATH = DATA_DIR / "object_collection_result" / "all_objects.csv"
+    SALT_OBJECTS = (
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "pass.csv"
+    )
 
-    OBJECTS = pl.read_csv(
-        source=OBJECTS_PATH, schema_overrides={"r:diaObjectId": pl.String}
-    )["r:diaObjectId"].to_list()
+    POWER_LAW_OBJECTS = (
+        DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "3_day_window"
+        / "pass.csv"
+    )
 
-    # Batch calling helper to prevent initial massive payloads
-    BATCH_SIZE = 20
-    all_dfs = []
+    LIGHT_CURVE_DATA_PATH = (
+        DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
+    )
 
-    for i in tqdm(range(0, len(OBJECTS), BATCH_SIZE), desc="Fetching Fink forced photometry"):
-        batch = OBJECTS[i : i + BATCH_SIZE]
-        df_chunk = query_fink_chunk(
-            chunk_objects=batch,
-            api_url=API_URL,
-            columns=COLUMNS,
-        )
-        if df_chunk.height > 0:
-            all_dfs.append(df_chunk)
+    COLOUR_CALCULATION_OUTPUT_PATH = (
+        DATA_DIR / "eex_results" / "eex_window_colour_results.csv"
+    )
 
-    forced_light_curve_data = pl.concat(all_dfs, how="diagonal") if all_dfs else pl.DataFrame()
-
-    forced_light_curve_data.write_parquet(file="/home/riley/Documents/University/Honours/Honours_Project/data/forced_photometry_test/light_curve_data/forced_photometry_light_curve_data.parquet")
+    colour_calculation(
+        salt_eex_candidates_object_path=SALT_OBJECTS,
+        power_law_eex_candidate_objects_path=POWER_LAW_OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
+        colour_calculation_output_path=COLOUR_CALCULATION_OUTPUT_PATH,
+    )
