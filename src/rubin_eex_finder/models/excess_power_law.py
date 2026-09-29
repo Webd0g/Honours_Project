@@ -359,7 +359,12 @@ def log_prior_function(
 
     t_fl = theta[0]
 
-    if not (-100 < t_fl < t_fd_rest):
+    alpha = theta[1]
+
+    if not (-100.0 < t_fl < t_fd_rest):
+        return -np.inf
+
+    if not 1.0 <= alpha <= 1e8:
         return -np.inf
 
     log_prior = 0.0
@@ -367,14 +372,14 @@ def log_prior_function(
     fit_bands = list(band_data.keys())
 
     for index, band in enumerate(fit_bands):
-        A_prime = theta[1 + 2 * index]
-        alpha = theta[2 + 2 * index]
+        A_prime = theta[2 + index]
+        # alpha = theta[2 + 2 * index]
 
         if A_prime <= 0:
             return -np.inf
 
-        if not 1.0 <= alpha <= 8.0:
-            return -np.inf
+        # if not 1.0 <= alpha <= 4.0:
+        #     return -np.inf
 
         log_prior += -np.log(A_prime) - alpha * np.log(10)
 
@@ -402,10 +407,11 @@ def log_likelihood_function(
     log_likelihood = 0.0
 
     t_fl = theta[0]
+    alpha = theta[1]
 
     for index, band in enumerate(fit_bands):
-        A_prime = theta[1 + 2 * index]
-        alpha = theta[2 + 2 * index]
+        A_prime = theta[2 + index]
+        # alpha = theta[2 + 2 * index]
 
         times = band_data[band]["times"]
         flux = band_data[band]["flux"]
@@ -482,21 +488,24 @@ def fitting_power_law(
         "A_prime_g": [],
         "A_prime_g_err_low": [],
         "A_prime_g_err_high": [],
-        "alpha_g": [],
-        "alpha_g_err_low": [],
-        "alpha_g_err_high": [],
+        "alpha_joint": [],
+        "alpha_joint_err_low": [],
+        "alpha_joint_err_high": [],
+        # "alpha_g": [],
+        # "alpha_g_err_low": [],
+        # "alpha_g_err_high": [],
         "A_prime_r": [],
         "A_prime_r_err_low": [],
         "A_prime_r_err_high": [],
-        "alpha_r": [],
-        "alpha_r_err_low": [],
-        "alpha_r_err_high": [],
+        # "alpha_r": [],
+        # "alpha_r_err_low": [],
+        # "alpha_r_err_high": [],
         "A_prime_i": [],
         "A_prime_i_err_low": [],
         "A_prime_i_err_high": [],
-        "alpha_i": [],
-        "alpha_i_err_low": [],
-        "alpha_i_err_high": [],
+        # "alpha_i": [],
+        # "alpha_i_err_low": [],
+        # "alpha_i_err_high": [],
         "t_fd": [],
         "t_fd_rest": [],
         "z_used": [],
@@ -511,8 +520,42 @@ def fitting_power_law(
     }
 
     for object_id, object_df in rest_frame_objects.group_by("r:diaObjectId"):
-        # Filtering the dataframe to just the individual band.
-        rest_frame_objects_df = object_df
+        t_fd_rest = object_df["t_fd_rest"].first()
+
+        # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
+        fake_times = [
+            t_fd_rest - offset
+            for offset in [
+                14.0,
+                12.0,
+                10.0,
+                8.0,
+                6.0,
+                4.0,
+                2.0,
+            ]
+        ]
+        synthetic_rows = []
+        for current_band in ["g", "r", "i"]:
+            for f_time in fake_times:
+                synthetic_rows.append(
+                    {
+                        "r:diaObjectId": object_id[0],
+                        "r:band": current_band,
+                        "rest_frame_time": f_time,
+                        "r:psfFlux": 0.0,
+                        "r:psfFluxErr": 300.0,
+                        "t_fd_rest": t_fd_rest,
+                        "t_fd": object_df["t_fd"].first(),
+                        "z_used": object_df["z_used"].first(),
+                        "t50_mjd": object_df["t50_mjd"].first(),
+                    }
+                )
+
+        synthetic_df = pl.DataFrame(synthetic_rows)
+        augmented_object_df = pl.concat([object_df, synthetic_df], how="diagonal").sort(
+            "rest_frame_time"
+        )
 
         band_data = {}
 
@@ -521,7 +564,7 @@ def fitting_power_law(
             "r",
             "i",
         ]:
-            band_df = object_df.filter(pl.col("r:band") == current_band)
+            band_df = augmented_object_df.filter(pl.col("r:band") == current_band)
 
             if band_df.height > 0:
                 band_data[current_band] = {
@@ -532,41 +575,39 @@ def fitting_power_law(
                 }
 
         # Finding the first detection for the object
-        t_fd_rest = rest_frame_objects_df["t_fd_rest"].first()
+        t_fd_rest = augmented_object_df["t_fd_rest"].first()
 
         # Bands present in the object that will be used for the fit.
         fit_bands = list(band_data.keys())
 
         # Initial guess for theta for this test object.
         theta = [
-            t_fd_rest - 2.0,
+            t_fd_rest,
+            2.0,
+        ]
+        scatter = [
+            0.5,
+            0.2,
         ]
 
         # Adding extra priors if more bands are present.
         for band in fit_bands:
-            theta.extend(
-                [
-                    2.0,
-                    4.0,
-                ]
-            )
+            max_flux = np.max(band_data[band]["flux"])
+            init_A_prime = max(100.0, max_flux * 0.5)
+            theta.append(init_A_prime)
+            scatter.append(init_A_prime * 0.1)
 
         # Converting the list to a numpy array.
         theta = np.array(theta)
 
-        # Rough scatter approximation for the fitting vector theta.
-        scatter = [
-            0.1,
-        ]
-
         # Adding extra scatter to extra extra prior for the detected bands
-        for band in fit_bands:
-            scatter.extend(
-                [
-                    0.5,
-                    0.5,
-                ]
-            )
+        # for band in fit_bands:
+        #     scatter.extend(
+        #         [
+        #             0.5,
+        #             0.5,
+        #         ]
+        #     )
 
         # Converting scatter list to numpy array.
         scatter = np.array(scatter)
@@ -601,11 +642,17 @@ def fitting_power_law(
         results["t_fl_err_low"].append(float(t_fl - q16))
         results["t_fl_err_high"].append(float(q84 - t_fl))
 
+        q16, alpha_joint, q84 = np.percentile(flat_samples[:, 1], [16, 50, 84])
+        results["alpha_joint"].append(float(alpha_joint))
+        results["alpha_joint_err_low"].append(float(alpha_joint - q16))
+        results["alpha_joint_err_high"].append(float(q84 - alpha_joint))
+
         for band in ["g", "r", "i"]:
             if band in fit_bands:
                 index = fit_bands.index(band)
-                A_prime_index = 1 + 2 * index
-                alpha_index = 2 + 2 * index
+                # A_prime_index = 1 + 2 * index
+                # alpha_index = 2 + 2 * index
+                A_prime_index = 2 + index
 
                 q16, A_prime, q84 = np.percentile(
                     flat_samples[:, A_prime_index], [16, 50, 84]
@@ -615,13 +662,13 @@ def fitting_power_law(
                 results[f"A_prime_{band}_err_low"].append(float(A_prime - q16))
                 results[f"A_prime_{band}_err_high"].append(float(q84 - A_prime))
 
-                q16, alpha, q84 = np.percentile(
-                    flat_samples[:, alpha_index], [16, 50, 84]
-                )
+                # q16, alpha, q84 = np.percentile(
+                #     flat_samples[:, alpha_index], [16, 50, 84]
+                # )
 
-                results[f"alpha_{band}"].append(float(alpha))
-                results[f"alpha_{band}_err_low"].append(float(alpha - q16))
-                results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
+                # results[f"alpha_{band}"].append(float(alpha))
+                # results[f"alpha_{band}_err_low"].append(float(alpha - q16))
+                # results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
 
             else:
                 # Append None for missing bands to preserve exact column heights
@@ -634,12 +681,12 @@ def fitting_power_law(
                 results[f"alpha_{band}_err_high"].append(None)
 
         results["r:diaObjectId"].append(object_id[0])
-        results["t_fd"].append(rest_frame_objects_df["t_fd"].item(0))
-        results["t_fd_rest"].append(rest_frame_objects_df["t_fd_rest"].item(0))
-        results["z_used"].append(rest_frame_objects_df["z_used"].item(0))
+        results["t_fd"].append(augmented_object_df["t_fd"].item(0))
+        results["t_fd_rest"].append(augmented_object_df["t_fd_rest"].item(0))
+        results["z_used"].append(augmented_object_df["z_used"].item(0))
         results["sampler_nsteps"].append(n_steps)
         results["sampler_nwalkers"].append(nwalkers)
-        results["t50_mjd"].append(rest_frame_objects_df["t50_mjd"].item(0))
+        results["t50_mjd"].append(augmented_object_df["t50_mjd"].item(0))
 
     results = pl.DataFrame(results)
 
@@ -814,6 +861,43 @@ def fit_sample_parameters_plot(
 
     for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
         diaObjectId = object_df["r:diaObjectId"].item()
+        t_fd_rest = object_df["t_fd_rest"].item()
+        t_fl_med = object_df["t_fl"].item()
+        alpha_joint = object_df["alpha_joint"].item()
+
+        # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
+        fake_times = [
+            t_fd_rest - offset
+            for offset in [
+                10.0,
+                8.0,
+                6.0,
+                4.0,
+                2.0,
+            ]
+        ]
+        synthetic_rows = []
+        for current_band in ["g", "r", "i"]:
+            for f_time in fake_times:
+                synthetic_rows.append(
+                    {
+                        "r:diaObjectId": object_id[0],
+                        "r:band": current_band,
+                        "rest_frame_time": f_time,
+                        "r:psfFlux": 0.0,
+                        "r:psfFluxErr": 300.0,
+                        "t_fd_rest": t_fd_rest,
+                        "t_fd": object_df["t_fd"].first(),
+                        "z_used": object_df["z_used"].first(),
+                        "t50_mjd": object_df["t50_mjd"].first(),
+                    }
+                )
+
+        synthetic_df = pl.DataFrame(synthetic_rows)
+        augmentented_object_df = pl.concat(
+            [full_rest_data_df, synthetic_df], how="diagonal"
+        ).sort("rest_frame_time")
+        diaObjectId = object_df["r:diaObjectId"].item()
 
         rest_band_data = {}
 
@@ -825,7 +909,7 @@ def fit_sample_parameters_plot(
             "i",
         ]:
             # Filter for the light curve data of this object in the desired band too.
-            rest_band_df = full_rest_data_df.filter(
+            rest_band_df = augmentented_object_df.filter(
                 (pl.col("r:band") == current_band)
                 & (pl.col("r:diaObjectId") == diaObjectId),
             )
@@ -858,7 +942,8 @@ def fit_sample_parameters_plot(
         for band in fit_bands:
             model_parameters[band] = {
                 "A_prime": object_df[f"A_prime_{band}"].item(),
-                "alpha": object_df[f"alpha_{band}"].item(),
+                # "alpha": object_df[f"alpha_{band}"].item(),
+                "alpha": alpha_joint,
             }
 
         t_fl_med = object_df["t_fl"].item()
@@ -1126,20 +1211,20 @@ if __name__ == "__main__":
     LABELS = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
 
     test_result = iterate_over_bands(
-        objects_dir=OBJECT_DIR,
+        objects_dir=TEST_OBJECT_DIR,
         light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
         bands=BANDS,
         fraction=0.5,
     )
 
     test_result = keep_observations_upto_t50(
-        objects=OBJECT_DIR,
+        objects=TEST_OBJECT_DIR,
         light_curve_data_path=LIGHT_CURVE_DATA_DIR,
         reference_df=test_result,
     )
 
     full_rest_data = rest_frame_conversion(
-        object_salt_data=OBJECT_DIR,
+        object_salt_data=TEST_OBJECT_DIR,
         pre_t50_objects_data=test_result,
     )
 
@@ -1148,10 +1233,10 @@ if __name__ == "__main__":
         window_length=4,
     )
 
-    # test_result = fitting_power_law(
-    #     rest_frame_objects=rest_data_no_eex,
-    #     n_steps=2000,
-    # )
+    test_result = fitting_power_law(
+        rest_frame_objects=rest_data_no_eex,
+        n_steps=2000,
+    )
 
     # walkers_chain_plot(
     #     sampler_results=test_result[1],
@@ -1168,15 +1253,15 @@ if __name__ == "__main__":
     #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
     # )
 
-    test_result = pl.read_csv(
-        source=POWER_LAW_PARAMS,
-        schema_overrides={"r:diaObjectId": pl.String},
-    )
+    # test_result = pl.read_csv(
+    #     source=POWER_LAW_PARAMS,
+    #     schema_overrides={"r:diaObjectId": pl.String},
+    # )
 
     fit_sample_parameters_plot(
         pl_fit_params_df=test_result,
         rest_frame_no_eex=rest_data_no_eex,
         window_length=4,
         full_rest_data_df=full_rest_data,
-        output_path=PLOTS_OUTPUT_PATH
+        # output_path=PLOTS_OUTPUT_PATH
     )
