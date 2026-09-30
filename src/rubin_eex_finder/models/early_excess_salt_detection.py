@@ -559,7 +559,7 @@ if __name__ == "__main__":
     )
 
     EEX_PASS_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "pass.csv"
+        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "3_day_window" / "pass.csv"
     )
 
     EEX_FAIL_OUTPUT_PATH = (
@@ -581,43 +581,46 @@ if __name__ == "__main__":
     EEX_SALT_PLOTS_PATH = (
         IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results"
     )
-
     light_curve_data = loading_light_curve_data_and_objects(
         objects_path=OBJECTS_PATH,
         light_curve_data_path=LIGHT_CURVE_DATA_PATH,
     )
 
-    pl.Config.set_tbl_cols(-1)
-    print(light_curve_data)
-
     rest_frame_object_data = rest_frame_observation_conversion(
         light_curve_data=light_curve_data,
     )
-
-    print(rest_frame_object_data)
 
     rest_frame_object_data = remove_sporadic_detections(
         light_curve_data=rest_frame_object_data,
     )
 
-    print(rest_frame_object_data)
-
-    rest_frame_object_data = nightly_weighted_average(
+    # 1. Compute nightly weighted averages
+    nightly_data = nightly_weighted_average(
         light_curve_data=rest_frame_object_data,
     )
 
-    print(rest_frame_object_data)
-
-    rest_frame_object_data = first_detection_determination(
-        nightly_data=rest_frame_object_data,
+    # 2. Extract first detection times (t_fd) per object
+    first_detections_df = first_detection_determination(
+        nightly_data=nightly_data,
     )
 
-    print(rest_frame_object_data)
+    # 3. FIX: Join t_fd BACK onto the full epoch-level light curve dataframe 
+    # so that 'r:midpointMjdTai' and 't_fd' exist together in the same DataFrame!
+    full_lc_with_t_fd = light_curve_data.join(
+        first_detections_df.select("r:diaObjectId", "t_fd"),
+        on="r:diaObjectId",
+        how="inner",
+    )
 
+    # 4. Now call eex_salt_fits_with_mask using the 3-day window
     eex_salt_results = eex_salt_fits_with_mask(
-        object_df=rest_frame_object_data,
-        excess_window_days=3,
+        object_df=full_lc_with_t_fd,
+        excess_window_days=3.0,
+        pass_output_path=EEX_PASS_OUTPUT_PATH,
+        fail_output_path=EEX_FAIL_OUTPUT_PATH,
+        values_output_path=EEX_VALUES_OUTPUT_PATH,
+        pull_output_path=EEX_PULL_RESULTS_PATH,
+        plot_output_path=EEX_SALT_PLOTS_PATH,
     )
 
-    pl.Config.set_tbl_cols(-1)
     print(eex_salt_results)

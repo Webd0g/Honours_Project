@@ -359,12 +359,7 @@ def log_prior_function(
 
     t_fl = theta[0]
 
-    alpha = theta[1]
-
     if not (-100.0 < t_fl < t_fd_rest):
-        return -np.inf
-
-    if not 1.0 <= alpha <= 1e8:
         return -np.inf
 
     log_prior = 0.0
@@ -373,13 +368,13 @@ def log_prior_function(
 
     for index, band in enumerate(fit_bands):
         A_prime = theta[2 + index]
-        # alpha = theta[2 + 2 * index]
+        alpha = theta[2 + 2 * index]
 
         if A_prime <= 0:
             return -np.inf
 
-        # if not 1.0 <= alpha <= 4.0:
-        #     return -np.inf
+        if not 1.0 <= alpha <= 1e8:
+            return -np.inf
 
         log_prior += -np.log(A_prime) - alpha * np.log(10)
 
@@ -407,11 +402,10 @@ def log_likelihood_function(
     log_likelihood = 0.0
 
     t_fl = theta[0]
-    alpha = theta[1]
 
     for index, band in enumerate(fit_bands):
-        A_prime = theta[2 + index]
-        # alpha = theta[2 + 2 * index]
+        A_prime = theta[1 + 2 * index]
+        alpha = theta[2 + 2 * index]
 
         times = band_data[band]["times"]
         flux = band_data[band]["flux"]
@@ -488,24 +482,21 @@ def fitting_power_law(
         "A_prime_g": [],
         "A_prime_g_err_low": [],
         "A_prime_g_err_high": [],
-        "alpha_joint": [],
-        "alpha_joint_err_low": [],
-        "alpha_joint_err_high": [],
-        # "alpha_g": [],
-        # "alpha_g_err_low": [],
-        # "alpha_g_err_high": [],
+        "alpha_g": [],
+        "alpha_g_err_low": [],
+        "alpha_g_err_high": [],
         "A_prime_r": [],
         "A_prime_r_err_low": [],
         "A_prime_r_err_high": [],
-        # "alpha_r": [],
-        # "alpha_r_err_low": [],
-        # "alpha_r_err_high": [],
+        "alpha_r": [],
+        "alpha_r_err_low": [],
+        "alpha_r_err_high": [],
         "A_prime_i": [],
         "A_prime_i_err_low": [],
         "A_prime_i_err_high": [],
-        # "alpha_i": [],
-        # "alpha_i_err_low": [],
-        # "alpha_i_err_high": [],
+        "alpha_i": [],
+        "alpha_i_err_low": [],
+        "alpha_i_err_high": [],
         "t_fd": [],
         "t_fd_rest": [],
         "z_used": [],
@@ -523,18 +514,7 @@ def fitting_power_law(
         t_fd_rest = object_df["t_fd_rest"].first()
 
         # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
-        fake_times = [
-            t_fd_rest - offset
-            for offset in [
-                14.0,
-                12.0,
-                10.0,
-                8.0,
-                6.0,
-                4.0,
-                2.0,
-            ]
-        ]
+        fake_times = [t_fd_rest - 2.0]
         synthetic_rows = []
         for current_band in ["g", "r", "i"]:
             for f_time in fake_times:
@@ -582,32 +562,21 @@ def fitting_power_law(
 
         # Initial guess for theta for this test object.
         theta = [
-            t_fd_rest,
-            2.0,
+            t_fd_rest - 5.0,
         ]
         scatter = [
             0.5,
-            0.2,
         ]
 
         # Adding extra priors if more bands are present.
         for band in fit_bands:
             max_flux = np.max(band_data[band]["flux"])
             init_A_prime = max(100.0, max_flux * 0.5)
-            theta.append(init_A_prime)
-            scatter.append(init_A_prime * 0.1)
+            theta.extend([init_A_prime, 2.0])
+            scatter.extend([init_A_prime * 0.1, 0.2])
 
         # Converting the list to a numpy array.
         theta = np.array(theta)
-
-        # Adding extra scatter to extra extra prior for the detected bands
-        # for band in fit_bands:
-        #     scatter.extend(
-        #         [
-        #             0.5,
-        #             0.5,
-        #         ]
-        #     )
 
         # Converting scatter list to numpy array.
         scatter = np.array(scatter)
@@ -642,17 +611,11 @@ def fitting_power_law(
         results["t_fl_err_low"].append(float(t_fl - q16))
         results["t_fl_err_high"].append(float(q84 - t_fl))
 
-        q16, alpha_joint, q84 = np.percentile(flat_samples[:, 1], [16, 50, 84])
-        results["alpha_joint"].append(float(alpha_joint))
-        results["alpha_joint_err_low"].append(float(alpha_joint - q16))
-        results["alpha_joint_err_high"].append(float(q84 - alpha_joint))
-
         for band in ["g", "r", "i"]:
             if band in fit_bands:
                 index = fit_bands.index(band)
-                # A_prime_index = 1 + 2 * index
-                # alpha_index = 2 + 2 * index
-                A_prime_index = 2 + index
+                A_prime_index = 1 + 2 * index
+                alpha_index = 2 + 2 * index
 
                 q16, A_prime, q84 = np.percentile(
                     flat_samples[:, A_prime_index], [16, 50, 84]
@@ -662,13 +625,13 @@ def fitting_power_law(
                 results[f"A_prime_{band}_err_low"].append(float(A_prime - q16))
                 results[f"A_prime_{band}_err_high"].append(float(q84 - A_prime))
 
-                # q16, alpha, q84 = np.percentile(
-                #     flat_samples[:, alpha_index], [16, 50, 84]
-                # )
+                q16, alpha, q84 = np.percentile(
+                    flat_samples[:, alpha_index], [16, 50, 84]
+                )
 
-                # results[f"alpha_{band}"].append(float(alpha))
-                # results[f"alpha_{band}_err_low"].append(float(alpha - q16))
-                # results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
+                results[f"alpha_{band}"].append(float(alpha))
+                results[f"alpha_{band}_err_low"].append(float(alpha - q16))
+                results[f"alpha_{band}_err_high"].append(float(q84 - alpha))
 
             else:
                 # Append None for missing bands to preserve exact column heights
@@ -689,6 +652,10 @@ def fitting_power_law(
         results["t50_mjd"].append(augmented_object_df["t50_mjd"].item(0))
 
     results = pl.DataFrame(results)
+
+    if fit_df_output_path is not None:
+        fit_df_output_path.parent.mkdir(parents=True, exist_ok=True)
+        results.write_csv(fit_df_output_path)
 
     return results, sampler
 
@@ -716,7 +683,7 @@ def eex_detection(
 
     pull_records = []
 
-    for object_id, object_df in pl_fit_params_df[0].group_by(
+    for object_id, object_df in pl_fit_params_df.group_by(
         "r:diaObjectId",
         maintain_order=True,
     ):
@@ -750,10 +717,12 @@ def eex_detection(
 
         for band in avaliable_bands:
             a_prime = object_df[f"A_prime_{band}"].item()
+            alpha = object_df[f"alpha_{band}"].item()
 
-            if a_prime is not None:
+            if a_prime is not None and alpha is not None:
                 model_parameters[band] = {
                     "A_prime": a_prime,
+                    "alpha": alpha,
                 }
                 fit_bands.append(band)
 
@@ -761,7 +730,6 @@ def eex_detection(
             continue
 
         t_fl_med = object_df["t_fl"].item()
-        alpha = object_df["alpha_joint"].item()
 
         for band in fit_bands:
             times = rest_band_data[band]["times"]
@@ -772,7 +740,7 @@ def eex_detection(
                 times=times,
                 t_fl=t_fl_med,
                 A_prime=model_parameters[band]["A_prime"],
-                alpha=alpha,
+                alpha=model_parameters[band]["alpha"],
             )
 
             pull = (flux - model_at_data) / (flux_error)
@@ -828,7 +796,7 @@ def eex_detection(
         .unique()["r:diaObjectId"]
     )
 
-    fit_params_with_eex = pl_fit_params_df[0].with_columns(
+    fit_params_with_eex = pl_fit_params_df.with_columns(
         pl.col("r:diaObjectId").is_in(passing_object_ids).alias("early_excess")
     )
 
@@ -871,7 +839,6 @@ def fit_sample_parameters_plot(
         diaObjectId = object_df["r:diaObjectId"].item()
         t_fd_rest = object_df["t_fd_rest"].item()
         t_fl_med = object_df["t_fl"].item()
-        alpha_joint = object_df["alpha_joint"].item()
 
         # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
         fake_times = [t_fd_rest - 5]
@@ -941,8 +908,7 @@ def fit_sample_parameters_plot(
         for band in fit_bands:
             model_parameters[band] = {
                 "A_prime": object_df[f"A_prime_{band}"].item(),
-                # "alpha": object_df[f"alpha_{band}"].item(),
-                "alpha": alpha_joint,
+                "alpha": object_df[f"alpha_{band}"].item(),
             }
 
         t_fl_med = object_df["t_fl"].item()
@@ -992,16 +958,16 @@ def fit_sample_parameters_plot(
                 "black",
             )
 
-            # plot_data = axes_fit.errorbar(
-            #     x=times[in_ranges],
-            #     y=flux[in_ranges],
-            #     yerr=flux_error[in_ranges],
-            #     fmt="o",
-            #     capsize=3,
-            #     mec="white",
-            #     mew=1,
-            #     alpha=0.3,
-            # )
+            axes_fit.errorbar(
+                x=times[in_ranges],
+                y=flux[in_ranges],
+                yerr=flux_error[in_ranges],
+                fmt="o",
+                capsize=3,
+                mec="white",
+                mew=1,
+                alpha=0.3,
+            )
 
             axes_fit.errorbar(
                 x=times[~in_ranges],
@@ -1120,8 +1086,8 @@ def fit_sample_parameters_plot(
         plt.tight_layout()
         if output_path is not None:
             plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
+            plt.close()
         plt.show()
-        plt.close()
 
 
 if __name__ == "__main__":
@@ -1133,12 +1099,13 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SALT_OBJECT_DATA_PATH = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
-    )
-
     OBJECT_DIR = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "eex_cut_results"
+        / "4_day_window"
+        / "values.csv"
     )
 
     OBJECT_PASS_OUTPUT_PATH = (
@@ -1169,7 +1136,11 @@ if __name__ == "__main__":
     )
 
     PLOTS_OUTPUT_PATH = (
-        IMAGE_DIR / "early_excess_plots" / "simple_power_law" / "3_day_window" / "pass"
+        IMAGE_DIR
+        / "early_excess_plots"
+        / "simple_power_law"
+        / "3_day_window"
+        / "values"
     )
 
     TEST_OBJECT_DIR = (
@@ -1213,58 +1184,92 @@ if __name__ == "__main__":
 
     LABELS = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
 
-    test_result = iterate_over_bands(
+    # 1. Compute reference rest-frame data
+    ref_points = iterate_over_bands(
         objects_dir=OBJECT_DIR,
         light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
         bands=BANDS,
         fraction=0.5,
     )
-
-    test_result = keep_observations_upto_t50(
+    pre_t50_data = keep_observations_upto_t50(
         objects=OBJECT_DIR,
         light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-        reference_df=test_result,
+        reference_df=ref_points,
     )
-
     full_rest_data = rest_frame_conversion(
         object_salt_data=OBJECT_DIR,
-        pre_t50_objects_data=test_result,
+        pre_t50_objects_data=pre_t50_data,
     )
 
-    rest_data_no_eex = excluding_excess_window(
+    # ----------------------------------------------------
+    # RUN 1: Simple Power Law (3-Day Window)
+    # ----------------------------------------------------
+    rest_data_no_eex_3d = excluding_excess_window(
         rest_frame_conversion_df=full_rest_data,
         window_length=3,
     )
-
-    # test_result = fitting_power_law(
-    #     rest_frame_objects=rest_data_no_eex,
-    #     n_steps=2000,
-    # )
-
-    # walkers_chain_plot(
-    #     sampler_results=test_result[1],
-    #     labels=LABELS,
-    #     discard=500,
-    # )
-
-    # eex_detection(
-    #     pl_fit_params_df=test_result,
-    #     full_rest_frame_lc_df=full_rest_data,
-    #     window_length=3,
-    #     pass_output_path=OBJECT_PASS_OUTPUT_PATH,
-    #     fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
-    #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
-    # )
-
-    test_result = pl.read_csv(
-        source=POWER_LAW_PARAMS,
-        schema_overrides={"r:diaObjectId": pl.String},
+    pl_results_3d, sampler_3d = fitting_power_law(
+        rest_frame_objects=rest_data_no_eex_3d,
+        n_steps=2000,
     )
-
+    eex_detection(
+        pl_fit_params_df=pl_results_3d,
+        full_rest_frame_lc_df=full_rest_data,
+        window_length=3,
+        pass_output_path=DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "3_day_window"
+        / "pass.csv",
+        fail_output_path=DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "3_day_window"
+        / "fail.csv",
+        values_output_path=DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "3_day_window"
+        / "values.csv",
+    )
     fit_sample_parameters_plot(
-        pl_fit_params_df=test_result,
-        rest_frame_no_eex=rest_data_no_eex,
+        pl_fit_params_df=pl_results_3d,
+        rest_frame_no_eex=rest_data_no_eex_3d,
         window_length=3,
         full_rest_data_df=full_rest_data,
-        output_path=PLOTS_OUTPUT_PATH
+        output_path=IMAGE_DIR
+        / "early_excess_plots"
+        / "simple_power_law"
+        / "3_day_window"
+        / "values",
+    )
+
+    # ----------------------------------------------------
+    # RUN 2: Simple Power Law (4-Day Window)
+    # ----------------------------------------------------
+    rest_data_no_eex_4d = excluding_excess_window(
+        rest_frame_conversion_df=full_rest_data,
+        window_length=4,
+    )
+    pl_results_4d, sampler_4d = fitting_power_law(
+        rest_frame_objects=rest_data_no_eex_4d,
+        n_steps=2000,
+    )
+    eex_detection(
+        pl_fit_params_df=pl_results_4d,
+        full_rest_frame_lc_df=full_rest_data,
+        window_length=4,
+        pass_output_path=DATA_DIR / "eex_results/simple_power_law/results/4_day_window/pass.csv",
+        fail_output_path=DATA_DIR / "eex_results/simple_power_law/results/4_day_window/fail.csv",
+        values_output_path=DATA_DIR / "eex_results/simple_power_law/results/4_day_window/values.csv",
+    )
+    fit_sample_parameters_plot(
+        pl_fit_params_df=pl_results_4d,
+        rest_frame_no_eex=rest_data_no_eex_4d,
+        window_length=4,
+        full_rest_data_df=full_rest_data,
+        output_path=IMAGE_DIR / "early_excess_plots/simple_power_law/4_day_window/values",
     )
