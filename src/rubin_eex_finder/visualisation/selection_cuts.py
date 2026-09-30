@@ -554,7 +554,7 @@ def plot_salt_phase_diagnostic(
         phase_results_path,
         schema_overrides={
             "r:diaObjectId": pl.String,
-            "host_photoz": pl.Float64,
+            "z_used": pl.Float64,
             "t0": pl.Float64,
         },
     )
@@ -574,13 +574,13 @@ def plot_salt_phase_diagnostic(
 
     for row in phase_results.iter_rows(named=True):
         object_id = row["r:diaObjectId"]
-        redshift = row["host_photoz"]
+        redshift = row["z_used"]
         if not row["fit_success"]:
             continue
 
         object_data = light_curve_data.filter(pl.col("r:diaObjectId") == object_id)
 
-        if row["host_photoz"] is None or not np.isfinite(row["host_photoz"]):
+        if redshift is None:
             continue
 
         data = Table(
@@ -597,7 +597,7 @@ def plot_salt_phase_diagnostic(
         model = sncosmo.Model(source="salt3")
 
         model.set(
-            z=row["host_photoz"],
+            z=redshift,
             t0=row["t0"],
             x0=row["x0"],
             x1=row["x1"],
@@ -617,7 +617,11 @@ def plot_salt_phase_diagnostic(
             (time_edges[2], time_edges[3], "Tail", "#D55E00"),
         ]
 
-        for ax in fig.axes:
+        n_panels = len(fig.axes) // 2  # Total number of passband panels
+        flux_axes = fig.axes[:n_panels]  # The first half are ALWAYS the flux panels
+        pull_axes = fig.axes[n_panels:]  # The second half are ALWAYS the pull panels
+
+        for ax in flux_axes:
             for tau, t_edge in zip(tau_edges, time_edges):
                 ax.axvline(
                     t_edge,
@@ -628,7 +632,6 @@ def plot_salt_phase_diagnostic(
                     zorder=1,
                 )
 
-            if ax.get_ylabel() != "pull":
                 for t_start, t_end, name, colour in phase_regions:
                     ax.axvspan(
                         t_start,

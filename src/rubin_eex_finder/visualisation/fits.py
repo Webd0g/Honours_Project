@@ -405,6 +405,7 @@ def plot_eex_salt_candidate_diagnostic(
         ax_pull.set_xlabel("Rest-frame days since $B$-band peak", fontsize=11)
 
         ax_flux.set_ylabel("Flux (nJy)")
+        ax_flux.set_title(f"{object_id}")
 
         plt.tight_layout()
         if plot_output_path is not None:
@@ -719,12 +720,14 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    OBJECTS = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
-    )
+    OBJECTS = DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "pass.csv"
 
     OUTPUT_PATH = (
-        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results" / "values"
+        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results" / "pass"
     )
 
-    fit_sample_parameters_plot()
+    plot_eex_salt_candidate_diagnostic(
+        object_df_path=OBJECTS,
+        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
+        plot_output_path=OUTPUT_PATH,
+    )

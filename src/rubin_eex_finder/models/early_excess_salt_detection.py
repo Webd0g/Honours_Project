@@ -292,6 +292,7 @@ def find_first_detection(nightly_data: pl.DataFrame) -> pl.DataFrame:
 
 def eex_salt_fits_with_mask(
     object_df: pl.DataFrame,
+    excess_window_days: pl.Float64,
     pass_output_path: Path | None = None,
     fail_output_path: Path | None = None,
     values_output_path: Path | None = None,
@@ -313,7 +314,8 @@ def eex_salt_fits_with_mask(
     }
 
     excess_mask = (pl.col("r:midpointMjdTai") >= pl.col("t_fd")) & (
-        pl.col("r:midpointMjdTai") <= (pl.col("t_fd") + 4.0 * (1.0 + pl.col("z_used")))
+        pl.col("r:midpointMjdTai")
+        <= (pl.col("t_fd") + excess_window_days * (1.0 + pl.col("z_used")))
     )
 
     withheld_df = object_df.filter(excess_mask)
@@ -585,13 +587,37 @@ if __name__ == "__main__":
         light_curve_data_path=LIGHT_CURVE_DATA_PATH,
     )
 
-    test_nightly_data = nightly_weighted_average(
+    pl.Config.set_tbl_cols(-1)
+    print(light_curve_data)
+
+    rest_frame_object_data = rest_frame_observation_conversion(
         light_curve_data=light_curve_data,
     )
 
-    test = first_detection_determination(
-        nightly_data=test_nightly_data,
+    print(rest_frame_object_data)
+
+    rest_frame_object_data = remove_sporadic_detections(
+        light_curve_data=rest_frame_object_data,
     )
 
-    pl.Config.set_tbl_rows(-1)
-    print(test)
+    print(rest_frame_object_data)
+
+    rest_frame_object_data = nightly_weighted_average(
+        light_curve_data=rest_frame_object_data,
+    )
+
+    print(rest_frame_object_data)
+
+    rest_frame_object_data = first_detection_determination(
+        nightly_data=rest_frame_object_data,
+    )
+
+    print(rest_frame_object_data)
+
+    eex_salt_results = eex_salt_fits_with_mask(
+        object_df=rest_frame_object_data,
+        excess_window_days=3,
+    )
+
+    pl.Config.set_tbl_cols(-1)
+    print(eex_salt_results)

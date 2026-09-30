@@ -750,12 +750,10 @@ def eex_detection(
 
         for band in avaliable_bands:
             a_prime = object_df[f"A_prime_{band}"].item()
-            alpha = object_df[f"alpha_{band}"].item()
 
-            if a_prime is not None and alpha is not None:
+            if a_prime is not None:
                 model_parameters[band] = {
                     "A_prime": a_prime,
-                    "alpha": alpha,
                 }
                 fit_bands.append(band)
 
@@ -763,6 +761,7 @@ def eex_detection(
             continue
 
         t_fl_med = object_df["t_fl"].item()
+        alpha = object_df["alpha_joint"].item()
 
         for band in fit_bands:
             times = rest_band_data[band]["times"]
@@ -773,7 +772,7 @@ def eex_detection(
                 times=times,
                 t_fl=t_fl_med,
                 A_prime=model_parameters[band]["A_prime"],
-                alpha=model_parameters[band]["alpha"],
+                alpha=alpha,
             )
 
             pull = (flux - model_at_data) / (flux_error)
@@ -868,16 +867,14 @@ def fit_sample_parameters_plot(
         "y": "#A52A2A",
     }
 
-    for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
+    for object_id, object_df in pl_fit_params_df.group_by("r:diaObjectId"):
         diaObjectId = object_df["r:diaObjectId"].item()
         t_fd_rest = object_df["t_fd_rest"].item()
         t_fl_med = object_df["t_fl"].item()
         alpha_joint = object_df["alpha_joint"].item()
 
         # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
-        fake_times = [
-            t_fd_rest - 5
-        ]
+        fake_times = [t_fd_rest - 5]
         synthetic_rows = []
         for current_band in ["g", "r", "i"]:
             for f_time in fake_times:
@@ -1149,7 +1146,7 @@ if __name__ == "__main__":
         / "eex_results"
         / "simple_power_law"
         / "results"
-        / "4_day_window"
+        / "3_day_window"
         / "pass.csv"
     )
 
@@ -1158,7 +1155,7 @@ if __name__ == "__main__":
         / "eex_results"
         / "simple_power_law"
         / "results"
-        / "4_day_window"
+        / "3_day_window"
         / "fail.csv"
     )
 
@@ -1167,12 +1164,12 @@ if __name__ == "__main__":
         / "eex_results"
         / "simple_power_law"
         / "results"
-        / "4_day_window"
+        / "3_day_window"
         / "values.csv"
     )
 
     PLOTS_OUTPUT_PATH = (
-        IMAGE_DIR / "early_excess_plots" / "simple_power_law" / "4_day_window" / "pass"
+        IMAGE_DIR / "early_excess_plots" / "simple_power_law" / "3_day_window" / "pass"
     )
 
     TEST_OBJECT_DIR = (
@@ -1204,7 +1201,7 @@ if __name__ == "__main__":
         / "eex_results"
         / "simple_power_law"
         / "results"
-        / "4_day_window"
+        / "3_day_window"
         / "pass.csv"
     )
 
@@ -1217,20 +1214,20 @@ if __name__ == "__main__":
     LABELS = [r"$t_{fl}$", r"$A^{\prime}$", r"$\alpha$"]
 
     test_result = iterate_over_bands(
-        objects_dir=TEST_OBJECT_DIR,
+        objects_dir=OBJECT_DIR,
         light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
         bands=BANDS,
         fraction=0.5,
     )
 
     test_result = keep_observations_upto_t50(
-        objects=TEST_OBJECT_DIR,
+        objects=OBJECT_DIR,
         light_curve_data_path=LIGHT_CURVE_DATA_DIR,
         reference_df=test_result,
     )
 
     full_rest_data = rest_frame_conversion(
-        object_salt_data=TEST_OBJECT_DIR,
+        object_salt_data=OBJECT_DIR,
         pre_t50_objects_data=test_result,
     )
 
@@ -1239,10 +1236,10 @@ if __name__ == "__main__":
         window_length=3,
     )
 
-    test_result = fitting_power_law(
-        rest_frame_objects=rest_data_no_eex,
-        n_steps=2000,
-    )
+    # test_result = fitting_power_law(
+    #     rest_frame_objects=rest_data_no_eex,
+    #     n_steps=2000,
+    # )
 
     # walkers_chain_plot(
     #     sampler_results=test_result[1],
@@ -1253,21 +1250,21 @@ if __name__ == "__main__":
     # eex_detection(
     #     pl_fit_params_df=test_result,
     #     full_rest_frame_lc_df=full_rest_data,
-    #     window_length=4,
+    #     window_length=3,
     #     pass_output_path=OBJECT_PASS_OUTPUT_PATH,
     #     fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
     #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
     # )
 
-    # test_result = pl.read_csv(
-    #     source=POWER_LAW_PARAMS,
-    #     schema_overrides={"r:diaObjectId": pl.String},
-    # )
+    test_result = pl.read_csv(
+        source=POWER_LAW_PARAMS,
+        schema_overrides={"r:diaObjectId": pl.String},
+    )
 
     fit_sample_parameters_plot(
         pl_fit_params_df=test_result,
         rest_frame_no_eex=rest_data_no_eex,
         window_length=3,
         full_rest_data_df=full_rest_data,
-        # output_path=PLOTS_OUTPUT_PATH
+        output_path=PLOTS_OUTPUT_PATH
     )
