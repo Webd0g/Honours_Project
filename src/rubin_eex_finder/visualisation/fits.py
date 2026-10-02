@@ -383,7 +383,7 @@ def plot_eex_salt_candidate_diagnostic(
             ax.axvline(
                 phase_start,
                 linestyle=":",
-                color="#E94E77",
+                color="#0072B2",
                 lw=1.5,
                 zorder=1,
                 label=rf"$t_{{fd}} ={phase_start:.2f}$ d",
@@ -391,11 +391,19 @@ def plot_eex_salt_candidate_diagnostic(
             ax.axvline(
                 phase_end,
                 linestyle=":",
-                color="#E94E77",
+                color="#0072B2",
                 lw=1.5,
                 zorder=1,
                 label=rf"$t_{{fd}} + 4 ={phase_start + 4:.2f}$ d",
             )
+
+        ax_flux.axvspan(
+            xmin=phase_start,
+            xmax=phase_end,
+            alpha=0.15,
+            color="#E94E77",
+            label="Points excluded from fit",
+        )
 
         ax_flux.legend(
             loc="best",
@@ -685,6 +693,14 @@ def fit_sample_parameters_plot(
             color="#0072B2",
         )
 
+        axes_fit.axvspan(
+            xmin=t_fd_rest,
+            xmax=t_fd_rest + window_length,
+            alpha=0.15,
+            color="#E94E77",
+            label="Points excluded from fit",
+        )
+
         axes_fit.axvline(
             t_fl_med,
             linestyle="--",
@@ -720,10 +736,17 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    OBJECTS = DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "pass.csv"
+    OBJECTS = (
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "eex_cut_results"
+        / "4_day_window"
+        / "pass.csv"
+    )
 
     OUTPUT_PATH = (
-        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results" / "pass"
+        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "4_day_window" / "pass"
     )
 
     plot_eex_salt_candidate_diagnostic(

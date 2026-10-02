@@ -1127,6 +1127,7 @@ def fit_sample_parameters_plot(
             loc="best",
             frameon=False,
         )
+        axes_fit.set_title(label=f"{object_id[0]}")
         plt.tight_layout()
         if output_path is not None:
             plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
@@ -1256,18 +1257,26 @@ if __name__ == "__main__":
         rest_frame_conversion_df=full_rest_data,
         window_length=3,
     )
-    pl_results_3d, sampler_3d = fitting_power_law(
-        rest_frame_objects=rest_data_no_eex_3d,
-        n_steps=2000,
-    )
-    eex_detection(
-        pl_fit_params_df=pl_results_3d,
-        full_rest_frame_lc_df=full_rest_data,
-        window_length=3,
-        pass_output_path=OBJECT_PASS_OUTPUT_PATH,
-        fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
-        values_output_path=OBJECT_VALUES_OUTPUT_PATH,
-    )
+    # pl_results_3d, sampler_3d = fitting_power_law(
+    #     rest_frame_objects=rest_data_no_eex_3d,
+    #     n_steps=2000,
+    # )
+    # eex_detection(
+    #     pl_fit_params_df=pl_results_3d,
+    #     full_rest_frame_lc_df=full_rest_data,
+    #     window_length=3,
+    #     pass_output_path=OBJECT_PASS_OUTPUT_PATH,
+    #     fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
+    #     values_output_path=OBJECT_VALUES_OUTPUT_PATH,
+    # )
+
+    pl_results_3d = pl.read_csv(source=DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "3_day_window"
+        / "pass.csv", schema_overrides={"r:diaObjectId": pl.String})
+
     fit_sample_parameters_plot(
         pl_fit_params_df=pl_results_3d,
         rest_frame_no_eex=rest_data_no_eex_3d,
@@ -1288,34 +1297,41 @@ if __name__ == "__main__":
         rest_frame_conversion_df=full_rest_data,
         window_length=4,
     )
-    pl_results_4d, sampler_4d = fitting_power_law(
-        rest_frame_objects=rest_data_no_eex_4d,
-        n_steps=2000,
-    )
+    # pl_results_4d, sampler_4d = fitting_power_law(
+    #     rest_frame_objects=rest_data_no_eex_4d,
+    #     n_steps=2000,
+    # )
 
-    eex_detection(
-        pl_fit_params_df=pl_results_4d,
-        full_rest_frame_lc_df=full_rest_data,
-        window_length=4,
-        pass_output_path=DATA_DIR
+    # eex_detection(
+    #     pl_fit_params_df=pl_results_4d,
+    #     full_rest_frame_lc_df=full_rest_data,
+    #     window_length=4,
+    #     pass_output_path=DATA_DIR
+    #     / "eex_results"
+    #     / "simple_power_law"
+    #     / "results"
+    #     / "4_day_window"
+    #     / "pass.csv",
+    #     fail_output_path=DATA_DIR
+    #     / "eex_results"
+    #     / "simple_power_law"
+    #     / "results"
+    #     / "4_day_window"
+    #     / "fail.csv",
+    #     values_output_path=DATA_DIR
+    #     / "eex_results"
+    #     / "simple_power_law"
+    #     / "results"
+    #     / "4_day_window"
+    #     / "values.csv",
+    # )
+
+    pl_results_4d = pl.read_csv(source=DATA_DIR
         / "eex_results"
         / "simple_power_law"
         / "results"
         / "4_day_window"
-        / "pass.csv",
-        fail_output_path=DATA_DIR
-        / "eex_results"
-        / "simple_power_law"
-        / "results"
-        / "4_day_window"
-        / "fail.csv",
-        values_output_path=DATA_DIR
-        / "eex_results"
-        / "simple_power_law"
-        / "results"
-        / "4_day_window"
-        / "values.csv",
-    )
+        / "pass.csv", schema_overrides={"r:diaObjectId": pl.String})
 
     fit_sample_parameters_plot(
         pl_fit_params_df=pl_results_4d,
