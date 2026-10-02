@@ -559,15 +559,30 @@ if __name__ == "__main__":
     )
 
     EEX_PASS_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "3_day_window" / "pass.csv"
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "eex_cut_results"
+        / "3_day_window"
+        / "pass.csv"
     )
 
     EEX_FAIL_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "fail.csv"
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "eex_cut_results"
+        / "3_day_window"
+        / "fail.csv"
     )
 
     EEX_VALUES_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "values.csv"
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "eex_cut_results"
+        / "3_day_window"
+        / "values.csv"
     )
 
     EEX_PULL_RESULTS_PATH = (
@@ -575,11 +590,12 @@ if __name__ == "__main__":
         / "eex_results"
         / "salt_method"
         / "eex_cut_results"
+        / "3_day_window"
         / "pull_results.csv"
     )
 
     EEX_SALT_PLOTS_PATH = (
-        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "eex_cut_results"
+        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "3_day_window"
     )
     light_curve_data = loading_light_curve_data_and_objects(
         objects_path=OBJECTS_PATH,
@@ -604,10 +620,14 @@ if __name__ == "__main__":
         nightly_data=nightly_data,
     )
 
-    # 3. FIX: Join t_fd BACK onto the full epoch-level light curve dataframe 
+    # 3. FIX: Join t_fd BACK onto the full epoch-level light curve dataframe
     # so that 'r:midpointMjdTai' and 't_fd' exist together in the same DataFrame!
     full_lc_with_t_fd = light_curve_data.join(
         first_detections_df.select("r:diaObjectId", "t_fd"),
+        on="r:diaObjectId",
+        how="inner",
+    ).join(
+        other=rest_frame_object_data.select(["r:diaObjectId", "rest_frame_phase"]),
         on="r:diaObjectId",
         how="inner",
     )
@@ -620,7 +640,5 @@ if __name__ == "__main__":
         fail_output_path=EEX_FAIL_OUTPUT_PATH,
         values_output_path=EEX_VALUES_OUTPUT_PATH,
         pull_output_path=EEX_PULL_RESULTS_PATH,
-        plot_output_path=EEX_SALT_PLOTS_PATH,
+        # plot_output_path=EEX_SALT_PLOTS_PATH,
     )
-
-    print(eex_salt_results)
