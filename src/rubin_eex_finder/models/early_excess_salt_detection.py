@@ -420,6 +420,7 @@ def eex_salt_fits_with_mask(
                 )
 
                 model_fluxes.append(float(model_flux))
+                print (f"Model flux computed for Object {object_id}")
 
             withheld_object_df = withheld_object_df.with_columns(
                 pl.Series(

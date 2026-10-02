@@ -386,7 +386,7 @@ def log_prior_function(
 
     t_fl = theta[0]
 
-    if not (t_fd_rest - 10.0 < t_fl < t_fd_rest):
+    if not (-100.0 < t_fl < t_fd_rest):
         return -np.inf
 
     log_prior = 0.0
@@ -539,9 +539,9 @@ def fitting_power_law(
 
     for object_id, object_df in rest_frame_objects.group_by("r:diaObjectId"):
         # Filtering the dataframe to just the individual band.
-        # t_fd_rest = object_df["t_fd_rest"].first()
+        t_fd_rest = object_df["t_fd_rest"].first()
 
-        # # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
+        # Inject 3 synthetic baseline points per band (0 nJy flux, 300 nJy error)
         # fake_times = [t_fd_rest - 2.0]
         # synthetic_rows = []
         # for current_band in ["g", "r", "i"]:
@@ -834,7 +834,9 @@ def eex_detection(
     )
 
     fit_params_with_eex = pl_fit_params_df.with_columns(
-        pl.col("r:diaObjectId").is_in(passing_object_ids).alias("early_excess")
+        pl.col("r:diaObjectId")
+        .is_in(passing_object_ids.implode())
+        .alias("early_excess")
     )
 
     if pass_output_path:
@@ -873,9 +875,8 @@ def fit_sample_parameters_plot(
     }
 
     for object_id, object_df in pl_fit_params_df.group_by("r:diaObjectId"):
-        print (object_df)
         diaObjectId = object_df["r:diaObjectId"].item()
-        # t_fd_rest = object_df["t_fd_rest"].item()
+        t_fd_rest = object_df["t_fd_rest"].item()
 
         # fake_times = [t_fd_rest - 5]
         # synthetic_rows = []
@@ -896,10 +897,10 @@ def fit_sample_parameters_plot(
         #         )
 
         # synthetic_df = pl.DataFrame(synthetic_rows)
-        # augmentented_object_df = pl.concat(
+        # augmented_object_df = pl.concat(
         #     [full_rest_data_df, synthetic_df], how="diagonal"
         # ).sort("rest_frame_time")
-        diaObjectId = object_df["r:diaObjectId"].item()
+        # diaObjectId = object_df["r:diaObjectId"].item()
 
         rest_band_data = {}
 
@@ -1090,6 +1091,14 @@ def fit_sample_parameters_plot(
             color="#0072B2",
         )
 
+        axes_fit.axvspan(
+            xmin=t_fd_rest,
+            xmax=t_fd_rest + window_length,
+            alpha=0.15,
+            color="#E94E77",
+            label="Points excluded from fit",
+        )
+
         axes_resid.axvline(
             x=t_fd_rest,
             linestyle="--",
@@ -1121,8 +1130,12 @@ def fit_sample_parameters_plot(
         plt.tight_layout()
         if output_path is not None:
             plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
-        plt.show()
-        plt.close()
+            print(f"Plotted and saved Object {object_id[0]}")
+            plt.close()
+        else:
+            print(f"Plotted Object {object_id[0]}")
+            plt.show()
+            plt.close()
 
 
 if __name__ == "__main__":
@@ -1221,18 +1234,18 @@ if __name__ == "__main__":
 
     # 1. Compute reference rest-frame data
     ref_points = iterate_over_bands(
-        objects_dir=TEST_OBJECT_DIR,
+        objects_dir=OBJECT_DIR,
         light_curve_data_dir=LIGHT_CURVE_DATA_DIR,
         bands=BANDS,
         fraction=0.5,
     )
     pre_t50_data = keep_observations_upto_t50(
-        objects=TEST_OBJECT_DIR,
+        objects=OBJECT_DIR,
         light_curve_data_path=LIGHT_CURVE_DATA_DIR,
         reference_df=ref_points,
     )
     full_rest_data = rest_frame_conversion(
-        object_salt_data=TEST_OBJECT_DIR,
+        object_salt_data=OBJECT_DIR,
         pre_t50_objects_data=pre_t50_data,
     )
 
@@ -1251,20 +1264,21 @@ if __name__ == "__main__":
         pl_fit_params_df=pl_results_3d,
         full_rest_frame_lc_df=full_rest_data,
         window_length=3,
-        pass_output_path=TEST_OBJECT_PASS_OUTPUT_PATH,
-        fail_output_path=TEST_OBJECT_FAIL_OUTPUT_PATH,
-        values_output_path=TEST_OBJECT_VALUES_OUTPUT_PATH,
+        pass_output_path=OBJECT_PASS_OUTPUT_PATH,
+        fail_output_path=OBJECT_FAIL_OUTPUT_PATH,
+        values_output_path=OBJECT_VALUES_OUTPUT_PATH,
     )
     fit_sample_parameters_plot(
         pl_fit_params_df=pl_results_3d,
         rest_frame_no_eex=rest_data_no_eex_3d,
         window_length=3,
         full_rest_data_df=full_rest_data,
-        # output_path=IMAGE_DIR
-        # / "early_excess_plots"
-        # / "simple_power_law"
-        # / "3_day_window"
-        # / "values",
+        output_path=IMAGE_DIR
+        / "early_excess_plots"
+        / "simple_power_law"
+        / "raw_data_results"
+        / "3_day_window"
+        / "values",
     )
 
     # ----------------------------------------------------
@@ -1278,22 +1292,40 @@ if __name__ == "__main__":
         rest_frame_objects=rest_data_no_eex_4d,
         n_steps=2000,
     )
-    # eex_detection(
-    #     pl_fit_params_df=pl_results_4d,
-    #     full_rest_frame_lc_df=full_rest_data,
-    #     window_length=4,
-    #     pass_output_path=DATA_DIR
-    #     / "eex_results/simple_power_law/results/4_day_window/pass.csv",
-    #     fail_output_path=DATA_DIR
-    #     / "eex_results/simple_power_law/results/4_day_window/fail.csv",
-    #     values_output_path=DATA_DIR
-    #     / "eex_results/simple_power_law/results/4_day_window/values.csv",
-    # )
+
+    eex_detection(
+        pl_fit_params_df=pl_results_4d,
+        full_rest_frame_lc_df=full_rest_data,
+        window_length=4,
+        pass_output_path=DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "4_day_window"
+        / "pass.csv",
+        fail_output_path=DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "4_day_window"
+        / "fail.csv",
+        values_output_path=DATA_DIR
+        / "eex_results"
+        / "simple_power_law"
+        / "results"
+        / "4_day_window"
+        / "values.csv",
+    )
+
     fit_sample_parameters_plot(
         pl_fit_params_df=pl_results_4d,
         rest_frame_no_eex=rest_data_no_eex_4d,
         window_length=4,
         full_rest_data_df=full_rest_data,
-        # output_path=IMAGE_DIR
-        # / "early_excess_plots/simple_power_law/4_day_window/values",
+        output_path=IMAGE_DIR
+        / "early_excess_plots"
+        / "simple_power_law"
+        / "raw_data_results"
+        / "4_day_window"
+        / "values",
     )
