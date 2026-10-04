@@ -6,7 +6,59 @@ import numpy as np
 import polars as pl
 import requests as re
 from astropy.time import Time
-from tqdm import tqdm
+
+
+def nightly_weighted_average(light_curve_data: pl.DataFrame) -> pl.DataFrame:
+    """Combine multiple observations from the same night and band using the inverse variance weighting.
+
+    Args:
+        light_curve_data (pl.DataFrame): Light curve dataframe after the conversion to rest-frame-phase and removal of epochs earlier than 25 days.
+
+    Returns:
+        pl.DataFrame: One row per object, band and observing night containing the weighted neightly flux, uncertainty, representative MJD, rest-frame phase and S/N.
+    """
+
+    nightly_data = (
+        light_curve_data.with_columns(
+            (1.0 / pl.col("r:psfFluxErr").pow(2)).alias("weight"),
+            pl.col("r:midpointMjdTai").floor().cast(pl.Int64).alias("night"),
+        )
+        .group_by(
+            [
+                "r:diaObjectId",
+                "r:band",
+                "night",
+            ]
+        )
+        .agg(
+            (
+                (pl.col("r:psfFlux") * pl.col("weight")).sum() / pl.col("weight").sum()
+            ).alias("nightly_flux"),
+            (1.0 / pl.col("weight").sum().sqrt()).alias("nightly_flux_err"),
+            (
+                (pl.col("r:midpointMjdTai") * pl.col("weight")).sum()
+                / pl.col("weight").sum()
+            ).alias("nightly_mjd"),
+            pl.col("z_used").first(),
+            pl.col("t0").first(),
+            pl.len().alias("n_observations"),
+        )
+        .with_columns(
+            ((pl.col("nightly_mjd") - pl.col("t0")) / (1.0 + pl.col("z_used"))).alias(
+                "rest_frame_phase"
+            ),
+            (pl.col("nightly_flux") / pl.col("nightly_flux_err")).alias("snr"),
+        )
+        .sort(
+            [
+                "r:diaObjectId",
+                "r:band",
+                "nightly_mjd",
+            ]
+        )
+    )
+
+    return nightly_data
 
 
 def add_night_and_SNR_columns(band_df: pl.DataFrame) -> pl.DataFrame:
@@ -369,6 +421,67 @@ def colour_calculation(
     return colours_df
 
 
+def compute_nightly_g_minus_r(
+    nightly_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Computes the g-r colour throughout time for observations in the same night.
+
+    Args:
+        nightly_df (pl.DataFrame): The nightly weighted average for points in the same night and other properties of the object in a polars dataframe.
+
+    Returns:
+        pl.DataFrame: Returns the polars dataframe with the g-r colour added.
+    """
+
+    df_mag = nightly_df.with_columns(
+        [
+            (-2.5 * pl.col("nightly_flux").log10() + 31.4).alias("mag"),
+            (
+                (2.5 / np.log(10))
+                * (pl.col("nightly_flux_err") / pl.col("nightly_flux"))
+            ),
+        ]
+    )
+
+    # Seperate the g and r bands
+    g_band = df_mag.filter(pl.col("r:band") == "g").select(
+        [
+            "r:diaObjectId",
+            "night",
+            "rest_frame_phase",
+            pl.col("mag").alias("mag_g"),
+            pl.col("mag_err").alias("mag_err_g"),
+        ]
+    )
+
+    r_band = df_mag.filter(pl.col("r:band") == "r").select(
+        [
+            "r:diaObjectId",
+            "night",
+            "rest_frame_phase",
+            pl.col("mag").alias("mag_r"),
+            pl.col("mag_err").alias("mag_err_r"),
+        ]
+    )
+
+    colour_df = g_band.join(
+        other=r_band,
+        on=["r:diaObjectId", "night"],
+        how="inner",
+    )
+
+    colour_df = colour_df.with_columns(
+        [
+            (pl.col("mag_g") - pl.col("mag_r")).alias("g_minus_r"),
+            ((pl.col("mag_err_g").pow(2) + pl.col("mag_err_r").pow(2)).sqrt()).alias(
+                "g_minus_r_err"
+            ),
+        ]
+    )
+
+    return colour_df
+
+
 if __name__ == "__main__":
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
@@ -378,15 +491,11 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    SALT_OBJECTS = (
-        DATA_DIR / "eex_results" / "salt_method" / "eex_cut_results" / "pass.csv"
-    )
-
-    POWER_LAW_OBJECTS = (
+    OBJECT_PATH = (
         DATA_DIR
         / "eex_results"
-        / "simple_power_law"
-        / "results"
+        / "salt_method"
+        / "eex_cut_results"
         / "3_day_window"
         / "pass.csv"
     )
@@ -395,13 +504,12 @@ if __name__ == "__main__":
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    COLOUR_CALCULATION_OUTPUT_PATH = (
-        DATA_DIR / "eex_results" / "eex_window_colour_results.csv"
-    )
+    LIGHT_CURVE_DATA = pl.read_parquet(source=LIGHT_CURVE_DATA_PATH)
 
-    colour_calculation(
-        salt_eex_candidates_object_path=SALT_OBJECTS,
-        power_law_eex_candidate_objects_path=POWER_LAW_OBJECTS,
-        light_curve_data_path=LIGHT_CURVE_DATA_PATH,
-        colour_calculation_output_path=COLOUR_CALCULATION_OUTPUT_PATH,
-    )
+    nightly_df = nightly_weighted_average(light_curve_data=LIGHT_CURVE_DATA)
+
+    g_r_colour_df = compute_nightly_g_minus_r(
+        nightly_df=nightly_df,
+    ).filter(pl.col("r:diaObjectId") == "170019716323082348")
+
+    print(g_r_colour_df)
