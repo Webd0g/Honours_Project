@@ -148,6 +148,7 @@ def nightly_weighted_average(light_curve_data: pl.DataFrame) -> pl.DataFrame:
             ).alias("nightly_mjd"),
             pl.col("z_used").first(),
             pl.col("t0").first(),
+            pl.col("t_fd_rest_frame").first(),
             pl.len().alias("n_observations"),
         )
         .with_columns(
@@ -420,7 +421,7 @@ def eex_salt_fits_with_mask(
                 )
 
                 model_fluxes.append(float(model_flux))
-                print (f"Model flux computed for Object {object_id}")
+                print(f"Model flux computed for Object {object_id}")
 
             withheld_object_df = withheld_object_df.with_columns(
                 pl.Series(

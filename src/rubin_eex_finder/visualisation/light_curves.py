@@ -7,7 +7,11 @@ import polars as pl
 import requests as re
 from astropy.time import Time
 
-from rubin_eex_finder.utils.light_curve_utils import add_night_and_SNR_columns
+from rubin_eex_finder.utils.light_curve_utils import (
+    add_night_and_SNR_columns,
+    compute_nightly_g_minus_r,
+    nightly_weighted_average,
+)
 from rubin_eex_finder.visualisation.style import (
     set_publication_style,
 )
@@ -263,6 +267,71 @@ def batch_plotter(
             )
 
 
+def colour_v_time_plot(
+    colour_dataframe: pl.DataFrame,
+    colour_v_time_output_path: Path | None = None,
+) -> None:
+    """Makes a plot of the magnitude colour as a function of the objects time, to understand the colour evolution over time.
+
+    Args:
+        colour_dataframe (pl.DataFrame): The dataframe with the colour in AB mag in whatever bands the user wants as well as with time data.
+    """
+
+    object_id = colour_dataframe["r:diaObjectId"].first()
+
+    t_fd_rest = colour_dataframe["t_fd_rest_frame"].first()
+
+    phases = colour_dataframe["rest_frame_phase"].to_numpy()
+
+    g_minus_r_colour = colour_dataframe["g_minus_r"].to_numpy()
+
+    g_minus_r_colour_err = colour_dataframe["g_minus_r_err"].to_numpy()
+
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+
+    ax.errorbar(
+        x=phases,
+        y=g_minus_r_colour,
+        yerr=g_minus_r_colour_err,
+        fmt="o",
+        color="#0072B2",
+        ecolor="#0072B2",
+        mec="white",
+        mew=0.8,
+        markersize=6,
+        capsize=3,
+        label=r"observed $g-r$",
+        zorder=3,
+    )
+
+    ax.axvspan(
+        xmin=t_fd_rest,
+        xmax=t_fd_rest + 4.0,
+        label="Early Excess Window",
+        zorder=1,
+        color="#E94E77",
+        alpha=0.15,
+        lw=2,
+        ec="#E31A50",
+        ls="--",
+    )
+
+    ax.set_xlabel(xlabel=r"Rest frame days before $t^B_{max}$")
+    ax.set_ylabel(ylabel=r"($g-r$) AB Mag")
+    ax.legend(loc="best")
+    ax.set_title(label=f"Early Color Evolution — Candidate {object_id}", fontsize=11, pad=10)
+
+    if colour_v_time_output_path is not None:
+        colour_v_time_output_path.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+        fig.savefig(fname=colour_v_time_output_path / f"{object_id}.png")
+        plt.close()
+    else:
+        plt.show()
+
+
 if __name__ == "__main__":
     PROJECT_DIR = (
         Path.home() / "Documents" / "University" / "Honours" / "Honours_Project"
@@ -272,28 +341,50 @@ if __name__ == "__main__":
 
     IMAGE_DIR = PROJECT_DIR / "images"
 
-    LIGHT_CURVE_DATA_DIR = (
+    LIGHT_CURVE_DATA_PATH = (
         DATA_DIR / "light_curve_data" / "combined_light_curve_data.parquet"
     )
 
-    OBJECTS = (
-        DATA_DIR / "constant_minus_shape_results" / "constant_minus_shape_passed.csv"
+    OBJECT_PATH = (
+        DATA_DIR
+        / "eex_results"
+        / "salt_method"
+        / "eex_cut_results"
+        / "3_day_window"
+        / "pass.csv"
     )
 
-    BAZIN_FIT_DATA_PATH = (
-        DATA_DIR / "bazin_fit_results" / "bazin_fits_i_band_results.csv"
+    PLOT_OUTPUT_PATH = IMAGE_DIR / "results_plots"
+
+    LIGHT_CURVE_DATA = pl.read_parquet(source=LIGHT_CURVE_DATA_PATH)
+    OBJECTS_DF = pl.read_csv(
+        source=OBJECT_PATH,
+        columns=[
+            "r:diaObjectId",
+            "z_used",
+            "t0",
+            "t_fd",
+        ],
+        schema_overrides={"r:diaObjectId": pl.String},
     )
 
-    PASS = DATA_DIR / "constant_minus_shape_result" / "passed.csv"
+    OBJECTS_DF = OBJECTS_DF.with_columns(
+        t_fd_rest_frame=(pl.col("t_fd") - pl.col("t0")) / (1 + pl.col("z_used"))
+    )
 
-    FAIL = DATA_DIR / "constant_minus_shape_result" / "failed.csv"
+    OBJECT_LIGHT_CURVE_DATA = OBJECTS_DF.join(
+        other=LIGHT_CURVE_DATA,
+        on="r:diaObjectId",
+        how="inner",
+    )
 
-    VALUES = DATA_DIR / "constant_minus_shape_result" / "values.csv"
+    nightly_df = nightly_weighted_average(light_curve_data=OBJECT_LIGHT_CURVE_DATA)
 
-    PLOT_OUTPUT_PATH = IMAGE_DIR / "constant_minus_shape_plots" / "pass_2"
+    g_r_colour_df = compute_nightly_g_minus_r(
+        nightly_df=nightly_df,
+    ).filter(pl.col("r:diaObjectId") == "170019716323082348")
 
-    batch_plotter(
-        object_path=OBJECTS,
-        light_curve_data_path=LIGHT_CURVE_DATA_DIR,
-        output_path=PLOT_OUTPUT_PATH,
+    colour_v_time_plot(
+        colour_dataframe=g_r_colour_df,
+        colour_v_time_output_path=PLOT_OUTPUT_PATH,
     )

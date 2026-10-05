@@ -41,6 +41,7 @@ def nightly_weighted_average(light_curve_data: pl.DataFrame) -> pl.DataFrame:
             ).alias("nightly_mjd"),
             pl.col("z_used").first(),
             pl.col("t0").first(),
+            pl.col("t_fd_rest_frame").first(),
             pl.len().alias("n_observations"),
         )
         .with_columns(
@@ -439,7 +440,7 @@ def compute_nightly_g_minus_r(
             (
                 (2.5 / np.log(10))
                 * (pl.col("nightly_flux_err") / pl.col("nightly_flux"))
-            ),
+            ).alias("mag_err"),
         ]
     )
 
@@ -459,6 +460,7 @@ def compute_nightly_g_minus_r(
             "r:diaObjectId",
             "night",
             "rest_frame_phase",
+            "t_fd_rest_frame",
             pl.col("mag").alias("mag_r"),
             pl.col("mag_err").alias("mag_err_r"),
         ]
@@ -505,8 +507,23 @@ if __name__ == "__main__":
     )
 
     LIGHT_CURVE_DATA = pl.read_parquet(source=LIGHT_CURVE_DATA_PATH)
+    OBJECTS_DF = pl.read_csv(
+        source=OBJECT_PATH,
+        columns=[
+            "r:diaObjectId",
+            "z_used",
+            "t0",
+        ],
+        schema_overrides={"r:diaObjectId": pl.String},
+    )
 
-    nightly_df = nightly_weighted_average(light_curve_data=LIGHT_CURVE_DATA)
+    OBJECT_LIGHT_CURVE_DATA = OBJECTS_DF.join(
+        other=LIGHT_CURVE_DATA,
+        on="r:diaObjectId",
+        how="inner",
+    )
+
+    nightly_df = nightly_weighted_average(light_curve_data=OBJECT_LIGHT_CURVE_DATA)
 
     g_r_colour_df = compute_nightly_g_minus_r(
         nightly_df=nightly_df,
