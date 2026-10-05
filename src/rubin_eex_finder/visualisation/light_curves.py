@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import requests as re
+import sncosmo
 from astropy.time import Time
 
 from rubin_eex_finder.utils.light_curve_utils import (
@@ -316,10 +317,41 @@ def colour_v_time_plot(
         ls="--",
     )
 
+    model = sncosmo.Model(source="salt3")
+    model.set(
+        z=(colour_dataframe["z_used"].first()),
+        t0=(colour_dataframe["t0"].first()),
+        x0=(colour_dataframe["x0"].first()),
+        x1=(colour_dataframe["x1"].first()),
+        c=(colour_dataframe["c"].first()),
+    )
+
+    phase_grid = np.linspace(min(phases) - 2, max(phases) + 5, 200)
+    t_grid = colour_dataframe["t0"].first() + phase_grid * (1.0 + colour_dataframe["z_used"].first())
+
+    g_flux = np.array([model.bandflux("lsstg", t, zp=31.4, zpsys="ab") for t in t_grid])
+    r_flux = np.array([model.bandflux("lsstr", t, zp=31.4, zpsys="ab") for t in t_grid])
+
+    valid = (g_flux > 0) & (r_flux > 0)
+    salt_color = (-2.5 * np.log10(g_flux[valid])) - (-2.5 * np.log10(r_flux[valid]))
+
+    ax.plot(
+        phase_grid[valid],
+        salt_color,
+        "--",
+        color="#D55E00",
+        lw=1.8,
+        label="SALT3 Model",
+        zorder=2,
+    )
+
     ax.set_xlabel(xlabel=r"Rest frame days before $t^B_{max}$")
     ax.set_ylabel(ylabel=r"($g-r$) AB Mag")
     ax.legend(loc="best")
-    ax.set_title(label=f"Early Color Evolution — Candidate {object_id}", fontsize=11, pad=10)
+    ax.set_title(
+        label=f"Early Color Evolution — Candidate {object_id}", fontsize=11, pad=10
+    )
+    plt.tight_layout()
 
     if colour_v_time_output_path is not None:
         colour_v_time_output_path.mkdir(
@@ -363,6 +395,9 @@ if __name__ == "__main__":
             "r:diaObjectId",
             "z_used",
             "t0",
+            "x0",
+            "x1",
+            "c",
             "t_fd",
         ],
         schema_overrides={"r:diaObjectId": pl.String},
@@ -386,5 +421,5 @@ if __name__ == "__main__":
 
     colour_v_time_plot(
         colour_dataframe=g_r_colour_df,
-        colour_v_time_output_path=PLOT_OUTPUT_PATH,
+        # colour_v_time_output_path=PLOT_OUTPUT_PATH,
     )

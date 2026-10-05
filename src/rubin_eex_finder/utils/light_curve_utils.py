@@ -42,6 +42,9 @@ def nightly_weighted_average(light_curve_data: pl.DataFrame) -> pl.DataFrame:
             pl.col("z_used").first(),
             pl.col("t0").first(),
             pl.col("t_fd_rest_frame").first(),
+            pl.col("x0").first(),
+            pl.col("x1").first(),
+            pl.col("c").first(),
             pl.len().alias("n_observations"),
         )
         .with_columns(
@@ -450,6 +453,12 @@ def compute_nightly_g_minus_r(
             "r:diaObjectId",
             "night",
             "rest_frame_phase",
+            "t_fd_rest_frame",
+            "t0",
+            "x0",
+            "x1",
+            "c",
+            "z_used",
             pl.col("mag").alias("mag_g"),
             pl.col("mag_err").alias("mag_err_g"),
         ]
@@ -461,6 +470,11 @@ def compute_nightly_g_minus_r(
             "night",
             "rest_frame_phase",
             "t_fd_rest_frame",
+            "t0",
+            "x0",
+            "x1",
+            "c",
+            "z_used",
             pl.col("mag").alias("mag_r"),
             pl.col("mag_err").alias("mag_err_r"),
         ]
