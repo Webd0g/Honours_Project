@@ -410,7 +410,7 @@ def plot_eex_salt_candidate_diagnostic(
             frameon=False,
         )
 
-        ax_pull.set_xlabel("Rest-frame days since $B$-band peak", fontsize=11)
+        ax_pull.set_xlabel("Rest-frame days before $B$-band peak", fontsize=11)
 
         ax_flux.set_ylabel("Flux (nJy)")
         ax_flux.set_title(f"{object_id}")
@@ -741,12 +741,12 @@ if __name__ == "__main__":
         / "eex_results"
         / "salt_method"
         / "eex_cut_results"
-        / "4_day_window"
+        / "3_day_window"
         / "pass.csv"
     )
 
     OUTPUT_PATH = (
-        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "4_day_window" / "pass"
+        IMAGE_DIR / "early_excess_plots" / "salt_plots" / "3_day_window" / "pass"
     )
 
     plot_eex_salt_candidate_diagnostic(

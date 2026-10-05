@@ -1121,7 +1121,7 @@ def fit_sample_parameters_plot(
         )
 
         axes_fit.set_ylabel("Flux (nJy)")
-        axes_resid.set_xlabel(r"Rest-frame days since $B$-band peak")
+        axes_resid.set_xlabel(r"Rest-frame days before $B$-band peak")
         axes_resid.set_ylabel("Pull")
         axes_fit.legend(
             loc="best",
