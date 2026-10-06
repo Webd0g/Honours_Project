@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import requests as re
-import sncosmo
 from astropy.time import Time
 
 from rubin_eex_finder.utils.light_curve_utils import (
@@ -270,6 +269,7 @@ def batch_plotter(
 
 def colour_v_time_plot(
     colour_dataframe: pl.DataFrame,
+    early_excess_window_time: float,
     colour_v_time_output_path: Path | None = None,
 ) -> None:
     """Makes a plot of the magnitude colour as a function of the objects time, to understand the colour evolution over time.
@@ -278,90 +278,92 @@ def colour_v_time_plot(
         colour_dataframe (pl.DataFrame): The dataframe with the colour in AB mag in whatever bands the user wants as well as with time data.
     """
 
-    object_id = colour_dataframe["r:diaObjectId"].first()
+    for object_id, group_df in colour_dataframe.group_by(by=pl.col("r:diaObjectId")):
+        object_id = group_df["r:diaObjectId"].first()
 
-    t_fd_rest = colour_dataframe["t_fd_rest_frame"].first()
+        t_fd_rest = group_df["t_fd_rest"].first()
 
-    phases = colour_dataframe["rest_frame_phase"].to_numpy()
+        phases = group_df["rest_frame_phase"].to_numpy()
 
-    g_minus_r_colour = colour_dataframe["g_minus_r"].to_numpy()
+        g_minus_r_colour = group_df["g_minus_r"].to_numpy()
 
-    g_minus_r_colour_err = colour_dataframe["g_minus_r_err"].to_numpy()
+        g_minus_r_colour_err = group_df["g_minus_r_err"].to_numpy()
 
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+        fig, ax = plt.subplots(figsize=(7, 4.5))
 
-    ax.errorbar(
-        x=phases,
-        y=g_minus_r_colour,
-        yerr=g_minus_r_colour_err,
-        fmt="o",
-        color="#0072B2",
-        ecolor="#0072B2",
-        mec="white",
-        mew=0.8,
-        markersize=6,
-        capsize=3,
-        label=r"observed $g-r$",
-        zorder=3,
-    )
-
-    ax.axvspan(
-        xmin=t_fd_rest,
-        xmax=t_fd_rest + 4.0,
-        label="Early Excess Window",
-        zorder=1,
-        color="#E94E77",
-        alpha=0.15,
-        lw=2,
-        ec="#E31A50",
-        ls="--",
-    )
-
-    # model = sncosmo.Model(source="salt3")
-    # model.set(
-    #     z=(colour_dataframe["z_used"].first()),
-    #     t0=(colour_dataframe["t0"].first()),
-    #     x0=(colour_dataframe["x0"].first()),
-    #     x1=(colour_dataframe["x1"].first()),
-    #     c=(colour_dataframe["c"].first()),
-    # )
-
-    # phase_grid = np.linspace(min(phases) - 2, max(phases) + 5, 200)
-    # t_grid = colour_dataframe["t0"].first() + phase_grid * (1.0 + colour_dataframe["z_used"].first())
-
-    # g_flux = np.array([model.bandflux("lsstg", t, zp=31.4, zpsys="ab") for t in t_grid])
-    # r_flux = np.array([model.bandflux("lsstr", t, zp=31.4, zpsys="ab") for t in t_grid])
-
-    # valid = (g_flux > 0) & (r_flux > 0)
-    # salt_color = (-2.5 * np.log10(g_flux[valid])) - (-2.5 * np.log10(r_flux[valid]))
-
-    # ax.plot(
-    #     phase_grid[valid],
-    #     salt_color,
-    #     "--",
-    #     color="#D55E00",
-    #     lw=1.8,
-    #     label="SALT3 Model",
-    #     zorder=2,
-    # )
-
-    ax.set_xlabel(xlabel="Rest frame days before B-band peak")
-    ax.set_ylabel(ylabel=r"($g-r$) AB Mag")
-    ax.legend(loc="best")
-    ax.set_title(
-        label=f"{object_id}", fontsize=11, pad=10
-    )
-    plt.tight_layout()
-
-    if colour_v_time_output_path is not None:
-        colour_v_time_output_path.mkdir(
-            parents=True,
-            exist_ok=True,
+        ax.errorbar(
+            x=phases,
+            y=g_minus_r_colour,
+            yerr=g_minus_r_colour_err,
+            fmt="o",
+            color="#0072B2",
+            ecolor="#0072B2",
+            mec="white",
+            mew=0.8,
+            markersize=6,
+            capsize=3,
+            label=r"observed $g-r$",
+            zorder=3,
         )
-        fig.savefig(fname=colour_v_time_output_path / f"{object_id}.png")
-        plt.close()
-    else:
-        plt.show()
+
+        ax.axvspan(
+            xmin=t_fd_rest,
+            xmax=t_fd_rest + early_excess_window_time,
+            label="Early Excess Window",
+            zorder=1,
+            color="#E94E77",
+            alpha=0.15,
+            lw=2,
+            ec="#E31A50",
+            ls="--",
+        )
+
+        # model = sncosmo.Model(source="salt3")
+        # model.set(
+        #     z=(group_df["z_used"].first()),
+        #     t0=(group_df["t0"].first()),
+        #     x0=(group_df["x0"].first()),
+        #     x1=(group_df["x1"].first()),
+        #     c=(group_df["c"].first()),
+        # )
+
+        # phase_grid = np.linspace(min(phases) - 2, max(phases) + 5, 200)
+        # t_grid = group_df["t0"].first() + phase_grid * (1.0 + group_df["z_used"].first())
+
+        # g_flux = np.array([model.bandflux("lsstg", t, zp=31.4, zpsys="ab") for t in t_grid])
+        # r_flux = np.array([model.bandflux("lsstr", t, zp=31.4, zpsys="ab") for t in t_grid])
+
+        # valid = (g_flux > 0) & (r_flux > 0)
+        # salt_color = (-2.5 * np.log10(g_flux[valid])) - (-2.5 * np.log10(r_flux[valid]))
+
+        # ax.plot(
+        #     phase_grid[valid],
+        #     salt_color,
+        #     "--",
+        #     color="#D55E00",
+        #     lw=1.8,
+        #     label="SALT3 Model",
+        #     zorder=2,
+        # )
+
+        ax.set_xlabel(xlabel=r"Rest frame days from $B$-band peak")
+        ax.set_ylabel(ylabel=r"($g-r$) AB Mag")
+        ax.legend(
+            loc="best",
+            frameon=False,
+        )
+        ax.set_title(label=f"{object_id}", fontsize=11, pad=10)
+        plt.tight_layout()
+
+        if colour_v_time_output_path is not None:
+            colour_v_time_output_path.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+            fig.savefig(fname=colour_v_time_output_path / f"{object_id}.png")
+            plt.close()
+        else:
+            plt.show()
 
 
 if __name__ == "__main__":

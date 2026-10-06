@@ -148,6 +148,7 @@ def plot_bazin_fit_batch(
 def plot_eex_salt_candidate_diagnostic(
     object_df_path: Path,
     light_curve_data_path: Path,
+    excess_window_length: float,
     plot_output_path: Path | None = None,
 ) -> None:
     """Generate the custom plot for the few SALT EEx objects that were succesfully detected.
@@ -230,7 +231,7 @@ def plot_eex_salt_candidate_diagnostic(
         )
 
         phase_start = (t_fd - t0) / (1.0 + z_used)
-        phase_end = phase_start + 4.0
+        phase_end = phase_start + excess_window_length
 
         group_df = group_df.with_columns(
             in_excess_window=(pl.col("phase_rest") >= phase_start)
@@ -394,7 +395,7 @@ def plot_eex_salt_candidate_diagnostic(
                 color="#0072B2",
                 lw=1.5,
                 zorder=1,
-                label=rf"$t_{{fd}} + 4 ={phase_start + 4:.2f}$ d",
+                label=rf"$t_{{fd}} + {excess_window_length} ={phase_end:.2f}$ d",
             )
 
         ax_flux.axvspan(
@@ -481,6 +482,7 @@ def fit_sample_parameters_plot(
     rest_frame_no_eex: pl.DataFrame,
     window_length: int,
     full_rest_data_df: pl.DataFrame,
+    inject_false_zero_point: bool,
     output_path: Path | None = None,
 ) -> None:
     """Plots the median sampled values from the sampling of parameters for the power law against the real data of the light curves of the objects.
@@ -490,7 +492,44 @@ def fit_sample_parameters_plot(
         output_path (Path | None, optional): Desired output path for the plots of the input polars df. Defaults to None.
     """
 
-    for object_id, object_df in pl_fit_params_df[0].group_by("r:diaObjectId"):
+    band_colours = {
+        "u": "#00008B",
+        "g": "#0080FF",  # Deep Sky Blue
+        "r": "#00E575",  # Bluish Green / Emerald
+        "i": "#FFD700",  # Yellow
+        "z": "#FF4500",  # Vermilion / Red-Orange
+        "y": "#A52A2A",
+    }
+
+    for object_id, object_df in pl_fit_params_df.group_by("r:diaObjectId"):
+        diaObjectId = object_df["r:diaObjectId"].item()
+        t_fd_rest = object_df["t_fd_rest"].item()
+        if inject_false_zero_point == True:
+            fake_times = [t_fd_rest - 5]
+            synthetic_rows = []
+            for current_band in ["g", "r", "i"]:
+                for f_time in fake_times:
+                    synthetic_rows.append(
+                        {
+                            "r:diaObjectId": object_id[0],
+                            "r:band": current_band,
+                            "rest_frame_time": f_time,
+                            "r:psfFlux": 0.0,
+                            "r:psfFluxErr": 300.0,
+                            "t_fd_rest": t_fd_rest,
+                            "t_fd": object_df["t_fd"].first(),
+                            "z_used": object_df["z_used"].first(),
+                            "t50_mjd": object_df["t50_mjd"].first(),
+                        }
+                    )
+
+            synthetic_df = pl.DataFrame(synthetic_rows)
+            augmented_object_df = pl.concat(
+                [full_rest_data_df, synthetic_df], how="diagonal"
+            ).sort("rest_frame_time")
+        else:
+            augmented_object_df = full_rest_data_df
+
         diaObjectId = object_df["r:diaObjectId"].item()
 
         rest_band_data = {}
@@ -503,7 +542,7 @@ def fit_sample_parameters_plot(
             "i",
         ]:
             # Filter for the light curve data of this object in the desired band too.
-            rest_band_df = full_rest_data_df.filter(
+            rest_band_df = augmented_object_df.filter(
                 (pl.col("r:band") == current_band)
                 & (pl.col("r:diaObjectId") == diaObjectId),
             )
@@ -545,7 +584,7 @@ def fit_sample_parameters_plot(
         model_grids = {}
 
         for band in fit_bands:
-            times = band_data[band]["times"]
+            times = rest_band_data[band]["times"]
 
             model_grids[band] = np.linspace(
                 np.min(times),
@@ -581,7 +620,12 @@ def fit_sample_parameters_plot(
 
             in_ranges = (times >= t_fd_rest) & (times <= t_fd_rest + window_length)
 
-            plot_data = axes_fit.errorbar(
+            data_colour = band_colours.get(
+                band,
+                "black",
+            )
+
+            axes_fit.errorbar(
                 x=times[in_ranges],
                 y=flux[in_ranges],
                 yerr=flux_error[in_ranges],
@@ -591,8 +635,6 @@ def fit_sample_parameters_plot(
                 mew=1,
                 alpha=0.3,
             )
-
-            data_colour = plot_data.lines[0].get_color()
 
             axes_fit.errorbar(
                 x=times[~in_ranges],
@@ -679,6 +721,14 @@ def fit_sample_parameters_plot(
             color="#0072B2",
         )
 
+        axes_fit.axvspan(
+            xmin=t_fd_rest,
+            xmax=t_fd_rest + window_length,
+            alpha=0.15,
+            color="#E94E77",
+            label="Points excluded from fit",
+        )
+
         axes_resid.axvline(
             x=t_fd_rest,
             linestyle="--",
@@ -693,14 +743,6 @@ def fit_sample_parameters_plot(
             color="#0072B2",
         )
 
-        axes_fit.axvspan(
-            xmin=t_fd_rest,
-            xmax=t_fd_rest + window_length,
-            alpha=0.15,
-            color="#E94E77",
-            label="Points excluded from fit",
-        )
-
         axes_fit.axvline(
             t_fl_med,
             linestyle="--",
@@ -709,18 +751,22 @@ def fit_sample_parameters_plot(
         )
 
         axes_fit.set_ylabel("Flux (nJy)")
-        axes_fit.set_title(f"{diaObjectId}")
-        axes_resid.set_xlabel(r"Rest-frame days since $B$-band peak")
+        axes_resid.set_xlabel(r"Rest-frame days before $B$-band peak")
         axes_resid.set_ylabel("Pull")
         axes_fit.legend(
             loc="best",
             frameon=False,
         )
+        axes_fit.set_title(label=f"{object_id[0]}")
         plt.tight_layout()
         if output_path is not None:
             plt.savefig(output_path / f"{diaObjectId}_eex_power_law_fit.jpg")
-        plt.show()
-        plt.close()
+            print(f"Plotted and saved Object {object_id[0]}")
+            plt.close()
+        else:
+            print(f"Plotted Object {object_id[0]}")
+            plt.show()
+            plt.close()
 
 
 if __name__ == "__main__":
