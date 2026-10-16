@@ -280,7 +280,7 @@ def spectro_strip_plots(
             "peak_time_difference": pl.Float64,
         },
     ).with_columns(
-        pl.lit("SN II").alias("spec_class"),
+        pl.lit("SN CC").alias("spec_class"),
     )
 
     spectro_results = pl.concat(
@@ -292,7 +292,7 @@ def spectro_strip_plots(
 
     colours = {
         "SN Ia": "#0072B2",
-        "SN II": "#D55E00",
+        "SN CC": "#D55E00",
     }
 
     sns.stripplot(
@@ -300,8 +300,8 @@ def spectro_strip_plots(
         x="peak_time_difference",
         y="spec_class",
         hue="spec_class",
-        order=["SN Ia", "SN II"],
-        hue_order=["SN Ia", "SN II"],
+        order=["SN Ia", "SN CC"],
+        hue_order=["SN Ia", "SN CC"],
         jitter=0.2,
         dodge=False,
         palette=colours,
@@ -446,7 +446,7 @@ def bar_chart_pass_fractions(
             "r:diaObjectId": pl.String,
         },
     ).with_columns(
-        pl.lit("SN II").alias("spec_class"),
+        pl.lit("SN CC").alias("spec_class"),
         pl.lit(True).alias("rise_slope_pass"),
     )
 
@@ -456,7 +456,7 @@ def bar_chart_pass_fractions(
             "r:diaObjectId": pl.String,
         },
     ).with_columns(
-        pl.lit("SN II").alias("spec_class"),
+        pl.lit("SN CC").alias("spec_class"),
         pl.lit(False).alias("rise_slope_pass"),
     )
 
@@ -484,17 +484,17 @@ def bar_chart_pass_fractions(
 
     colours = {
         "SN Ia": "#0072B2",
-        "SN II": "#D55E00",
+        "SN CC": "#D55E00",
     }
 
     hatches = {
         "SN Ia": "//",
-        "SN II": "xx",
+        "SN CC": "xx",
     }
 
     edgecolours = {
         "SN Ia": "#05507B",
-        "SN II": "#743504",
+        "SN CC": "#743504",
     }
 
     bars = plt.bar(
@@ -801,7 +801,7 @@ def spectro_strip_plot(
             ],
         )
         .with_columns(
-            pl.lit("SN II").alias("spec_class"),
+            pl.lit("SN CC").alias("spec_class"),
         )
         .with_columns(
             pl.col("delta_peak_mjd").cast(
@@ -823,7 +823,7 @@ def spectro_strip_plot(
             ],
         )
         .with_columns(
-            pl.lit("SN II").alias("spec_class"),
+            pl.lit("SN CC").alias("spec_class"),
         )
         .with_columns(
             pl.col("delta_peak_mjd").cast(
@@ -852,7 +852,7 @@ def spectro_strip_plot(
 
     colours = {
         "SN Ia": "#0072B2",
-        "SN II": "#D55E00",
+        "SN CC": "#D55E00",
     }
 
     sns.stripplot(
@@ -862,7 +862,7 @@ def spectro_strip_plot(
         hue="spec_class",
         jitter=0.2,
         palette=colours,
-        order=["SN Ia", "SN II"],
+        order=["SN Ia", "SN CC"],
     )
 
     plt.axvline(
