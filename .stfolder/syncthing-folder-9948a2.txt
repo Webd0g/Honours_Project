@@ -1,5 +1,0 @@
-# This directory is a Syncthing folder marker.
-# Do not delete.
-
-folderID: honours_project
-created: 2026-07-15T10:34:57+10:00
