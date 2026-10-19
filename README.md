@@ -104,14 +104,14 @@ Webd0g<!-- Improved compatibility of back to top link: See: https://github.com/o
 
 1. Clone the repo
 ```bash
-   git clone [https://github.com/Webd0g/Honours_Project.git](https://github.com/Webd0g/Honours_Project.git)
-   cd Honours_Project  
+  git clone [https://github.com/Webd0g/Honours_Project.git](https://github.com/Webd0g/Honours_Project.git)
+  cd Honours_Project  
 ```
 
 2. Create and activate a virtual environment
 ```bash 
-    python -m venv .venv
-    source .venv/bin/activate
+  python -m venv .venv
+  source .venv/bin/activate
 ```
 
 3. Install requirements and package in editable mode
@@ -213,9 +213,9 @@ Project Link: [https://github.com/Webd0g/Honours_Project](https://github.com/Web
 ## Acknowledgments
 
 ```markdown
-* **Dr. Anais Möller** (Swinburne University of Technology) - For invaluable guidance, support and expertise throughout the project.
-* **Brayden Leicester & Lukas Steinwender** - For asking interesting questions about any and all results I presented and useful feedback throughout the project.
-* **Family & Friends** - For their constant encoruagement, patience and unwavering belief during the project.
+**Dr. Anais Möller** (Swinburne University of Technology) - For invaluable guidance, support and expertise throughout the project.
+**Brayden Leicester & Lukas Steinwender** - For asking interesting questions about any and all results I presented and useful feedback throughout the project.
+**Family & Friends** - For their constant encoruagement, patience and unwavering belief during the project.
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
