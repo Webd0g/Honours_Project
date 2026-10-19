@@ -201,26 +201,20 @@ Distributed under the MIT License. See `LICENSE` for more information.
 <!-- CONTACT -->
 ## Contact
 
-```markdown
 Riley Webster - webd0g@duck.com
 
 Project Link: [https://github.com/Webd0g/Honours_Project](https://github.com/Webd0g/Honours_Project)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-```
 
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-```markdown
 **Dr. Anais Möller** (Swinburne University of Technology) - For invaluable guidance, support and expertise throughout the project.
 **Brayden Leicester & Lukas Steinwender** - For asking interesting questions about any and all results I presented and useful feedback throughout the project.
-**Family & Friends** - For their constant encoruagement, patience and unwavering belief during the project.
-```
+**Family & Friends** - For their constant encouragement, patience and unwavering belief during the project.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
