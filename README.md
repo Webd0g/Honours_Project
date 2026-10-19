@@ -1,4 +1,4 @@
-github_username<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
+Webd0g<!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a id="readme-top"></a>
 <!--
 *** Thanks for checking out the Best-README-Template. If you have a suggestion
@@ -31,7 +31,7 @@ github_username<!-- Improved compatibility of back to top link: See: https://git
 <br />
 <div align="center">
   <a href="https://github.com/Webd0g/Honours_Project">
-    <img src="images/logo.png" alt="Logo" width="80" height="80">
+    <img src="images/Honours Project Logo.png" alt="Honours Project Logo" width="80" height="80">
   </a>
 
 <h3 align="center">Honours Project</h3>
@@ -41,8 +41,6 @@ github_username<!-- Improved compatibility of back to top link: See: https://git
     <br />
     <a href="https://github.com/Webd0g/Honours_Project"><strong>Explore the docs »</strong></a>
     <br />
-    <br />
-    <a href="https://github.com/Webd0g/Honours_Project">View Demo</a>
     &middot;
     <a href="https://github.com/Webd0g/Honours_Project/issues/new?labels=bug&template=bug-report---.md">Report Bug</a>
     &middot;
@@ -83,22 +81,17 @@ github_username<!-- Improved compatibility of back to top link: See: https://git
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-[![Product Name Screen Shot][product-screenshot]](https://example.com)
-
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
 ### Built With
 
-* [![Next][Next.js]][Next-url]
-* [![React][React.js]][React-url]
-* [![Vue][Vue.js]][Vue-url]
-* [![Angular][Angular.io]][Angular-url]
-* [![Svelte][Svelte.dev]][Svelte-url]
-* [![Laravel][Laravel.com]][Laravel-url]
-* [![Bootstrap][Bootstrap.com]][Bootstrap-url]
-* [![JQuery][JQuery.com]][JQuery-url]
+* [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
+* [![Polars](https://img.shields.io/badge/Polars-DataFrames-blue)](https://pola.rs/)
+* [![Astropy](https://img.shields.io/badge/Astropy-v5.0+-orange)](https://www.astropy.org/)
+* [![SNCosmo](https://img.shields.io/badge/SNCosmo-SALT3-red)](https://sncosmo.readthedocs.io/)
+* [![emcee](https://img.shields.io/badge/emcee-MCMC-green)](https://emcee.readthedocs.io/)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -107,66 +100,78 @@ github_username<!-- Improved compatibility of back to top link: See: https://git
 <!-- GETTING STARTED -->
 ## Getting Started
 
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
-
 ### Prerequisites
-
-This is an example of how to list things you need to use the software and how to install them.
-* npm
-  ```sh
-  npm install npm@latest -g
-  ```
+- Python 3.10+
+- `conda` or `venv` package manager
 
 ### Installation
 
-1. Get a free API Key at [https://example.com](https://example.com)
-2. Clone the repo
-   ```sh
-   git clone https://github.com/Webd0g/Honours_Project.git
-   ```
-3. Install NPM packages
-   ```sh
-   npm install
-   ```
-4. Enter your API in `config.js`
-   ```js
-   const API_KEY = 'ENTER YOUR API';
-   ```
-5. Change git remote url to avoid accidental pushes to base project
-   ```sh
-   git remote set-url origin Webd0g/Honours_Project
-   git remote -v # confirm the changes
-   ```
+1. Clone the repo
+   ```bash
+   git clone [https://github.com/Webd0g/Honours_Project.git](https://github.com/Webd0g/Honours_Project.git)
+   cd Honours_Project
+  ```
+
+2. Create and activate a virtual environment
+  ```bash 
+    python -m venv .venv
+    source .venv/bin/activate
+  ```
+
+3. Install requirements and package in editable mode
+  ```bash 
+  pip install -r requirements.txt
+  pip install -e
+  ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
 
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-Use this space to show useful examples of how a project can be used. Additional screenshots, code examples and demos work well in this space. You may also link to more resources.
+`rubin_eex_finder` provides automated modules for filtering alert stream light curves, running empirical (Bazin, SALT3) and power-law MCMC model fits, and extracting early excess (EEx) candidates.
 
-_For more examples, please refer to the [Documentation](https://example.com)_
+### Running the Early-Excess Power-Law Model Fit
+
+The example below demonstrates how to load processed rest-frame light curves, exclude points inside the early excess window, fit a multi-band power law using `emcee` (100 walkers, 2000 steps), and plot the candidate results:
+
+```python
+from pathlib import Path
+import polars as pl
+from rubin_eex_finder.models.excess_power_law import (
+    excluding_excess_window,
+    fitting_power_law,
+    fit_sample_parameters_plot,
+)
+
+# 1. Load rest-frame converted light curve data
+data_dir = Path("data/eex_results/simple_power_law")
+full_rest_data = pl.read_csv("data/rest_frame_light_curves.csv")
+
+# 2. Exclude observations inside the 3-day early excess window (t_fd to t_fd + 3d)
+rest_data_no_eex = excluding_excess_window(
+    rest_frame_conversion_df=full_rest_data,
+    window_length=3,
+)
+
+# 3. Fit the multi-band simple power law via MCMC
+fit_results, sampler = fitting_power_law(
+    rest_frame_objects=rest_data_no_eex,
+    n_steps=2000,
+    fit_df_output_path=data_dir / "results/3_day_window/pass.csv",
+)
+
+# 4. Generate diagnostic plots (light curve + residual pull panels)
+fit_sample_parameters_plot(
+    pl_fit_params_df=fit_results,
+    rest_frame_no_eex=rest_data_no_eex,
+    window_length=3,
+    full_rest_data_df=full_rest_data,
+    output_path=Path("images/early_excess_plots/3_day_window"),
+)
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- ROADMAP -->
-## Roadmap
-
-- [ ] Feature 1
-- [ ] Feature 2
-- [ ] Feature 3
-    - [ ] Nested Feature
-
-See the [open issues](https://github.com/Webd0g/Honours_Project/issues) for a full list of proposed features (and known issues).
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
 
 <!-- CONTRIBUTING -->
 ## Contributing
@@ -190,8 +195,6 @@ Don't forget to give the project a star! Thanks again!
   <img src="https://contrib.rocks/image?repo=Webd0g/Honours_Project" alt="contrib.rocks image" />
 </a>
 
-
-
 <!-- LICENSE -->
 ## License
 
@@ -199,25 +202,25 @@ Distributed under the MIT License. See `LICENSE` for more information.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
-
-
 <!-- CONTACT -->
 ## Contact
 
-Your Name - https://twitter.co- webd0g@duck.com
+```markdown
+Riley Webster - webd0g@duck.com
 
 Project Link: [https://github.com/Webd0g/Honours_Project](https://github.com/Webd0g/Honours_Project)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
-
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-* []()
-* []()
-* []()
+```markdown
+* **Dr. Anais Möller** (Swinburne University of Technology) - For invaluable guidance, support and expertise throughout the project.
+* **Brayden Leicester & Lukas Steinwender** - For asking interesting questions about any and all results I presented and useful feedback throughout the project.
+* **Family & Friends** - For their constant encoruagement, patience and unwavering belief during the project.
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
