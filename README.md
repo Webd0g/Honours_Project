@@ -29,10 +29,6 @@ Webd0g<!-- Improved compatibility of back to top link: See: https://github.com/o
 
 <!-- PROJECT LOGO -->
 <br />
-<div align="center">
-  <a href="https://github.com/Webd0g/Honours_Project">
-    <img src="images/Honours Project Logo.png" alt="Honours Project Logo" width="80" height="80">
-  </a>
 
 <h3 align="center">Honours Project</h3>
 
@@ -107,22 +103,22 @@ Webd0g<!-- Improved compatibility of back to top link: See: https://github.com/o
 ### Installation
 
 1. Clone the repo
-   ```bash
+```bash
    git clone [https://github.com/Webd0g/Honours_Project.git](https://github.com/Webd0g/Honours_Project.git)
-   cd Honours_Project
-  ```
+   cd Honours_Project  
+```
 
 2. Create and activate a virtual environment
-  ```bash 
+```bash 
     python -m venv .venv
     source .venv/bin/activate
-  ```
+```
 
 3. Install requirements and package in editable mode
-  ```bash 
+```bash 
   pip install -r requirements.txt
   pip install -e
-  ```
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -211,7 +207,7 @@ Riley Webster - webd0g@duck.com
 Project Link: [https://github.com/Webd0g/Honours_Project](https://github.com/Webd0g/Honours_Project)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
+```
 
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
